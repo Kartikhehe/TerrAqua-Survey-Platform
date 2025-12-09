@@ -9,8 +9,10 @@ import {
   Menu,
   MenuItem,
   ListItemText,
+  ListItemIcon,
+  Divider,
 } from '@mui/material';
-import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon } from '@mui/icons-material';
+import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
 import { useState } from 'react';
 
 function WaypointDetails({
@@ -23,6 +25,7 @@ function WaypointDetails({
   onImageUpload,
   savedWaypoints = [],
   onNavigate,
+  currentLocation = null, // { lat: number, lng: number } or null
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -41,6 +44,62 @@ function WaypointDetails({
       onNavigate(fromWaypoint);
     }
     handleNavigateClose();
+  };
+
+  const handleCurrentLocationSelect = () => {
+    if (!onNavigate) {
+      handleNavigateClose();
+      return;
+    }
+
+    // Get fresh location from browser when user selects "Current Location"
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          // Create a waypoint object in the format expected by handleNavigate
+          const currentLocationWaypoint = {
+            id: 'current-location',
+            name: 'Current Location',
+            latitude: latitude,
+            longitude: longitude,
+          };
+          onNavigate(currentLocationWaypoint);
+          handleNavigateClose();
+        },
+        (error) => {
+          console.error('Error getting current location:', error);
+          // Fallback to using passed currentLocation if available
+          if (currentLocation && currentLocation.lat && currentLocation.lng) {
+            const currentLocationWaypoint = {
+              id: 'current-location',
+              name: 'Current Location',
+              latitude: parseFloat(currentLocation.lat),
+              longitude: parseFloat(currentLocation.lng),
+            };
+            onNavigate(currentLocationWaypoint);
+          }
+          handleNavigateClose();
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0, // Don't use cached location, get fresh one
+        }
+      );
+    } else {
+      // Fallback if geolocation is not available
+      if (currentLocation && currentLocation.lat && currentLocation.lng) {
+        const currentLocationWaypoint = {
+          id: 'current-location',
+          name: 'Current Location',
+          latitude: parseFloat(currentLocation.lat),
+          longitude: parseFloat(currentLocation.lng),
+        };
+        onNavigate(currentLocationWaypoint);
+      }
+      handleNavigateClose();
+    }
   };
 
   return (
@@ -364,10 +423,46 @@ function WaypointDetails({
             >
               Navigate from
             </MenuItem>
+            {/* Current Location option - always available */}
+            {currentLocation && (
+              <>
+                <MenuItem
+                  onClick={handleCurrentLocationSelect}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <MyLocationIcon sx={{ color: '#2196f3', fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Current Location"
+                    secondary={currentLocation.lat && currentLocation.lng 
+                      ? `${parseFloat(currentLocation.lat).toFixed(6)}, ${parseFloat(currentLocation.lng).toFixed(6)}`
+                      : 'Getting location...'}
+                    primaryTypographyProps={{
+                      fontSize: '0.9rem',
+                      color: theme.palette.text.primary,
+                      fontWeight: 500,
+                    }}
+                    secondaryTypographyProps={{
+                      fontSize: '0.75rem',
+                      color: theme.palette.text.secondary,
+                    }}
+                  />
+                </MenuItem>
+                {savedWaypoints.length > 0 && <Divider />}
+              </>
+            )}
+            {/* Saved waypoints */}
             {savedWaypoints.length === 0 ? (
-              <MenuItem disabled sx={{ color: theme.palette.text.secondary }}>
-                No saved waypoints available
-              </MenuItem>
+              !currentLocation && (
+                <MenuItem disabled sx={{ color: theme.palette.text.secondary }}>
+                  No saved waypoints available
+                </MenuItem>
+              )
             ) : (
               savedWaypoints.map((waypoint) => (
                 <MenuItem

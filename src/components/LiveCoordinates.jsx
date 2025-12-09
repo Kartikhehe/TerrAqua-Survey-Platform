@@ -89,6 +89,34 @@ function LiveCoordinates({ coordinates }) {
             {coordinates.lng}°
           </Typography>
         </Box>
+        {coordinates.accuracy !== null && (
+          <Box sx={{ flex: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontSize: '0.7rem',
+                color: theme.palette.text.secondary,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                mb: 0.5,
+                display: 'block',
+              }}
+            >
+              Accuracy
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontSize: '0.9rem',
+                fontWeight: 500,
+                color: '#4CAF50',
+                fontFamily: 'monospace',
+              }}
+            >
+              ±{coordinates.accuracy}m
+            </Typography>
+          </Box>
+        )}
       </Box>
     </Paper>
   );

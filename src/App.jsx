@@ -9,7 +9,7 @@ function App() {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return (
+  return (
       <Box
         sx={{
           display: 'flex',

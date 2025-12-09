@@ -86,6 +86,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
       
       <Box
         ref={scrollContainerRef}
+
         sx={{
           display: 'flex',
           gap: 1,

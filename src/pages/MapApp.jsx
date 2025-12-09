@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import '../App.css'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-rotate/dist/leaflet-rotate.js';
 import { 
   Box, 
   useTheme, 
@@ -35,7 +36,8 @@ const drawerCollapsedWidth = 64;
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [surveyActive, setSurveyActive] = useState(false);
-  const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0 });
+  const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
+  const [currentLocationWaypointId, setCurrentLocationWaypointId] = useState(null);
   const [selectedWaypointId, setSelectedWaypointId] = useState(null);
   const [waypoints, setWaypoints] = useState([]); // Array of { id, lat, lng, name, notes, image }
   const [waypointData, setWaypointData] = useState({ name: '', lat: '', lng: '', notes: '', image: null });
@@ -49,6 +51,7 @@ function App() {
   });
   const [savedWaypointsList, setSavedWaypointsList] = useState([]); // List of all saved waypoints for navigation
   const [loginPromptOpen, setLoginPromptOpen] = useState(false); // Login prompt dialog state
+  const watchPositionIdRef = useRef(null); // Reference to watchPosition ID for cleanup
   const routePolylineRef = useRef(null); // Reference to route polyline on map
   const navigationStartMarkerRef = useRef(null); // Reference to starting point marker for navigation
   const mapRef = useRef(null);
@@ -369,17 +372,42 @@ function App() {
 
   // Fetch route from OpenRouteService
   const handleNavigate = async (fromWaypoint) => {
-    if (!mapRef.current || !selectedWaypointId) return;
+    if (!mapRef.current) {
+      showSnackbar('Map not initialized', 'error');
+      return;
+    }
+
+    if (!selectedWaypointId && (!waypointData.lat || !waypointData.lng)) {
+      showSnackbar('Please select a destination waypoint', 'error');
+      return;
+    }
 
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
       return;
     }
 
+    if (!fromWaypoint || !fromWaypoint.latitude || !fromWaypoint.longitude) {
+      showSnackbar('Invalid starting location', 'error');
+      return;
+    }
+
     try {
-      const toWaypoint = waypoints.find(wp => wp.id === selectedWaypointId);
-      if (!toWaypoint) {
-        showSnackbar('Destination waypoint not found', 'error');
+      // Try to find destination waypoint in waypoints array, otherwise use waypointData
+      let toWaypoint = waypoints.find(wp => wp.id === selectedWaypointId);
+      
+      if (!toWaypoint && waypointData.lat && waypointData.lng) {
+        // Use waypointData as fallback
+        toWaypoint = {
+          id: selectedWaypointId || 'temp-waypoint',
+          lat: parseFloat(waypointData.lat),
+          lng: parseFloat(waypointData.lng),
+          name: waypointData.name || 'Destination'
+        };
+      }
+
+      if (!toWaypoint || !toWaypoint.lat || !toWaypoint.lng) {
+        showSnackbar('Destination waypoint not found. Please select a waypoint first.', 'error');
         return;
       }
 
@@ -389,15 +417,24 @@ function App() {
         navigationStartMarkerRef.current = null;
       }
 
+      // Validate coordinates
+      const startLng = parseFloat(fromWaypoint.longitude);
+      const startLat = parseFloat(fromWaypoint.latitude);
+      const endLng = parseFloat(toWaypoint.lng);
+      const endLat = parseFloat(toWaypoint.lat);
+
+      if (isNaN(startLng) || isNaN(startLat) || isNaN(endLng) || isNaN(endLat)) {
+        showSnackbar('Invalid coordinates. Please check waypoint locations.', 'error');
+        return;
+      }
+
       // Check if starting point is in current waypoints (on map)
       const startWaypointOnMap = waypoints.find(wp => 
-        Math.abs(parseFloat(wp.lat) - parseFloat(fromWaypoint.latitude)) < 0.0001 &&
-        Math.abs(parseFloat(wp.lng) - parseFloat(fromWaypoint.longitude)) < 0.0001
+        Math.abs(parseFloat(wp.lat) - startLat) < 0.0001 &&
+        Math.abs(parseFloat(wp.lng) - startLng) < 0.0001
       );
 
       // Create blue highlighted marker for starting point
-      const startLat = parseFloat(fromWaypoint.latitude);
-      const startLng = parseFloat(fromWaypoint.longitude);
       const startIcon = createMarkerIcon(false, null, true);
       const startMarker = L.marker([startLat, startLng], { icon: startIcon }).addTo(mapRef.current);
       navigationStartMarkerRef.current = startMarker;
@@ -421,8 +458,8 @@ function App() {
 
       // Coordinates format: [longitude, latitude]
       const coordinates = [
-        [parseFloat(fromWaypoint.longitude), parseFloat(fromWaypoint.latitude)],
-        [parseFloat(toWaypoint.lng), parseFloat(toWaypoint.lat)]
+        [startLng, startLat],
+        [endLng, endLat]
       ];
 
       showSnackbar('Calculating route...', 'info');
@@ -584,9 +621,15 @@ function App() {
 
   useEffect(() => {
     // initialize map only once
+    // Start with default location, will update to user's location if available
     const map = L.map('map', {
       zoomControl: false, // Disable default zoom control
-    }).setView([28.6139, 77.2090], 5);
+      rotate: true, // Enable map rotation
+      touchRotate: true, // Enable rotation with touch gestures (finger/trackpad)
+      touchGestures: true, // Enable touch gestures
+      rotateControl: false, // Disable rotate control button (only use gestures)
+      bearing: 0, // Initial bearing (rotation angle in degrees)
+    }).setView([28.6139, 77.2090], 5); // Default location (will be updated if geolocation succeeds)
     mapRef.current = map;
 
     // Use dark tile layer if dark mode is enabled
@@ -601,6 +644,149 @@ function App() {
     }).addTo(map);
     
     tileLayerRef.current = tileLayer;
+
+    // Try to get user's current location and center map on it
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          // Set view to current location with zoomed out view (zoom level 12 for city-level view)
+          map.setView([latitude, longitude], 15);
+          
+          // Update coordinates with accuracy
+          setCoordinates({
+            lat: latitude.toFixed(6),
+            lng: longitude.toFixed(6),
+            accuracy: accuracy ? Math.round(accuracy) : null
+          });
+          
+          // Create a default location marker at current position
+          const waypointId = `current-location-${Date.now()}`;
+          const currentLocationWaypoint = {
+            id: waypointId,
+            lat: latitude,
+            lng: longitude,
+            name: 'My Current Location',
+            notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}`,
+            image: null
+          };
+          
+          // Add to waypoints array
+          setWaypoints([currentLocationWaypoint]);
+          setCurrentLocationWaypointId(waypointId);
+          
+          // Create marker icon (blue for current location)
+          const icon = createMarkerIcon(false, waypointId, true);
+          const marker = L.marker([latitude, longitude], { icon }).addTo(map);
+          
+          // Add hover effects
+          const mapContainer = map.getContainer();
+          marker.on('mouseover', function() {
+            const markerElement = this.getElement();
+            if (markerElement && mapContainer) {
+              mapContainer.style.cursor = 'none';
+              markerElement.style.pointerEvents = 'auto';
+              markerElement.style.opacity = '1';
+              markerElement.style.visibility = 'visible';
+              markerElement.style.display = 'block';
+              const innerDiv = markerElement.querySelector('div');
+              if (innerDiv) {
+                innerDiv.style.pointerEvents = 'auto';
+                innerDiv.style.opacity = '1';
+                innerDiv.style.visibility = 'visible';
+                innerDiv.style.display = 'block';
+              }
+              markerElement.style.transform = 'scale(1.2) translateY(-5px)';
+              markerElement.style.filter = 'drop-shadow(0 8px 16px rgba(33, 150, 243, 0.4))';
+              markerElement.style.zIndex = '1000';
+            }
+          });
+          
+          marker.on('mouseout', function() {
+            const markerElement = this.getElement();
+            if (markerElement && mapContainer) {
+              if (customCursorRef.current) {
+                mapContainer.style.cursor = customCursorRef.current;
+              }
+              markerElement.style.transform = 'scale(1) translateY(0)';
+              markerElement.style.filter = 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))';
+              markerElement.style.zIndex = 'auto';
+            }
+          });
+          
+          // Add click handler to select waypoint
+          marker.on('click', function() {
+            handleSelectWaypoint(waypointId);
+          });
+          
+          markersRef.current[waypointId] = marker;
+          
+          // Select this waypoint by default
+          setSelectedWaypointId(waypointId);
+          setWaypointData({
+            name: 'My Current Location',
+            lat: latitude.toFixed(6),
+            lng: longitude.toFixed(6),
+            notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}`,
+            image: null
+          });
+
+          // Start watching position for live updates
+          watchPositionIdRef.current = navigator.geolocation.watchPosition(
+            (position) => {
+              const { latitude: newLat, longitude: newLng, accuracy: newAccuracy } = position.coords;
+              
+              // Update coordinates
+              setCoordinates({
+                lat: newLat.toFixed(6),
+                lng: newLng.toFixed(6),
+                accuracy: newAccuracy ? Math.round(newAccuracy) : null
+              });
+              
+              // Update marker position if it exists
+              const currentMarker = markersRef.current[waypointId];
+              if (currentMarker) {
+                currentMarker.setLatLng([newLat, newLng]);
+              }
+              
+              // Update waypoint data if this is the selected waypoint
+              if (selectedWaypointId === waypointId) {
+                setWaypointData(prev => ({
+                  ...prev,
+                  lat: newLat.toFixed(6),
+                  lng: newLng.toFixed(6),
+                  notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}`
+                }));
+              }
+              
+              // Update waypoint in array
+              setWaypoints(prev => prev.map(wp => 
+                wp.id === waypointId 
+                  ? { ...wp, lat: newLat, lng: newLng, notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}` }
+                  : wp
+              ));
+            },
+            (error) => {
+              console.log('Watch position error:', error);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 5000,
+              maximumAge: 1000 // Update every second
+            }
+          );
+        },
+        (error) => {
+          // If geolocation fails, keep default location (already set)
+          console.log('Geolocation error, using default location:', error);
+        },
+        {
+          enableHighAccuracy: true, // Use high accuracy for better location
+          timeout: 10000,
+          maximumAge: 0 // Don't use cached location, get fresh one
+        }
+      );
+    }
 
     // Create custom control container for all map controls (search, locate, zoom)
     const MapControlsContainer = L.Control.extend({
@@ -885,6 +1071,11 @@ function App() {
 
     // Cleanup function to remove map instance when component unmounts
     return () => {
+      // Stop watching position
+      if (watchPositionIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchPositionIdRef.current);
+        watchPositionIdRef.current = null;
+      }
       map.remove();
     };
   }, [darkMode]);
@@ -1053,11 +1244,19 @@ function App() {
       };
     } else {
       mapContainer.style.cursor = '';
-      // Clear markers when survey is deactivated
-      Object.values(markersRef.current).forEach(marker => marker.remove());
-      markersRef.current = {};
-      setWaypoints([]);
-      setSelectedWaypointId(null);
+      // Clear markers when survey is deactivated, but keep current location marker
+      Object.keys(markersRef.current).forEach(id => {
+        if (id !== currentLocationWaypointId) {
+          markersRef.current[id].remove();
+          delete markersRef.current[id];
+        }
+      });
+      // Remove waypoints except current location
+      setWaypoints(prev => prev.filter(wp => wp.id === currentLocationWaypointId));
+      // Don't clear selection if it's the current location
+      if (selectedWaypointId !== currentLocationWaypointId) {
+        setSelectedWaypointId(null);
+      }
     }
   }, [surveyActive]);
 
@@ -1168,6 +1367,9 @@ function App() {
           }}
         />
         
+        {/* Live Coordinates card - always visible */}
+        <LiveCoordinates coordinates={coordinates} />
+
         {surveyActive && (
           <>
             {/* Waypoint Selector - horizontal scrollable tabs */}
@@ -1176,9 +1378,6 @@ function App() {
               selectedWaypointId={selectedWaypointId}
               onSelectWaypoint={handleSelectWaypoint}
             />
-
-            {/* Live Coordinates card - always visible when survey is active */}
-            <LiveCoordinates coordinates={coordinates} />
 
             {/* Expanded waypoint card - only visible when a point is clicked */}
             {selectedWaypointId && (
@@ -1214,9 +1413,32 @@ function App() {
                 onImageUpload={handleImageUpload}
                 savedWaypoints={savedWaypointsList}
                 onNavigate={handleNavigate}
+                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
               />
             )}
           </>
+        )}
+
+        {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
+        {selectedWaypointId && !surveyActive && currentLocationWaypointId === selectedWaypointId && (
+          <WaypointDetails
+            selectedWaypointId={selectedWaypointId}
+            waypointData={waypointData}
+            setWaypointData={setWaypointData}
+            onClose={() => {
+              setSelectedWaypointId(null);
+              setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+            }}
+            onSave={handleSaveWaypoint}
+            onDelete={() => {
+              // Don't allow deleting the current location marker
+              showSnackbar('Cannot delete current location marker', 'info');
+            }}
+            onImageUpload={handleImageUpload}
+            savedWaypoints={savedWaypointsList}
+            onNavigate={handleNavigate}
+            currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
+          />
         )}
 
         {/* Saved Points Dialog */}
