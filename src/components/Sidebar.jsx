@@ -19,8 +19,9 @@ import {
   ChevronRight 
 } from '@mui/icons-material';
 
-const drawerWidth = 260;
-const drawerCollapsedWidth = 64;
+// Responsive drawer widths (87.5% of original)
+const drawerWidth = { xs: '14rem', sm: '14.21875rem', md: '15.3125rem' };
+const drawerCollapsedWidth = { xs: '3.0625rem', sm: '3.5rem' };
 
 function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
   const theme = useTheme();
@@ -44,22 +45,26 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
         variant="persistent"
         open={true}
         sx={(theme) => ({
-          width: sidebarOpen ? drawerWidth : drawerCollapsedWidth,
+          width: sidebarOpen 
+            ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
+            : { xs: drawerCollapsedWidth.xs, sm: drawerCollapsedWidth.sm },
           flexShrink: 0,
           whiteSpace: 'nowrap',
           '& .MuiDrawer-paper': {
-            width: sidebarOpen ? drawerWidth : drawerCollapsedWidth,
+            width: sidebarOpen 
+              ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
+              : { xs: drawerCollapsedWidth.xs, sm: drawerCollapsedWidth.sm },
             boxSizing: 'border-box',
             backgroundColor: theme.palette.background.paper,
             borderRight: `1px solid ${theme.palette.divider}`,
-            borderRadius: '0 16px 16px 0',
+            borderRadius: { xs: '0 0.75rem 0.75rem 0', sm: '0 1rem 1rem 0' },
             transition: theme.transitions.create('width', {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
             }),
             overflowX: 'hidden',
-            top: '64px',
-            height: 'calc(100vh - 64px)',
+            top: { xs: '3.0625rem', sm: '3.5rem' },
+            height: { xs: 'calc(100vh - 3.0625rem)', sm: 'calc(100vh - 3.5rem)' },
             position: 'fixed',
             left: 0,
             zIndex: theme.zIndex.drawer,
@@ -71,8 +76,8 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: sidebarOpen ? 'flex-end' : 'center',
-          padding: theme.spacing(0, 1),
-          minHeight: '64px',
+          padding: { xs: theme.spacing(0, 0.65625), sm: theme.spacing(0, 0.875) },
+          minHeight: { xs: '3.0625rem', sm: '3.5rem' },
           borderBottom: `1px solid ${theme.palette.divider}`,
           position: 'absolute',
           top: 0,
@@ -88,8 +93,8 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: 40,
-            height: 40,
+            width: { xs: '1.75rem', sm: '2.1875rem' },
+            height: { xs: '1.75rem', sm: '2.1875rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
@@ -99,7 +104,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
           {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
         </IconButton>
       </Box>
-      <List sx={{ pt: '80px' }}>
+      <List sx={{ pt: { xs: '3.9375rem', sm: '4.375rem' } }}>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <Tooltip
@@ -111,10 +116,10 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
               <ListItemButton
                 onClick={item.action}
                 sx={{
-                  mx: 1,
-                  borderRadius: '12px',
+                  mx: { xs: 0.65625, sm: 0.875 },
+                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
                   justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                  minHeight: 48,
+                  minHeight: { xs: '2.40625rem', sm: '2.625rem' },
                   '&:hover': {
                     backgroundColor: theme.palette.action.hover,
                   },
@@ -131,7 +136,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                 <ListItemIcon
                   sx={{
                     color: sidebarOpen ? '#4CAF50' : theme.palette.text.secondary,
-                    minWidth: sidebarOpen ? 40 : 'auto',
+                    minWidth: sidebarOpen ? { xs: '1.75rem', sm: '2.1875rem' } : 'auto',
                     justifyContent: 'center',
                     '& .Mui-selected': {
                       color: '#4CAF50',
@@ -146,7 +151,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                     primaryTypographyProps={{
                       fontWeight: 500,
                       color: theme.palette.text.primary,
-                      fontSize: '0.95rem',
+                      fontSize: { xs: '0.74375rem', sm: '0.7875rem', md: '0.83125rem' },
                     }}
                   />
                 )}

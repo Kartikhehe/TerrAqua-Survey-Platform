@@ -97,11 +97,13 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
       fullWidth
       PaperProps={{
         sx: {
-          borderRadius: '16px',
+          borderRadius: { xs: '0.5625rem', sm: '0.75rem' },
           backgroundColor: theme.palette.background.paper,
           boxShadow: theme.palette.mode === 'dark' 
-            ? '0 4px 12px rgba(0, 0, 0, 0.5)' 
-            : '0 4px 12px rgba(0, 0, 0, 0.1)',
+            ? '0 0.1875rem 0.5625rem rgba(0, 0, 0, 0.5)' 
+            : '0 0.1875rem 0.5625rem rgba(0, 0, 0, 0.1)',
+          margin: { xs: '0.75rem', sm: 'auto' },
+          maxHeight: { xs: 'calc(100vh - 1.5rem)', sm: '90vh' },
         },
       }}
     >
@@ -111,13 +113,15 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
           justifyContent: 'space-between',
           alignItems: 'center',
           borderBottom: `1px solid ${theme.palette.divider}`,
-          pb: 2,
+          pb: { xs: 1.5, sm: 2 },
+          px: { xs: 1.5, sm: 2 },
+          pt: { xs: 1.5, sm: 2 },
         }}
       >
         <Typography
           variant="h6"
           sx={{
-            fontSize: '1.2rem',
+            fontSize: { xs: '0.75rem', sm: '0.825rem', md: '0.9rem' },
             fontWeight: 600,
             color: theme.palette.text.primary,
           }}
@@ -130,8 +134,8 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: 32,
-            height: 32,
+            width: { xs: '1.3125rem', sm: '1.5rem' },
+            height: { xs: '1.3125rem', sm: '1.5rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
@@ -140,25 +144,34 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
           <Close />
         </IconButton>
       </DialogTitle>
-      <DialogContent sx={{ p: 0 }}>
+      <DialogContent sx={{ p: 0, maxHeight: { xs: 'calc(100vh - 8rem)', sm: '60vh' }, overflow: 'auto' }}>
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 3, sm: 4 } }}>
             <CircularProgress sx={{ color: '#4CAF50' }} />
           </Box>
         ) : error ? (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="error">{error}</Alert>
+          <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
+            <Alert severity="error" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>{error}</Alert>
             {error === 'Authentication required' && (
-              <Box sx={{ mt: 2, textAlign: 'center' }}>
-                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+              <Box sx={{ mt: { xs: 1.5, sm: 2 }, textAlign: 'center' }}>
+                <Typography variant="body2" sx={{ 
+                  color: 'text.secondary', 
+                  mb: 1,
+                  fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                }}>
                   Redirecting to login page...
                 </Typography>
               </Box>
             )}
           </Box>
         ) : waypoints.length === 0 ? (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography sx={{ color: theme.palette.text.secondary }}>No saved waypoints found</Typography>
+          <Box sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
+            <Typography sx={{ 
+              color: theme.palette.text.secondary,
+              fontSize: { xs: '0.875rem', sm: '1rem' }
+            }}>
+              No saved waypoints found
+            </Typography>
           </Box>
         ) : (
           <List sx={{ p: 0 }}>
@@ -167,9 +180,9 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
                 <ListItemButton
                   onClick={() => handleWaypointClick(waypoint)}
                   sx={{
-                    mx: 1,
-                    my: 0.5,
-                    borderRadius: '12px',
+                    mx: { xs: 0.75, sm: 1 },
+                    my: { xs: 0.25, sm: 0.5 },
+                    borderRadius: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
                     '&:hover': {
                       backgroundColor: theme.palette.action.hover,
                     },
@@ -180,15 +193,16 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      width: 40,
-                      height: 40,
+                      width: { xs: '2rem', sm: '2.5rem' },
+                      height: { xs: '2rem', sm: '2.5rem' },
                       borderRadius: '50%',
                       backgroundColor: '#E8F5E9',
                       color: '#4CAF50',
-                      mr: 2,
+                      mr: { xs: 1.5, sm: 2 },
+                      flexShrink: 0,
                     }}
                   >
-                    <LocationOn />
+                    <LocationOn sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
                   </Box>
                   <ListItemText
                     primary={waypoint.name}
@@ -196,12 +210,13 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
                     primaryTypographyProps={{
                       fontWeight: 500,
                       color: theme.palette.text.primary,
-                      fontSize: '0.95rem',
+                      fontSize: { xs: '0.6375rem', sm: '0.675rem', md: '0.7125rem' },
                     }}
                     secondaryTypographyProps={{
                       color: theme.palette.text.secondary,
-                      fontSize: '0.85rem',
+                      fontSize: { xs: '0.5625rem', sm: '0.6rem', md: '0.6375rem' },
                     }}
+                    sx={{ minWidth: 0, flex: 1 }}
                   />
                 </ListItemButton>
               </ListItem>

@@ -19,3 +19,9 @@ CREATE INDEX IF NOT EXISTS idx_waypoints_coordinates ON waypoints(latitude, long
 -- Create index on created_at for sorting
 CREATE INDEX IF NOT EXISTS idx_waypoints_created_at ON waypoints(created_at DESC);
 
+-- Insert default location (required for the app to work properly)
+-- This location is used when GPS is unavailable
+INSERT INTO waypoints (name, latitude, longitude, notes)
+VALUES ('Default Location', 26.516654, 80.231507, 'Default location when GPS is unavailable')
+ON CONFLICT DO NOTHING;
+

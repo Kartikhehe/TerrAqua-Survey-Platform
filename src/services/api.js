@@ -24,6 +24,12 @@ export const waypointsAPI = {
     return response.json();
   },
 
+  getDefault: async () => {
+    const response = await fetch(`${API_BASE_URL}/waypoints/default`);
+    if (!response.ok) throw new Error('Failed to fetch default location');
+    return response.json();
+  },
+
   create: async (waypoint) => {
     const response = await fetch(`${API_BASE_URL}/waypoints`, {
       method: 'POST',

@@ -74,6 +74,7 @@ router.post('/signup', async (req, res) => {
     });
   } catch (error) {
     console.error('Signup error:', error);
+    
     // Provide more detailed error message
     if (error.code === '23505') {
       // PostgreSQL unique constraint violation
@@ -83,6 +84,23 @@ router.post('/signup', async (req, res) => {
       // PostgreSQL not null constraint violation
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    
+    // Database connection errors
+    if (error.code === 'ENOTFOUND') {
+      return res.status(500).json({ 
+        error: 'Database connection failed',
+        message: 'Cannot connect to database. Please check your DATABASE_URL in server/.env file.',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+    
+    if (error.message && error.message.includes('placeholder')) {
+      return res.status(500).json({ 
+        error: 'Database configuration error',
+        message: 'Your DATABASE_URL contains placeholder values. Please update server/.env with your actual database credentials.'
+      });
+    }
+    
     res.status(500).json({ 
       error: error.message || 'Internal server error',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -151,7 +169,27 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    
+    // Provide more helpful error messages
+    if (error.code === 'ENOTFOUND') {
+      return res.status(500).json({ 
+        error: 'Database connection failed',
+        message: 'Cannot connect to database. Please check your DATABASE_URL in server/.env file.',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+    
+    if (error.message && error.message.includes('placeholder')) {
+      return res.status(500).json({ 
+        error: 'Database configuration error',
+        message: 'Your DATABASE_URL contains placeholder values. Please update server/.env with your actual database credentials.'
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred while processing your request'
+    });
   }
 });
 

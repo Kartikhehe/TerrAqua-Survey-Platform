@@ -8,10 +8,22 @@ const { Pool } = pkg;
 // Support for connection string (NeonDB, Heroku, etc.) or individual parameters
 let poolConfig;
 
+// Validate DATABASE_URL for placeholder values (warn but don't throw to allow server to start)
 if (process.env.DATABASE_URL) {
+  const dbUrl = process.env.DATABASE_URL;
+  
+  // Check for common placeholder patterns
+  if (dbUrl.includes('xxx') || dbUrl.includes('your_') || dbUrl.includes('username') || dbUrl.includes('password') || dbUrl.includes('ep-xxx')) {
+    console.error('\n❌ WARNING: DATABASE_URL contains placeholder values!');
+    console.error('Please update your .env file with your actual database connection string.');
+    console.error('Current DATABASE_URL contains placeholder values (xxx, your_, etc.)');
+    console.error('Database connections will fail until this is fixed.\n');
+    // Don't throw - allow server to start, errors will occur when queries are attempted
+  }
+  
   // Use connection string (for NeonDB and other cloud providers)
   poolConfig = {
-    connectionString: process.env.DATABASE_URL,
+    connectionString: dbUrl,
     ssl: {
       rejectUnauthorized: false // Required for NeonDB and most cloud databases
     }
@@ -30,6 +42,14 @@ if (process.env.DATABASE_URL) {
     sslConfig = {
       rejectUnauthorized: false
     };
+  }
+
+  // Validate individual parameters (warn but don't throw)
+  if (!process.env.DB_USER || !process.env.DB_PASSWORD) {
+    console.error('\n❌ WARNING: Missing database credentials!');
+    console.error('Please set DB_USER and DB_PASSWORD in your .env file, or use DATABASE_URL instead.');
+    console.error('Database connections will fail until this is fixed.\n');
+    // Don't throw - allow server to start, errors will occur when queries are attempted
   }
 
   poolConfig = {
