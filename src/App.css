@@ -21,17 +21,30 @@
   display: block !important;
 }
 
-/* Custom styles for Leaflet controls */
+/* Custom styles for Leaflet controls - Responsive */
 .leaflet-control-zoom {
-  border-radius: 12px !important;
+  border-radius: clamp(0.5rem, 2vw, 0.75rem) !important;
   overflow: hidden !important;
 }
 
 .leaflet-control-zoom a {
   border-radius: 0 !important;
-  width: 34px !important;
-  height: 34px !important;
-  line-height: 34px !important;
+  width: clamp(2rem, 5vw, 2.125rem) !important;
+  height: clamp(2rem, 5vw, 2.125rem) !important;
+  line-height: clamp(2rem, 5vw, 2.125rem) !important;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 600px) {
+  .leaflet-control-zoom a {
+    width: 2rem !important;
+    height: 2rem !important;
+    line-height: 2rem !important;
+  }
+  
+  .map-controls-container {
+    margin-right: 0.5rem !important;
+  }
 }
 
 .leaflet-control-zoom-in {

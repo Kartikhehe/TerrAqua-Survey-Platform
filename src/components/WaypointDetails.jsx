@@ -12,8 +12,14 @@ import {
   ListItemIcon,
   Divider,
 } from '@mui/material';
-import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon } from '@mui/icons-material';
+import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon } from '@mui/icons-material';
 import { useState } from 'react';
+
+// Default location to use when GPS is unavailable
+const DEFAULT_LOCATION = {
+  lat: 26.516654,
+  lng: 80.231507
+};
 
 function WaypointDetails({
   selectedWaypointId,
@@ -26,6 +32,9 @@ function WaypointDetails({
   savedWaypoints = [],
   onNavigate,
   currentLocation = null, // { lat: number, lng: number } or null
+  locationSelectionActive = false,
+  onToggleLocationSelection,
+  sidebarOpen = false,
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -69,16 +78,24 @@ function WaypointDetails({
         },
         (error) => {
           console.error('Error getting current location:', error);
-          // Fallback to using passed currentLocation if available
+          // Fallback to using passed currentLocation if available, otherwise use default location
+          let fallbackLat, fallbackLng;
           if (currentLocation && currentLocation.lat && currentLocation.lng) {
-            const currentLocationWaypoint = {
-              id: 'current-location',
-              name: 'Current Location',
-              latitude: parseFloat(currentLocation.lat),
-              longitude: parseFloat(currentLocation.lng),
-            };
-            onNavigate(currentLocationWaypoint);
+            fallbackLat = parseFloat(currentLocation.lat);
+            fallbackLng = parseFloat(currentLocation.lng);
+          } else {
+            // Use default location when GPS fails and no currentLocation is available
+            fallbackLat = DEFAULT_LOCATION.lat;
+            fallbackLng = DEFAULT_LOCATION.lng;
           }
+          
+          const currentLocationWaypoint = {
+            id: 'current-location',
+            name: 'Current Location',
+            latitude: fallbackLat,
+            longitude: fallbackLng,
+          };
+          onNavigate(currentLocationWaypoint);
           handleNavigateClose();
         },
         {
@@ -89,15 +106,23 @@ function WaypointDetails({
       );
     } else {
       // Fallback if geolocation is not available
+      let fallbackLat, fallbackLng;
       if (currentLocation && currentLocation.lat && currentLocation.lng) {
-        const currentLocationWaypoint = {
-          id: 'current-location',
-          name: 'Current Location',
-          latitude: parseFloat(currentLocation.lat),
-          longitude: parseFloat(currentLocation.lng),
-        };
-        onNavigate(currentLocationWaypoint);
+        fallbackLat = parseFloat(currentLocation.lat);
+        fallbackLng = parseFloat(currentLocation.lng);
+      } else {
+        // Use default location when geolocation is not available
+        fallbackLat = DEFAULT_LOCATION.lat;
+        fallbackLng = DEFAULT_LOCATION.lng;
       }
+      
+      const currentLocationWaypoint = {
+        id: 'current-location',
+        name: 'Current Location',
+        latitude: fallbackLat,
+        longitude: fallbackLng,
+      };
+      onNavigate(currentLocationWaypoint);
       handleNavigateClose();
     }
   };
@@ -107,21 +132,32 @@ function WaypointDetails({
       elevation={0}
       sx={{
         position: 'fixed',
-        right: 24,
-        bottom: 160,
-        width: 420,
-        maxHeight: 'calc(100vh - 240px)',
-        p: 3,
-        borderRadius: '16px',
+        right: { xs: '1rem', sm: '1.5rem' },
+        bottom: { xs: '8rem', sm: '10rem', md: '10rem' },
+        left: { 
+          xs: sidebarOpen ? 'calc(14rem + 1rem)' : '1rem', // 14rem sidebar width + 1rem margin
+          sm: 'auto' 
+        },
+        width: { 
+          xs: sidebarOpen 
+            ? 'calc(100% - 14rem - 2rem)' // Account for sidebar + margins
+            : 'calc(100% - 1.75rem)', 
+          sm: '19.25rem', 
+          md: '22.96875rem' 
+        },
+        maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
+        maxHeight: { xs: '35vh', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
+        p: { xs: 1.3125, sm: 1.75, md: 2.625 },
+        borderRadius: { xs: '0.65625rem', sm: '0.875rem' },
         backgroundColor: theme.palette.background.paper,
         boxShadow: theme.palette.mode === 'dark' 
-          ? '0 4px 12px rgba(0, 0, 0, 0.5)' 
-          : '0 4px 12px rgba(0, 0, 0, 0.1)',
+          ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+          : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
         border: `1px solid ${theme.palette.divider}`,
         zIndex: theme.zIndex.drawer + 3,
         display: 'flex',
         flexDirection: 'column',
-        gap: 2,
+        gap: { xs: 1.5, sm: 2 },
         overflow: 'hidden',
         transform: 'translateZ(0)',
         willChange: 'transform',
@@ -143,7 +179,7 @@ function WaypointDetails({
         <Typography
           variant="h6"
           sx={{
-            fontSize: '1.1rem',
+            fontSize: { xs: '0.83125rem', sm: '0.875rem', md: '0.9625rem' },
             fontWeight: 600,
             color: theme.palette.text.primary,
           }}
@@ -157,8 +193,8 @@ function WaypointDetails({
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: 32,
-            height: 32,
+            width: { xs: '1.53125rem', sm: '1.75rem' },
+            height: { xs: '1.53125rem', sm: '1.75rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
@@ -168,7 +204,7 @@ function WaypointDetails({
         </IconButton>
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, flex: 1, overflow: 'auto', minHeight: 0 }}>
         <TextField
           label="Name"
           value={waypointData.name}
@@ -176,10 +212,11 @@ function WaypointDetails({
           fullWidth
           size="small"
           placeholder="Enter waypoint name"
+          disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
           sx={{
             '& .MuiOutlinedInput-root': {
               backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-              borderRadius: '12px',
+              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
               '& fieldset': {
                 borderColor: theme.palette.divider,
               },
@@ -193,17 +230,18 @@ function WaypointDetails({
           }}
         />
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1.5, md: 2 }, alignItems: 'flex-start', flexWrap: 'nowrap' }}>
           <TextField
             label="Latitude"
             value={waypointData.lat}
             onChange={(e) => setWaypointData(prev => ({ ...prev, lat: e.target.value }))}
-            fullWidth
             size="small"
             sx={{
+              flex: 1,
+              minWidth: 0,
               '& .MuiOutlinedInput-root': {
                 backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                borderRadius: '12px',
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
                 '& fieldset': {
                   borderColor: theme.palette.divider,
                 },
@@ -226,12 +264,13 @@ function WaypointDetails({
             label="Longitude"
             value={waypointData.lng}
             onChange={(e) => setWaypointData(prev => ({ ...prev, lng: e.target.value }))}
-            fullWidth
             size="small"
             sx={{
+              flex: 1,
+              minWidth: 0,
               '& .MuiOutlinedInput-root': {
                 backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                borderRadius: '12px',
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
                 '& fieldset': {
                   borderColor: theme.palette.divider,
                 },
@@ -250,6 +289,28 @@ function WaypointDetails({
               },
             }}
           />
+          <IconButton
+            onClick={onToggleLocationSelection}
+            sx={{
+              mt: 0.5,
+              flexShrink: 0,
+              backgroundColor: locationSelectionActive 
+                ? theme.palette.primary.main 
+                : (theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5'),
+              color: locationSelectionActive ? 'white' : theme.palette.text.secondary,
+              '&:hover': {
+                backgroundColor: locationSelectionActive 
+                  ? theme.palette.primary.dark 
+                  : (theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0'),
+              },
+              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+              width: { xs: '1.96875rem', sm: '2.1875rem' },
+              height: { xs: '1.96875rem', sm: '2.1875rem' },
+            }}
+            title={locationSelectionActive ? 'Click on map to set location' : 'Select location from map'}
+          >
+            <LocationSearchingIcon />
+          </IconButton>
         </Box>
 
         <Box>
@@ -268,7 +329,7 @@ function WaypointDetails({
               fullWidth
               sx={{
                 py: 1.5,
-                borderRadius: '12px',
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
                 backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
                 borderColor: theme.palette.divider,
                 color: theme.palette.text.secondary,
@@ -302,14 +363,14 @@ function WaypointDetails({
         <TextField
           label="Notes"
           multiline
-          rows={6}
+          rows={3}
           value={waypointData.notes}
           onChange={(e) => setWaypointData(prev => ({ ...prev, notes: e.target.value }))}
           fullWidth
           sx={{
             '& .MuiOutlinedInput-root': {
               backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-              borderRadius: '12px',
+              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
               '& fieldset': {
                 borderColor: theme.palette.divider,
               },
@@ -323,22 +384,23 @@ function WaypointDetails({
           }}
         />
 
-        <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column' }}>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
+          <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5, md: 2 }, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
             <Button
               variant="contained"
               startIcon={<Save />}
               onClick={onSave}
               sx={{
                 flex: 1,
-                py: 1.5,
-                borderRadius: '12px',
+                py: { xs: 1.25, sm: 1.5 },
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
                 backgroundColor: '#4CAF50',
                 textTransform: 'none',
-                boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+                fontSize: { xs: '0.765625rem', sm: '0.7875rem', md: '0.875rem' },
+                boxShadow: '0 0.109375rem 0.4375rem rgba(76, 175, 80, 0.3)',
                 '&:hover': {
                   backgroundColor: '#45a049',
-                  boxShadow: '0 4px 12px rgba(76, 175, 80, 0.4)',
+                  boxShadow: '0 0.25rem 0.75rem rgba(76, 175, 80, 0.4)',
                 },
               }}
             >
@@ -349,9 +411,10 @@ function WaypointDetails({
               startIcon={<ArrowOutwardOutlinedIcon />}
               onClick={handleNavigateClick}
               sx={{
-                py: 1.5,
-                minWidth: 120,
-                borderRadius: '12px',
+                py: { xs: 1.25, sm: 1.5 },
+                minWidth: { xs: '5rem', sm: '7.5rem' },
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                fontSize: { xs: '0.765625rem', sm: '0.7875rem', md: '0.875rem' },
                 borderColor: theme.palette.divider,
                 color: theme.palette.text.primary,
                 backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
@@ -369,10 +432,12 @@ function WaypointDetails({
             variant="outlined"
             startIcon={<Delete />}
             onClick={onDelete}
+            disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
             fullWidth
             sx={{
-              py: 1.5,
-              borderRadius: '12px',
+              py: { xs: 1.25, sm: 1.5 },
+              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+              fontSize: { xs: '0.765625rem', sm: '0.7875rem', md: '0.875rem' },
               borderColor: '#9E9E9E',
               color: '#616161',
               backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
@@ -380,6 +445,11 @@ function WaypointDetails({
               '&:hover': {
                 borderColor: '#757575',
                 backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+              },
+              '&.Mui-disabled': {
+                borderColor: theme.palette.divider,
+                color: theme.palette.text.disabled,
+                backgroundColor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f0f0f0',
               },
             }}
           >
@@ -393,7 +463,7 @@ function WaypointDetails({
               sx: {
                 maxHeight: 300,
                 width: '280px',
-                borderRadius: '12px',
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
                 backgroundColor: theme.palette.background.paper,
                 boxShadow: theme.palette.mode === 'dark'
                   ? '0 4px 12px rgba(0, 0, 0, 0.5)'

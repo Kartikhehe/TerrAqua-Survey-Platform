@@ -13,14 +13,14 @@ import {
   Switch,
   FormControlLabel,
 } from '@mui/material';
-import { NearMeOutlined as NearMeOutlinedIcon, DarkMode, LightMode } from '@mui/icons-material';
+import { NearMeOutlined as NearMeOutlinedIcon, DarkMode, LightMode, LocationOn as LocationOnIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const drawerWidth = 260;
 const drawerCollapsedWidth = 64;
 
-function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
+function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaultLocation }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const theme = useTheme();
@@ -81,16 +81,24 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
         marginLeft: 0,
       })}
     >
-      <Toolbar sx={{ px: { xs: 2, sm: 3 }, minHeight: '64px !important' }}>
-        <NearMeOutlinedIcon sx={{ fontSize: 28, color: '#4CAF50', mr: 1.5, transform: 'scaleX(-1)' }} />
+      <Toolbar sx={{ 
+        px: { xs: '0.875rem', sm: '1.3125rem', md: '1.75rem' }, 
+        minHeight: { xs: '3.0625rem', sm: '3.5rem' } 
+      }}>
+        <NearMeOutlinedIcon sx={{ 
+          fontSize: { xs: '1.3125rem', sm: '1.53125rem', md: '1.75rem' }, 
+          color: '#4CAF50', 
+          mr: { xs: 0.875, sm: 1.3125 }, 
+          transform: 'scaleX(-1)' 
+        }} />
         <Typography
           variant="h5"
           component="div"
           sx={{
             flexGrow: 1,
             fontWeight: 600,
-            letterSpacing: '0.5px',
-            fontSize: { xs: '1.1rem', sm: '1.5rem' },
+            letterSpacing: { xs: '0.2625px', sm: '0.4375px' },
+            fontSize: { xs: '0.7875rem', sm: '0.9625rem', md: '1.3125rem' },
             color: 'text.primary',
           }}
         >
@@ -100,9 +108,11 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
           onClick={handleClick}
           size="small"
           sx={{ 
-            ml: 2,
+            ml: { xs: 0.875, sm: 1.75 },
             backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
             borderRadius: '50%',
+            width: { xs: '1.75rem', sm: '2.1875rem' },
+            height: { xs: '1.75rem', sm: '2.1875rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
@@ -114,8 +124,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
           <Avatar 
             src={user ? `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userName)}&size=40` : undefined}
             sx={{ 
-              width: 40, 
-              height: 40,
+              width: { xs: '1.75rem', sm: '2.1875rem' }, 
+              height: { xs: '1.75rem', sm: '2.1875rem' },
               bgcolor: theme.palette.primary.main,
               color: 'white',
               fontWeight: 600,
@@ -134,14 +144,15 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
             elevation: 3,
             sx: {
               overflow: 'visible',
-              filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.1))',
+              filter: 'drop-shadow(0px 0.125rem 0.5rem rgba(0,0,0,0.1))',
               mt: 1.5,
-              minWidth: 220,
-              borderRadius: '12px',
+              minWidth: { xs: '10.5rem', sm: '12.03125rem' },
+              maxWidth: { xs: '90vw', sm: '17.5rem' },
+              borderRadius: '0.65625rem',
               backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
               '& .MuiAvatar-root': {
-                width: 32,
-                height: 32,
+                width: { xs: '1.53125rem', sm: '1.75rem' },
+                height: { xs: '1.53125rem', sm: '1.75rem' },
                 ml: -0.5,
                 mr: 1,
               },
@@ -150,9 +161,9 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
                 display: 'block',
                 position: 'absolute',
                 top: 0,
-                right: 14,
-                width: 10,
-                height: 10,
+                right: { xs: '0.65625rem', sm: '0.765625rem' },
+                width: { xs: '0.4375rem', sm: '0.546875rem' },
+                height: { xs: '0.4375rem', sm: '0.546875rem' },
                 bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : 'background.paper',
                 transform: 'translateY(-50%) rotate(45deg)',
                 zIndex: 0,
@@ -167,8 +178,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
               <Avatar 
                 src={user ? `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userName)}&size=32` : undefined}
                 sx={{ 
-                  width: 32, 
-                  height: 32,
+                  width: { xs: '1.53125rem', sm: '1.75rem' }, 
+                  height: { xs: '1.53125rem', sm: '1.75rem' },
                   bgcolor: theme.palette.primary.main,
                   color: 'white',
                   fontWeight: 600,
@@ -176,11 +187,26 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
               >
                 {getAvatarInitials(userName)}
               </Avatar>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ 
+                  fontWeight: 600, 
+                  color: 'text.primary',
+                  fontSize: { xs: '0.7rem', sm: '0.765625rem' },
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '100%'
+                }}>
                   {userName}
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                <Typography variant="caption" sx={{ 
+                  color: 'text.secondary', 
+                  fontSize: { xs: '0.6125rem', sm: '0.65625rem' },
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '100%'
+                }}>
                   {userEmail}
                 </Typography>
               </Box>
@@ -191,11 +217,14 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 {isDark ? (
-                  <DarkMode sx={{ fontSize: 20, color: 'text.secondary' }} />
+                  <DarkMode sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
                 ) : (
-                  <LightMode sx={{ fontSize: 20, color: 'text.secondary' }} />
+                  <LightMode sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
                 )}
-                <Typography sx={{ color: 'text.primary', fontSize: '0.9rem' }}>
+                <Typography sx={{ 
+                  color: 'text.primary', 
+                  fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+                }}>
                   {isDark ? 'Dark Mode' : 'Light Mode'}
                 </Typography>
               </Box>
@@ -211,6 +240,26 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode }) {
                   },
                 }}
               />
+            </Box>
+          </MenuItem>
+          <Divider />
+          <MenuItem 
+            onClick={() => {
+              if (onSetDefaultLocation) {
+                onSetDefaultLocation();
+              }
+              handleClose();
+            }}
+            sx={{ py: 1.5 }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
+              <LocationOnIcon sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
+              <Typography sx={{ 
+                color: 'text.primary', 
+                fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+              }}>
+                Set Default Location
+              </Typography>
             </Box>
           </MenuItem>
           <Divider />

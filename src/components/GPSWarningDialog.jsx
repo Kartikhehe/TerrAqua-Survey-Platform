@@ -8,16 +8,16 @@ import {
   Box,
   useTheme,
 } from '@mui/material';
-import { Login as LoginIcon } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { LocationOff as LocationOffIcon } from '@mui/icons-material';
 
-function LoginPromptDialog({ open, onClose }) {
+function GPSWarningDialog({ open, onClose, onContinue }) {
   const theme = useTheme();
-  const navigate = useNavigate();
 
-  const handleLogin = () => {
+  const handleContinue = () => {
+    if (onContinue) {
+      onContinue();
+    }
     onClose();
-    navigate('/login');
   };
 
   return (
@@ -31,6 +31,10 @@ function LoginPromptDialog({ open, onClose }) {
           maxWidth: { xs: '90vw', sm: '18.75rem' },
           width: { xs: 'calc(100% - 1.5rem)', sm: 'auto' },
           margin: { xs: '0.75rem', sm: 'auto' },
+          backgroundColor: theme.palette.background.paper,
+          boxShadow: theme.palette.mode === 'dark' 
+            ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+            : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
         },
       }}
     >
@@ -41,37 +45,53 @@ function LoginPromptDialog({ open, onClose }) {
               width: { xs: '1.875rem', sm: '2.25rem' },
               height: { xs: '1.875rem', sm: '2.25rem' },
               borderRadius: { xs: '0.5625rem', sm: '0.65625rem', md: '0.75rem' },
-              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+              background: `linear-gradient(135deg, ${theme.palette.warning.main || '#ff9800'}, ${theme.palette.warning.dark || '#f57c00'})`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <LoginIcon sx={{ fontSize: { xs: '0.9375rem', sm: '1.125rem' }, color: 'white' }} />
+            <LocationOffIcon sx={{ fontSize: { xs: '0.9375rem', sm: '1.125rem' }, color: 'white' }} />
           </Box>
           <Typography variant="h6" sx={{ 
-            fontWeight: 600,
+            fontWeight: 600, 
+            color: theme.palette.text.primary,
             fontSize: { xs: '0.75rem', sm: '0.9375rem' }
           }}>
-            Login Required
+            GPS Not Detected
           </Typography>
         </Box>
       </DialogTitle>
       <DialogContent sx={{ px: { xs: 1.125, sm: 1.5 }, pb: { xs: 0.75, sm: 1.125 } }}>
         <Typography variant="body1" sx={{ 
-          color: 'text.secondary', 
+          color: theme.palette.text.secondary, 
           mb: { xs: 1.125, sm: 1.5 },
           fontSize: { xs: '0.65625rem', sm: '0.75rem' }
         }}>
-          Please log in to access this feature. You need to be authenticated to save, delete, navigate, or view saved waypoints.
+          GPS not detected. Make sure it is turned on.
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          color: theme.palette.text.secondary, 
+          opacity: 0.8,
+          fontSize: { xs: '0.6rem', sm: '0.65625rem' }
+        }}>
+          The app will use the default location instead.
         </Typography>
       </DialogContent>
-      <DialogActions sx={{ p: { xs: 1.5, sm: 2 }, pt: { xs: 0.5, sm: 1 }, gap: { xs: 1, sm: 1.5 } }}>
-        <Button onClick={onClose} sx={{ color: 'text.secondary' }}>
+      <DialogActions sx={{ p: { xs: 1.125, sm: 1.5 }, pt: { xs: 0.375, sm: 0.75 }, gap: { xs: 0.75, sm: 1.125 } }}>
+        <Button
+          onClick={onClose}
+          sx={{
+            color: theme.palette.text.secondary,
+            '&:hover': {
+              backgroundColor: theme.palette.action.hover,
+            },
+          }}
+        >
           Cancel
         </Button>
         <Button
-          onClick={handleLogin}
+          onClick={handleContinue}
           variant="contained"
           sx={{
             background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
@@ -81,12 +101,12 @@ function LoginPromptDialog({ open, onClose }) {
             },
           }}
         >
-          Go to Login
+          Continue with Default Location
         </Button>
       </DialogActions>
     </Dialog>
   );
 }
 
-export default LoginPromptDialog;
+export default GPSWarningDialog;
 

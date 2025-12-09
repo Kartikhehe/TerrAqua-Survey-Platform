@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Box, Paper, Typography, IconButton, useTheme } from '@mui/material';
-import { ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { Box, Paper, Typography, IconButton, useTheme, useMediaQuery, Menu, MenuItem, ListItemText } from '@mui/material';
+import { ChevronLeft, ChevronRight, ExpandMore } from '@mui/icons-material';
 
 function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+  const [dropdownAnchor, setDropdownAnchor] = useState(null);
+  const dropdownOpen = Boolean(dropdownAnchor);
 
   useEffect(() => {
     const checkScroll = () => {
@@ -33,7 +36,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
 
   const scroll = (direction) => {
     if (scrollContainerRef.current) {
-      const scrollAmount = 150;
+      const scrollAmount = window.innerWidth < 600 ? 120 : 150;
       scrollContainerRef.current.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
@@ -41,24 +44,135 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
     }
   };
 
+  const handleDropdownOpen = (event) => {
+    setDropdownAnchor(event.currentTarget);
+  };
+
+  const handleDropdownClose = () => {
+    setDropdownAnchor(null);
+  };
+
+  const handleWaypointSelect = (waypointId) => {
+    onSelectWaypoint(waypointId);
+    handleDropdownClose();
+  };
+
+  // Mobile dropdown view
+  if (isMobile) {
+    const selectedWaypoint = waypoints.find(wp => wp.id === selectedWaypointId);
+    const selectedIndex = waypoints.findIndex(wp => wp.id === selectedWaypointId);
+
+    return (
+      <>
+        <Paper
+          elevation={0}
+          sx={{
+            position: 'fixed',
+            top: '3.9375rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            maxWidth: '30vw',
+            px: 0.875,
+            py: 0.65625,
+            borderRadius: '0.65625rem',
+            backgroundColor: theme.palette.background.paper,
+            boxShadow: theme.palette.mode === 'dark' 
+              ? '0 0.125rem 0.5rem rgba(0, 0, 0, 0.5)' 
+              : '0 0.125rem 0.5rem rgba(0, 0, 0, 0.1)',
+            border: `1px solid ${theme.palette.divider}`,
+            zIndex: theme.zIndex.drawer + 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+          }}
+          onClick={handleDropdownOpen}
+        >
+          <Typography
+            sx={{
+              fontSize: '0.85rem',
+              fontWeight: selectedWaypoint ? 600 : 400,
+              color: theme.palette.text.primary,
+              flex: 1,
+            }}
+          >
+            {selectedWaypoint ? `Point ${selectedIndex + 1}` : 'Select Point'}
+          </Typography>
+          <ExpandMore sx={{ fontSize: '1.25rem', color: theme.palette.text.secondary }} />
+        </Paper>
+        <Menu
+          anchorEl={dropdownAnchor}
+          open={dropdownOpen}
+          onClose={handleDropdownClose}
+          PaperProps={{
+            sx: {
+              maxHeight: '50vh',
+              width: 'calc(100vw - 2rem)',
+              maxWidth: '30vw',
+              mt: 0.5,
+              borderRadius: '0.75rem',
+              backgroundColor: theme.palette.background.paper,
+              boxShadow: theme.palette.mode === 'dark' 
+                ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+                : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
+            },
+          }}
+          transformOrigin={{ horizontal: 'center', vertical: 'top' }}
+          anchorOrigin={{ horizontal: 'center', vertical: 'bottom' }}
+        >
+          {waypoints.map((waypoint, index) => {
+            const isSelected = waypoint.id === selectedWaypointId;
+            return (
+              <MenuItem
+                key={waypoint.id}
+                onClick={() => handleWaypointSelect(waypoint.id)}
+                selected={isSelected}
+                sx={{
+                  py: 1,
+                  px: 1.5,
+                  '&.Mui-selected': {
+                    backgroundColor: theme.palette.action.selected,
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                    },
+                  },
+                }}
+              >
+                <ListItemText
+                  primary={`Point ${index + 1}`}
+                  primaryTypographyProps={{
+                    fontSize: '0.85rem',
+                    fontWeight: isSelected ? 600 : 400,
+                  }}
+                />
+              </MenuItem>
+            );
+          })}
+        </Menu>
+      </>
+    );
+  }
+
+  // Desktop horizontal scroll view
   return (
     <Paper
       elevation={0}
       sx={{
         position: 'fixed',
-        top: 80,
+        top: '4.375rem',
         left: '50%',
         transform: 'translateX(-50%)',
-        px: 1,
-        py: 1,
-        borderRadius: '12px',
+        px: 0.875,
+        py: 0.875,
+        borderRadius: '0.765625rem',
         backgroundColor: theme.palette.background.paper,
         boxShadow: theme.palette.mode === 'dark' 
-          ? '0 2px 8px rgba(0, 0, 0, 0.5)' 
-          : '0 2px 8px rgba(0, 0, 0, 0.1)',
+          ? '0 0.125rem 0.5rem rgba(0, 0, 0, 0.5)' 
+          : '0 0.125rem 0.5rem rgba(0, 0, 0, 0.1)',
         border: `1px solid ${theme.palette.divider}`,
         zIndex: theme.zIndex.drawer + 2,
-        maxWidth: '25vw',
+        maxWidth: '30vw',
+        minWidth: '12rem',
         display: 'flex',
         alignItems: 'center',
         overflow: 'hidden',
@@ -72,8 +186,8 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: 32,
-            height: 32,
+            width: '2rem',
+            height: '2rem',
             mr: 0.5,
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
@@ -86,7 +200,6 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
       
       <Box
         ref={scrollContainerRef}
-
         sx={{
           display: 'flex',
           gap: 1,
@@ -103,9 +216,9 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
               key={waypoint.id}
               onClick={() => onSelectWaypoint(waypoint.id)}
               sx={{
-                px: 2.5,
+                px: { sm: 2, md: 2.5 },
                 py: 1,
-                borderRadius: '8px',
+                borderRadius: { sm: '0.625rem', md: '0.75rem' },
                 backgroundColor: isSelected ? theme.palette.action.hover : 'transparent',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
@@ -119,7 +232,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
             >
               <Typography
                 sx={{
-                  fontSize: '0.9rem',
+                  fontSize: { sm: '0.74375rem', md: '0.7875rem' },
                   fontWeight: isSelected ? 600 : 400,
                   color: theme.palette.text.primary,
                 }}
@@ -139,8 +252,8 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: 32,
-            height: 32,
+            width: '2rem',
+            height: '2rem',
             ml: 0.5,
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
