@@ -1,0 +1,25 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  /* Background color will be set by theme */
+}
+
+/* Theme colors */
+:root {
+  --primary-green: #4CAF50;
+  --light-green: #81C784;
+  --grey-button: #9E9E9E;
+  --grey-button-hover: #757575;
+  --grey-text: #616161;
+  --light-grey-bg: #f5f5f5;
+  --white: #ffffff;
+  --border-grey: #e0e0e0;
+}
+
