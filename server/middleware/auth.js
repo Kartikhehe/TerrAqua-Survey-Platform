@@ -7,8 +7,15 @@ export const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
     
-    // Also check cookies
+    // Also check cookies - log for debugging
     const cookieToken = req.cookies?.token;
+    
+    // Debug logging (remove in production)
+    if (process.env.NODE_ENV === 'development' || process.env.VERCEL) {
+      console.log('Auth check - Cookies:', req.cookies);
+      console.log('Auth check - Cookie token:', cookieToken ? 'Present' : 'Missing');
+      console.log('Auth check - Auth header:', authHeader ? 'Present' : 'Missing');
+    }
 
     const jwtToken = token || cookieToken;
 
