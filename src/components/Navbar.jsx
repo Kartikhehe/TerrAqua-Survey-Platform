@@ -25,16 +25,17 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
   const open = Boolean(anchorEl);
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   // Get user data from auth context
-  const userName = user?.full_name || 'User';
-  const userEmail = user?.email || '';
+  const userName = isAuthenticated ? (user?.full_name || 'User') : 'Guest User';
+  const userEmail = isAuthenticated ? (user?.email || '') : 'Not Logged in';
   
   // Generate avatar initials from full name
   const getAvatarInitials = (name) => {
     if (!name) return 'U';
+    if (name === 'Guest User') return 'GU';
     const parts = name.trim().split(' ');
     if (parts.length >= 2) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -57,6 +58,11 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
     } catch (error) {
       console.error('Logout error:', error);
     }
+    handleClose();
+  };
+
+  const handleLogin = () => {
+    navigate('/login');
     handleClose();
   };
 
@@ -283,9 +289,20 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
             </Box>
           </MenuItem>
           <Divider />
-          <MenuItem onClick={handleLogout} sx={{ color: '#d32f2f' }}>
-            Logout
-          </MenuItem>
+          {isAuthenticated ? (
+            <MenuItem onClick={handleLogout} sx={{ color: '#d32f2f' }}>
+              Logout
+            </MenuItem>
+          ) : (
+            <MenuItem onClick={handleLogin} sx={{ py: 1.5 }}>
+              <Typography sx={{ 
+                color: 'text.primary', 
+                fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+              }}>
+                Login
+              </Typography>
+            </MenuItem>
+          )}
         </Menu>
       </Toolbar>
     </AppBar>
