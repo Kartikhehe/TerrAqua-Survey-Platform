@@ -13,14 +13,14 @@ import {
   Switch,
   FormControlLabel,
 } from '@mui/material';
-import { NearMeOutlined as NearMeOutlinedIcon, DarkMode, LightMode, LocationOn as LocationOnIcon } from '@mui/icons-material';
+import { NearMeOutlined as NearMeOutlinedIcon, DarkMode, LightMode, LocationOn as LocationOnIcon, SatelliteAlt as SatelliteAltIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const drawerWidth = 260;
 const drawerCollapsedWidth = 64;
 
-function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaultLocation }) {
+function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaultLocation, onToggleSatelliteHybrid, satelliteHybridMode }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const theme = useTheme();
@@ -259,6 +259,26 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
               }}>
                 Set Default Location
+              </Typography>
+            </Box>
+          </MenuItem>
+          <Divider />
+          <MenuItem 
+            onClick={() => {
+              if (onToggleSatelliteHybrid) {
+                onToggleSatelliteHybrid();
+              }
+              handleClose();
+            }}
+            sx={{ py: 1.5 }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
+              <SatelliteAltIcon sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
+              <Typography sx={{ 
+                color: 'text.primary', 
+                fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+              }}>
+                {satelliteHybridMode ? 'Switch to Map View' : 'Switch to Satellite Hybrid'}
               </Typography>
             </Box>
           </MenuItem>

@@ -62,6 +62,7 @@ function App() {
   const [gpsWarningOpen, setGpsWarningOpen] = useState(false); // GPS warning dialog state
   const [locationSelectionActive, setLocationSelectionActive] = useState(false); // Location selection mode state
   const [defaultLocation, setDefaultLocation] = useState({ lat: 26.516654, lng: 80.231507 }); // Default location from database
+  const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
   const watchPositionIdRef = useRef(null); // Reference to watchPosition ID for cleanup
   const routePolylineRef = useRef(null); // Reference to route polyline on map
   const navigationStartMarkerRef = useRef(null); // Reference to starting point marker for navigation
@@ -70,7 +71,9 @@ function App() {
   const selectedMarkerOverlayRef = useRef(null); // Red circleMarker overlay for selected waypoint
   const customCursorRef = useRef(null); // Store custom cursor for restoration
   const tileLayerRef = useRef(null); // Reference to tile layer for dark mode switching
+  const labelLayerRef = useRef(null); // Reference to label layer for satellite hybrid view
   const locateHandlerRef = useRef(null); // Reference to locate handler function
+  const fileInputRef = useRef(null); // Reference to file input for import
   const theme = createAppTheme(darkMode ? 'dark' : 'light');
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isAuthenticated } = useAuth();
@@ -124,8 +127,42 @@ function App() {
       setSavedPointsOpen(true);
     } else if (item === 'Export Data') {
       setExportDialogOpen(true);
+    } else if (item === 'Import File') {
+      // Trigger file input click
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
     } else {
     console.log(`${item} clicked`);
+    }
+  };
+
+  // Handle file selection from file input
+  const handleFileSelect = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const fileName = file.name.toLowerCase();
+    const isValidFile = fileName.endsWith('.geojson') || 
+                        fileName.endsWith('.json') || 
+                        fileName.endsWith('.kml');
+
+    if (!isValidFile) {
+      showSnackbar('Invalid file type. Please select KML or GeoJSON files', 'error');
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Import the file
+    await importWaypointsFromFile(file);
+
+    // Reset file input for next selection
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -681,6 +718,98 @@ function App() {
     }
   };
 
+  // Toggle satellite hybrid view
+  const handleToggleSatelliteHybrid = () => {
+    if (!mapRef.current) return;
+    
+    const map = mapRef.current;
+    const newMode = !satelliteHybridMode;
+    
+    // Show loading state
+    showSnackbar(newMode ? 'Switching to satellite view...' : 'Switching to map view...', 'info');
+    
+    // Remove existing layers with proper cleanup
+    if (tileLayerRef.current) {
+      try {
+        map.removeLayer(tileLayerRef.current);
+        tileLayerRef.current = null;
+      } catch (e) {
+        console.warn('Error removing tile layer:', e);
+      }
+    }
+    if (labelLayerRef.current) {
+      try {
+        map.removeLayer(labelLayerRef.current);
+        labelLayerRef.current = null;
+      } catch (e) {
+        console.warn('Error removing label layer:', e);
+      }
+    }
+    
+    // Small delay to ensure cleanup completes
+    setTimeout(() => {
+      if (!mapRef.current) return;
+      
+      setSatelliteHybridMode(newMode);
+      
+      if (newMode) {
+        // Satellite hybrid mode: Use Esri World Imagery with labels
+        // Using a more reliable tile server configuration
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: '',
+          maxZoom: 19,
+          minZoom: 1,
+          tileSize: 256,
+          zoomOffset: 0,
+          errorTileUrl: '', // Prevent error tiles from showing
+          crossOrigin: true
+        });
+        
+        // Add satellite layer first
+        satelliteLayer.addTo(map);
+        tileLayerRef.current = satelliteLayer;
+        
+        // Add label layer with slight delay to ensure satellite loads first
+        setTimeout(() => {
+          if (!mapRef.current) return;
+          
+          const labelLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '',
+            maxZoom: 19,
+            minZoom: 1,
+            opacity: 0.7, // Semi-transparent labels over satellite
+            tileSize: 256,
+            zoomOffset: 0,
+            errorTileUrl: '',
+            crossOrigin: true
+          });
+          
+          labelLayer.addTo(map);
+          labelLayerRef.current = labelLayer;
+        }, 100);
+        
+        showSnackbar('Satellite hybrid view enabled', 'success');
+      } else {
+        // OSM mode: Use current dark/light mode setting
+        const tileUrl = darkMode 
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+          : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        
+        const tileLayer = L.tileLayer(tileUrl, {
+          attribution: '',
+          maxZoom: 19,
+          errorTileUrl: '',
+          crossOrigin: true
+        });
+        
+        tileLayer.addTo(map);
+        tileLayerRef.current = tileLayer;
+        
+        showSnackbar('Map view enabled', 'success');
+      }
+    }, 50);
+  };
+
   // Helper function to navigate to default location
   const goToDefaultLocation = () => {
     const map = mapRef.current;
@@ -1004,16 +1133,55 @@ function App() {
     }).setView([INDIA_CENTER.lat, INDIA_CENTER.lng], 5); // Show India at zoom 5 while detecting GPS (will be updated if geolocation succeeds)
     mapRef.current = map;
 
-    // Use dark tile layer if dark mode is enabled
-    const tileUrl = darkMode 
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    
-    const tileLayer = L.tileLayer(tileUrl, {
-      attribution: '' // Remove attribution
-    }).addTo(map);
-    
-    tileLayerRef.current = tileLayer;
+    // Initialize tile layer based on satellite hybrid mode
+    if (satelliteHybridMode) {
+      // Satellite hybrid mode: Esri World Imagery (satellite) + Reference labels
+      const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '',
+        maxZoom: 19,
+        minZoom: 1,
+        tileSize: 256,
+        zoomOffset: 0,
+        errorTileUrl: '',
+        crossOrigin: true
+      });
+      
+      satelliteLayer.addTo(map);
+      tileLayerRef.current = satelliteLayer;
+      
+      // Add label layer after a short delay
+      setTimeout(() => {
+        if (mapRef.current && satelliteHybridMode) {
+          const labelLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '',
+            maxZoom: 19,
+            minZoom: 1,
+            opacity: 0.7,
+            tileSize: 256,
+            zoomOffset: 0,
+            errorTileUrl: '',
+            crossOrigin: true
+          });
+          
+          labelLayer.addTo(mapRef.current);
+          labelLayerRef.current = labelLayer;
+        }
+      }, 200);
+    } else {
+      // OSM mode: Use dark/light mode setting
+      const tileUrl = darkMode 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      
+      const tileLayer = L.tileLayer(tileUrl, {
+        attribution: '',
+        maxZoom: 19,
+        errorTileUrl: '',
+        crossOrigin: true
+      }).addTo(map);
+      
+      tileLayerRef.current = tileLayer;
+    }
 
     // Try to get user's current location and center map on it
     if (navigator.geolocation) {
@@ -1406,7 +1574,44 @@ function App() {
       mapContainer.removeEventListener('drop', handleDrop);
       map.remove();
     };
-  }, [darkMode]);
+  }, [darkMode, satelliteHybridMode]);
+
+  // Update tile layer when dark mode changes (only if not in satellite hybrid mode)
+  useEffect(() => {
+    if (!mapRef.current || satelliteHybridMode) return;
+    
+    const map = mapRef.current;
+    
+    // Remove existing tile layer with proper cleanup
+    if (tileLayerRef.current) {
+      try {
+        map.removeLayer(tileLayerRef.current);
+        tileLayerRef.current = null;
+      } catch (e) {
+        console.warn('Error removing tile layer:', e);
+      }
+    }
+    
+    // Small delay to ensure cleanup
+    setTimeout(() => {
+      if (!mapRef.current || satelliteHybridMode) return;
+      
+      // Add new tile layer based on dark mode
+      const tileUrl = darkMode 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      
+      const tileLayer = L.tileLayer(tileUrl, {
+        attribution: '',
+        maxZoom: 19,
+        errorTileUrl: '',
+        crossOrigin: true
+      });
+      
+      tileLayer.addTo(map);
+      tileLayerRef.current = tileLayer;
+    }, 50);
+  }, [darkMode, satelliteHybridMode]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -1747,6 +1952,8 @@ function App() {
           darkMode={darkMode}
           onToggleDarkMode={handleToggleDarkMode}
           onSetDefaultLocation={handleSetDefaultLocation}
+          onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
+          satelliteHybridMode={satelliteHybridMode}
         />
       <Sidebar 
         sidebarOpen={sidebarOpen} 
@@ -2017,6 +2224,15 @@ function App() {
           open={gpsWarningOpen}
           onClose={() => setGpsWarningOpen(false)}
           onContinue={goToDefaultLocation}
+        />
+
+        {/* Hidden file input for importing GeoJSON/KML files */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".geojson,.json,.kml"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
         />
       </Box>
     </Box>
