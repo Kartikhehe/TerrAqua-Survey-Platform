@@ -1582,6 +1582,13 @@ function App() {
     
     const map = mapRef.current;
     
+    // Check if map container exists and is properly initialized
+    const mapContainer = map.getContainer();
+    if (!mapContainer || !mapContainer.parentNode) {
+      console.warn('Map container not ready, skipping tile layer update');
+      return;
+    }
+    
     // Remove existing tile layer with proper cleanup
     if (tileLayerRef.current) {
       try {
@@ -1596,6 +1603,14 @@ function App() {
     setTimeout(() => {
       if (!mapRef.current || satelliteHybridMode) return;
       
+      // Double-check map is still valid
+      const currentMap = mapRef.current;
+      const currentContainer = currentMap.getContainer();
+      if (!currentContainer || !currentContainer.parentNode) {
+        console.warn('Map container not ready after delay, skipping tile layer update');
+        return;
+      }
+      
       // Add new tile layer based on dark mode
       const tileUrl = darkMode 
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -1608,7 +1623,7 @@ function App() {
         crossOrigin: true
       });
       
-      tileLayer.addTo(map);
+      tileLayer.addTo(currentMap);
       tileLayerRef.current = tileLayer;
     }, 50);
   }, [darkMode, satelliteHybridMode]);

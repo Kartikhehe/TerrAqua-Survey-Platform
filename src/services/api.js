@@ -1,5 +1,5 @@
-const API_BASE_URL = 'https://terr-aqua-survey-platform-backend.vercel.app/api';
-const AUTH_BASE_URL = 'https://terr-aqua-survey-platform-backend.vercel.app/auth';
+const API_BASE_URL = 'http://localhost:3001/api';
+const AUTH_BASE_URL = 'http://localhost:3001/auth';
 
 // Waypoints API
 export const waypointsAPI = {
