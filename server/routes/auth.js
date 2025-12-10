@@ -55,12 +55,40 @@ router.post('/signup', async (req, res) => {
     );
 
     // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    // When backend is on Vercel, always use cross-origin cookie settings
+    // because frontend may be on localhost or different domain
+    const isVercelDeployment = process.env.VERCEL || req.hostname.includes('vercel.app');
+    const requestOrigin = req.headers.origin;
+    const isCrossOrigin = isVercelDeployment || (requestOrigin && !requestOrigin.includes(req.hostname));
+    
+    // Debug logging
+    console.log('Setting cookie - isVercelDeployment:', isVercelDeployment);
+    console.log('Setting cookie - requestOrigin:', requestOrigin);
+    console.log('Setting cookie - isCrossOrigin:', isCrossOrigin);
+    
+    // For Vercel deployment or cross-origin: always use 'none' and 'secure: true'
+    // For localhost same-origin: use 'lax' and 'secure: false'
+    if (isVercelDeployment || isCrossOrigin) {
+      // Cross-origin requires 'none' and 'secure: true'
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: true, // Required when sameSite is 'none'
+        sameSite: 'none', // Required for cross-origin requests
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      });
+      console.log('Cookie set with sameSite: none, secure: true');
+    } else {
+      // Local development - same origin
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false, // Not needed for localhost
+        sameSite: 'lax', // Works for same-origin
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      });
+      console.log('Cookie set with sameSite: lax, secure: false');
+    }
 
     res.status(201).json({
       message: 'User created successfully',
@@ -112,6 +140,11 @@ router.post('/signup', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Debug logging
+    console.log('Login attempt - Origin:', req.headers.origin);
+    console.log('Login attempt - Hostname:', req.hostname);
+    console.log('Login attempt - Cookies:', req.cookies);
 
     // Validation
     if (!email || !password) {
@@ -150,12 +183,40 @@ router.post('/login', async (req, res) => {
     );
 
     // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    // When backend is on Vercel, always use cross-origin cookie settings
+    // because frontend may be on localhost or different domain
+    const isVercelDeployment = process.env.VERCEL || req.hostname.includes('vercel.app');
+    const requestOrigin = req.headers.origin;
+    const isCrossOrigin = isVercelDeployment || (requestOrigin && !requestOrigin.includes(req.hostname));
+    
+    // Debug logging
+    console.log('Setting cookie - isVercelDeployment:', isVercelDeployment);
+    console.log('Setting cookie - requestOrigin:', requestOrigin);
+    console.log('Setting cookie - isCrossOrigin:', isCrossOrigin);
+    
+    // For Vercel deployment or cross-origin: always use 'none' and 'secure: true'
+    // For localhost same-origin: use 'lax' and 'secure: false'
+    if (isVercelDeployment || isCrossOrigin) {
+      // Cross-origin requires 'none' and 'secure: true'
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: true, // Required when sameSite is 'none'
+        sameSite: 'none', // Required for cross-origin requests
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      });
+      console.log('Cookie set with sameSite: none, secure: true');
+    } else {
+      // Local development - same origin
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false, // Not needed for localhost
+        sameSite: 'lax', // Works for same-origin
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      });
+      console.log('Cookie set with sameSite: lax, secure: false');
+    }
 
     res.json({
       message: 'Login successful',

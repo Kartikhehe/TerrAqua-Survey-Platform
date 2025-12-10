@@ -31,10 +31,18 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
+    // Check if origin is in allowed list
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      // Log for debugging
       console.log('CORS blocked origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
+      // In development, allow localhost origins even if not explicitly listed
+      if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+        console.log('Allowing localhost origin for development');
+        return callback(null, true);
+      }
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -52,7 +60,11 @@ app.use(express.urlencoded({ extended: true }));
 // Handle preflight requests explicitly
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
+  // Check if origin is allowed or is localhost (for development)
+  const isAllowed = allowedOrigins.includes(origin) || 
+                    (origin && (origin.includes('localhost') || origin.includes('127.0.0.1')));
+  
+  if (isAllowed) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');

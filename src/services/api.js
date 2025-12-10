@@ -1,11 +1,38 @@
-const API_BASE_URL = 'http://localhost:3001/api';
-const AUTH_BASE_URL = 'http://localhost:3001/auth';
+const API_BASE_URL = 'https://terr-aqua-survey-platform-backend.vercel.app/api';
+const AUTH_BASE_URL = 'https://terr-aqua-survey-platform-backend.vercel.app/auth';
+
+// Helper function to get auth token from localStorage
+const getAuthToken = () => {
+  return localStorage.getItem('authToken');
+};
+
+// Helper function to set auth token in localStorage
+const setAuthToken = (token) => {
+  if (token) {
+    localStorage.setItem('authToken', token);
+  } else {
+    localStorage.removeItem('authToken');
+  }
+};
+
+// Helper function to get headers with auth
+const getAuthHeaders = () => {
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
 
 // Waypoints API
 export const waypointsAPI = {
   getAll: async () => {
     const response = await fetch(`${API_BASE_URL}/waypoints`, {
       credentials: 'include',
+      headers: getAuthHeaders(),
     });
     if (!response.ok) {
       if (response.status === 401) {
@@ -19,6 +46,7 @@ export const waypointsAPI = {
   getById: async (id) => {
     const response = await fetch(`${API_BASE_URL}/waypoints/${id}`, {
       credentials: 'include',
+      headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to fetch waypoint');
     return response.json();
@@ -33,9 +61,7 @@ export const waypointsAPI = {
   create: async (waypoint) => {
     const response = await fetch(`${API_BASE_URL}/waypoints`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({
         name: waypoint.name,
@@ -58,9 +84,7 @@ export const waypointsAPI = {
   update: async (id, waypoint) => {
     const response = await fetch(`${API_BASE_URL}/waypoints/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({
         name: waypoint.name,
@@ -84,6 +108,7 @@ export const waypointsAPI = {
     const response = await fetch(`${API_BASE_URL}/waypoints/${id}`, {
       method: 'DELETE',
       credentials: 'include',
+      headers: getAuthHeaders(),
     });
     if (!response.ok) {
       if (response.status === 401) {
@@ -102,10 +127,17 @@ export const uploadAPI = {
     const formData = new FormData();
     formData.append('image', file);
 
+    const headers = {};
+    const token = getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers: headers,
     });
     if (!response.ok) throw new Error('Failed to upload image');
     return response.json();
@@ -115,7 +147,7 @@ export const uploadAPI = {
 // Auth API
 export const authAPI = {
   signup: async (email, password, fullName) => {
-    return fetch(`${AUTH_BASE_URL}/signup`, {
+    const response = await fetch(`${AUTH_BASE_URL}/signup`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -123,10 +155,26 @@ export const authAPI = {
       credentials: 'include',
       body: JSON.stringify({ email, password, full_name: fullName }),
     });
+    
+    // If signup successful, store token from response
+    if (response.ok) {
+      const data = await response.json();
+      if (data.token) {
+        setAuthToken(data.token);
+      }
+      // Return a new response with the data
+      return {
+        ok: true,
+        json: async () => data,
+        status: response.status,
+      };
+    }
+    
+    return response;
   },
 
   login: async (email, password) => {
-    return fetch(`${AUTH_BASE_URL}/login`, {
+    const response = await fetch(`${AUTH_BASE_URL}/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -134,12 +182,30 @@ export const authAPI = {
       credentials: 'include',
       body: JSON.stringify({ email, password }),
     });
+    
+    // If login successful, store token from response
+    if (response.ok) {
+      const data = await response.json();
+      if (data.token) {
+        setAuthToken(data.token);
+      }
+      // Return a new response with the data
+      return {
+        ok: true,
+        json: async () => data,
+        status: response.status,
+      };
+    }
+    
+    return response;
   },
 
   logout: async () => {
+    setAuthToken(null); // Clear token from localStorage
     const response = await fetch(`${AUTH_BASE_URL}/logout`, {
       method: 'POST',
       credentials: 'include',
+      headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to logout');
     return response.json();
@@ -149,6 +215,7 @@ export const authAPI = {
     return fetch(`${AUTH_BASE_URL}/me`, {
       method: 'GET',
       credentials: 'include',
+      headers: getAuthHeaders(),
     });
   },
 };
