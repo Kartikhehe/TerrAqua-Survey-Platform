@@ -12,7 +12,7 @@ import {
   ListItemIcon,
   Divider,
 } from '@mui/material';
-import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon } from '@mui/icons-material';
+import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon, LocationOn as LocationOnIcon } from '@mui/icons-material';
 import { useState } from 'react';
 
 // Default location to use when GPS is unavailable
@@ -495,70 +495,69 @@ function WaypointDetails({
             </MenuItem>
             {/* Current Location option - always available */}
             {currentLocation && (
-              <>
-                <MenuItem
-                  onClick={handleCurrentLocationSelect}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                    },
+              <MenuItem
+                onClick={handleCurrentLocationSelect}
+                sx={{
+                  '&:hover': {
+                    backgroundColor: theme.palette.action.hover,
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  <MyLocationIcon sx={{ color: '#2196f3', fontSize: 20 }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Current Location"
+                  secondary={currentLocation.lat && currentLocation.lng 
+                    ? `${parseFloat(currentLocation.lat).toFixed(6)}, ${parseFloat(currentLocation.lng).toFixed(6)}`
+                    : 'Getting location...'}
+                  primaryTypographyProps={{
+                    fontSize: '0.9rem',
+                    color: theme.palette.text.primary,
+                    fontWeight: 500,
                   }}
-                >
-                  <ListItemIcon sx={{ minWidth: 40 }}>
-                    <MyLocationIcon sx={{ color: '#2196f3', fontSize: 20 }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Current Location"
-                    secondary={currentLocation.lat && currentLocation.lng 
-                      ? `${parseFloat(currentLocation.lat).toFixed(6)}, ${parseFloat(currentLocation.lng).toFixed(6)}`
-                      : 'Getting location...'}
-                    primaryTypographyProps={{
-                      fontSize: '0.9rem',
-                      color: theme.palette.text.primary,
-                      fontWeight: 500,
-                    }}
-                    secondaryTypographyProps={{
-                      fontSize: '0.75rem',
-                      color: theme.palette.text.secondary,
-                    }}
-                  />
-                </MenuItem>
-                {savedWaypoints.length > 0 && <Divider />}
-              </>
+                  secondaryTypographyProps={{
+                    fontSize: '0.75rem',
+                    color: theme.palette.text.secondary,
+                  }}
+                />
+              </MenuItem>
             )}
+            {currentLocation && savedWaypoints.length > 0 && <Divider />}
             {/* Saved waypoints */}
-            {savedWaypoints.length === 0 ? (
-              !currentLocation && (
-                <MenuItem disabled sx={{ color: theme.palette.text.secondary }}>
-                  No saved waypoints available
-                </MenuItem>
-              )
-            ) : (
-              savedWaypoints.map((waypoint) => (
-                <MenuItem
-                  key={waypoint.id}
-                  onClick={() => handleNavigateSelect(waypoint)}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={waypoint.name}
-                    secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)}`}
-                    primaryTypographyProps={{
-                      fontSize: '0.9rem',
-                      color: theme.palette.text.primary,
-                    }}
-                    secondaryTypographyProps={{
-                      fontSize: '0.75rem',
-                      color: theme.palette.text.secondary,
-                    }}
-                  />
-                </MenuItem>
-              ))
+            {savedWaypoints.length === 0 && !currentLocation && (
+              <MenuItem disabled sx={{ color: theme.palette.text.secondary }}>
+                No saved waypoints available
+              </MenuItem>
             )}
+            {savedWaypoints.map((waypoint) => (
+              <MenuItem
+                key={waypoint.id}
+                onClick={() => handleNavigateSelect(waypoint)}
+                sx={{
+                  '&:hover': {
+                    backgroundColor: theme.palette.action.hover,
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  <LocationOnIcon sx={{ color: '#4CAF50', fontSize: 20 }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary={waypoint.name}
+                  secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)}`}
+                  primaryTypographyProps={{
+                    fontSize: '0.9rem',
+                    color: theme.palette.text.primary,
+                    fontWeight: 500,
+                  }}
+                  secondaryTypographyProps={{
+                    fontSize: '0.75rem',
+                    color: theme.palette.text.secondary,
+                  }}
+                />
+              </MenuItem>
+            ))}
           </Menu>
         </Box>
       </Box>

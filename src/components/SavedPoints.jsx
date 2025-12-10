@@ -28,20 +28,29 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Load waypoints when dialog opens
   useEffect(() => {
     if (open) {
       if (!isAuthenticated) {
-        setError('Authentication required');
+        setError('Authentication required. Please log in to view saved waypoints.');
         setLoading(false);
         return;
       }
+      // Reset error state when dialog opens
+      setError(null);
       loadWaypoints();
+    } else {
+      // Reset state when dialog closes
+      setError(null);
+      setWaypoints([]);
+      setLoading(false);
     }
   }, [open, isAuthenticated]);
 
   const loadWaypoints = async () => {
     if (!isAuthenticated) {
-      setError('Authentication required');
+      setError('Authentication required. Please log in to view saved waypoints.');
+      setLoading(false);
       return;
     }
 
@@ -55,18 +64,22 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
       }
     } catch (err) {
       let errorMsg = 'Failed to load saved waypoints';
-      if (err.message === 'Authentication required') {
-        errorMsg = 'Authentication required. Please log in to view saved waypoints.';
+      console.error('Error loading waypoints:', err);
+      console.error('Error details:', {
+        message: err.message,
+        isAuthenticated,
+        error: err
+      });
+      
+      if (err.message === 'Authentication required' || err.message?.includes('Authentication')) {
+        // Show a simple error message without trying to verify session
+        errorMsg = 'Unable to load saved waypoints. Please ensure you are logged in and try again.';
         setError(errorMsg);
-        // Close dialog and navigate to login after a short delay
-        setTimeout(() => {
-          onClose();
-          navigate('/login');
-        }, 2000);
       } else {
+        errorMsg = err.message || 'Failed to load saved waypoints. Please try again.';
         setError(errorMsg);
       }
-      console.error(err);
+      
       if (onShowSnackbar) {
         onShowSnackbar(errorMsg, 'error');
       }
@@ -108,6 +121,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
       }}
     >
       <DialogTitle
+        component="div"
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -119,6 +133,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
         }}
       >
         <Typography
+          component="span"
           variant="h6"
           sx={{
             fontSize: { xs: '0.75rem', sm: '0.825rem', md: '0.9rem' },
@@ -152,14 +167,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
         ) : error ? (
           <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
             <Alert severity="error" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>{error}</Alert>
-            {error === 'Authentication required' && (
+            {error?.includes('Authentication required') && (
               <Box sx={{ mt: { xs: 1.5, sm: 2 }, textAlign: 'center' }}>
                 <Typography variant="body2" sx={{ 
                   color: 'text.secondary', 
                   mb: 1,
                   fontSize: { xs: '0.8rem', sm: '0.875rem' }
                 }}>
-                  Redirecting to login page...
+                  Please log in and try again.
                 </Typography>
               </Box>
             )}

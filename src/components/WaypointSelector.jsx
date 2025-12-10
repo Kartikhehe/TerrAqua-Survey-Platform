@@ -63,7 +63,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
     const selectedIndex = waypoints.findIndex(wp => wp.id === selectedWaypointId);
 
     return (
-      <>
+      <Box>
         <Paper
           elevation={0}
           sx={{
@@ -149,7 +149,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
             );
           })}
         </Menu>
-      </>
+      </Box>
     );
   }
 
