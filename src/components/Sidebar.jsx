@@ -15,6 +15,7 @@ import {
   AddLocationAltOutlined as AddLocationAltOutlinedIcon,
   BookmarkAddedOutlined as BookmarkAddedOutlinedIcon,
   IosShareOutlined as IosShareOutlinedIcon,
+  InputOutlined as InputOutlinedIcon,
   ChevronLeft, 
   ChevronRight 
 } from '@mui/icons-material';
@@ -28,6 +29,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
   const menuItems = [
     { text: 'Start Survey', icon: <AddLocationAltOutlinedIcon />, action: () => onMenuItemClick('Start Survey') },
     { text: 'View Saved Points', icon: <BookmarkAddedOutlinedIcon />, action: () => onMenuItemClick('Saved Points') },
+    { text: 'Import File', icon: <InputOutlinedIcon />, action: () => onMenuItemClick('Import File') },
     { text: 'Export Data', icon: <IosShareOutlinedIcon />, action: () => onMenuItemClick('Export Data') },
   ];
 
