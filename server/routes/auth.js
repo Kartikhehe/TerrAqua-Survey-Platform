@@ -6,6 +6,29 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Middleware to set CORS headers on all auth routes
+router.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://terr-aqua-survey-platform.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL,
+  ].filter(Boolean);
+  
+  const isAllowed = !origin || 
+                   allowedOrigins.includes(origin) ||
+                   (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) ||
+                   (origin && origin.includes('vercel.app'));
+  
+  if (isAllowed && origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  next();
+});
+
 // Signup route
 router.post('/signup', async (req, res) => {
   try {
@@ -74,6 +97,12 @@ router.post('/signup', async (req, res) => {
     // For Vercel deployment or cross-origin: always use 'none' and 'secure: true'
     // For localhost same-origin: use 'lax' and 'secure: false'
     if (isVercelDeployment || isCrossOrigin) {
+      // Ensure CORS headers are set before setting cookie
+      if (requestOrigin) {
+        res.header('Access-Control-Allow-Origin', requestOrigin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
+      
       // Cross-origin requires 'none' and 'secure: true'
       res.cookie('token', token, {
         httpOnly: true,
@@ -208,6 +237,12 @@ router.post('/login', async (req, res) => {
     // For Vercel deployment or cross-origin: always use 'none' and 'secure: true'
     // For localhost same-origin: use 'lax' and 'secure: false'
     if (isVercelDeployment || isCrossOrigin) {
+      // Ensure CORS headers are set before setting cookie
+      if (requestOrigin) {
+        res.header('Access-Control-Allow-Origin', requestOrigin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
+      
       // Cross-origin requires 'none' and 'secure: true'
       res.cookie('token', token, {
         httpOnly: true,
