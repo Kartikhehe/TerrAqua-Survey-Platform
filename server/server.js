@@ -27,7 +27,8 @@ const allowedOrigins = [
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null, // Vercel preview deployments
 ].filter(Boolean); // Remove any undefined values
 
-app.use(cors({
+// CORS configuration function
+const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
@@ -58,7 +59,30 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
-}));
+};
+
+app.use(cors(corsOptions));
+
+// Additional middleware to ensure CORS headers are set on all responses
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Check if origin should be allowed
+  const isAllowed = !origin || 
+                   allowedOrigins.includes(origin) ||
+                   (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) ||
+                   (origin && origin.includes('vercel.app'));
+  
+  if (isAllowed && origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.header('Access-Control-Expose-Headers', 'Set-Cookie');
+  }
+  
+  next();
+});
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
