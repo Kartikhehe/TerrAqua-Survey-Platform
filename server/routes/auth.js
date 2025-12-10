@@ -59,11 +59,16 @@ router.post('/signup', async (req, res) => {
     // because frontend may be on localhost or different domain
     const isVercelDeployment = process.env.VERCEL || req.hostname.includes('vercel.app');
     const requestOrigin = req.headers.origin;
-    const isCrossOrigin = isVercelDeployment || (requestOrigin && !requestOrigin.includes(req.hostname));
+    // Check if request is cross-origin (different domain/subdomain)
+    const isCrossOrigin = isVercelDeployment || 
+                         (requestOrigin && requestOrigin !== `http://${req.hostname}` && 
+                          requestOrigin !== `https://${req.hostname}` &&
+                          !requestOrigin.includes(req.hostname));
     
     // Debug logging
     console.log('Setting cookie - isVercelDeployment:', isVercelDeployment);
     console.log('Setting cookie - requestOrigin:', requestOrigin);
+    console.log('Setting cookie - hostname:', req.hostname);
     console.log('Setting cookie - isCrossOrigin:', isCrossOrigin);
     
     // For Vercel deployment or cross-origin: always use 'none' and 'secure: true'
@@ -76,6 +81,7 @@ router.post('/signup', async (req, res) => {
         sameSite: 'none', // Required for cross-origin requests
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         path: '/',
+        // Don't set domain - let browser handle it for cross-origin
       });
       console.log('Cookie set with sameSite: none, secure: true');
     } else {
@@ -187,11 +193,16 @@ router.post('/login', async (req, res) => {
     // because frontend may be on localhost or different domain
     const isVercelDeployment = process.env.VERCEL || req.hostname.includes('vercel.app');
     const requestOrigin = req.headers.origin;
-    const isCrossOrigin = isVercelDeployment || (requestOrigin && !requestOrigin.includes(req.hostname));
+    // Check if request is cross-origin (different domain/subdomain)
+    const isCrossOrigin = isVercelDeployment || 
+                         (requestOrigin && requestOrigin !== `http://${req.hostname}` && 
+                          requestOrigin !== `https://${req.hostname}` &&
+                          !requestOrigin.includes(req.hostname));
     
     // Debug logging
     console.log('Setting cookie - isVercelDeployment:', isVercelDeployment);
     console.log('Setting cookie - requestOrigin:', requestOrigin);
+    console.log('Setting cookie - hostname:', req.hostname);
     console.log('Setting cookie - isCrossOrigin:', isCrossOrigin);
     
     // For Vercel deployment or cross-origin: always use 'none' and 'secure: true'
@@ -204,6 +215,7 @@ router.post('/login', async (req, res) => {
         sameSite: 'none', // Required for cross-origin requests
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         path: '/',
+        // Don't set domain - let browser handle it for cross-origin
       });
       console.log('Cookie set with sameSite: none, secure: true');
     } else {

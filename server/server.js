@@ -24,6 +24,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   process.env.FRONTEND_URL,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null, // Vercel preview deployments
 ].filter(Boolean); // Remove any undefined values
 
 app.use(cors({
@@ -43,6 +44,11 @@ app.use(cors({
         console.log('Allowing localhost origin for development');
         return callback(null, true);
       }
+      // Allow any Vercel deployment (for preview deployments)
+      if (origin && origin.includes('vercel.app')) {
+        console.log('Allowing Vercel deployment origin:', origin);
+        return callback(null, true);
+      }
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -60,9 +66,10 @@ app.use(express.urlencoded({ extended: true }));
 // Handle preflight requests explicitly
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
-  // Check if origin is allowed or is localhost (for development)
+  // Check if origin is allowed or is localhost (for development) or Vercel deployment
   const isAllowed = allowedOrigins.includes(origin) || 
-                    (origin && (origin.includes('localhost') || origin.includes('127.0.0.1')));
+                    (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) ||
+                    (origin && origin.includes('vercel.app'));
   
   if (isAllowed) {
     res.header('Access-Control-Allow-Origin', origin);
