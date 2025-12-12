@@ -104,13 +104,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: { xs: '2.5rem', sm: '2.1875rem' },
-            height: { xs: '2.5rem', sm: '2.1875rem' },
+            width: { xs: '3rem', sm: '2.1875rem' },
+            height: { xs: '3rem', sm: '2.1875rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
             '& .MuiSvgIcon-root': {
-              fontSize: { xs: '1.5rem', sm: '1.25rem' },
+              fontSize: { xs: '1.75rem', sm: '1.25rem' },
             },
           }} 
           size="small"

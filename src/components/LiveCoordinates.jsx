@@ -69,11 +69,11 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, flex: 1, overflow: 'auto', minHeight: 0 }}>
         <Box sx={{ 
           display: 'flex', 
-          gap: { xs: 1, sm: 1.5, md: 2 }, 
+          gap: { xs: 0.5, sm: 1.5, md: 2 }, 
           alignItems: 'flex-start',
-          flexWrap: { xs: 'wrap', sm: 'nowrap' }
+          flexWrap: 'nowrap'
         }}>
-          <Box sx={{ flex: { xs: '1 1 calc(50% - 0.75rem)', sm: 1 }, minWidth: 0 }}>
+          <Box sx={{ flex: { xs: '1 1 calc(33.33% - 0.33rem)', sm: 1 }, minWidth: 0 }}>
             <Typography
               variant="caption"
               sx={{
@@ -100,7 +100,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
               {coordinates.lat}°
             </Typography>
           </Box>
-          <Box sx={{ flex: { xs: '1 1 calc(50% - 0.75rem)', sm: 1 }, minWidth: 0 }}>
+          <Box sx={{ flex: { xs: '1 1 calc(33.33% - 0.33rem)', sm: 1 }, minWidth: 0 }}>
             <Typography
               variant="caption"
               sx={{
@@ -128,7 +128,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
             </Typography>
           </Box>
           {coordinates.accuracy !== null && (
-            <Box sx={{ flex: { xs: '1 1 100%', sm: 1 }, minWidth: 0 }}>
+            <Box sx={{ flex: { xs: '1 1 calc(33.33% - 0.33rem)', sm: 1 }, minWidth: 0 }}>
               <Typography
                 variant="caption"
                 sx={{

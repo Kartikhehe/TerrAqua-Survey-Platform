@@ -90,18 +90,29 @@ function App() {
   const [mapDynamicHeight, setMapDynamicHeight] = useState(null);
   const theme = createAppTheme(darkMode ? 'dark' : 'light');
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   
   // Detect if device has cursor (mouse) or is touch-only
   // Check for touch support - if device supports touch, assume no cursor
-  const hasCursor = (() => {
+  const [hasCursor, setHasCursor] = useState(() => {
     if (typeof window === 'undefined') return true;
     // Check if device has touch capability
     const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     // Check if it's a hybrid device (like Surface) - assume it has cursor if screen is large
     const isLargeScreen = window.innerWidth >= 768;
     return !hasTouch || (hasTouch && isLargeScreen);
-  })();
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const checkCursor = () => {
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isLargeScreen = window.innerWidth >= 768;
+      setHasCursor(!hasTouch || (hasTouch && isLargeScreen));
+    };
+    window.addEventListener('resize', checkCursor);
+    return () => window.removeEventListener('resize', checkCursor);
+  }, []);
 
   const handleToggleDarkMode = () => {
     const newMode = !darkMode;
@@ -1122,7 +1133,15 @@ function App() {
       
       try {
         const data = await waypointsAPI.getAll();
-        setSavedWaypointsList(data);
+        const filtered = user?.id
+          ? data.filter(
+              (wp) =>
+                wp.user_id === user.id ||
+                wp.userId === user.id ||
+                wp.user?.id === user.id
+            )
+          : data;
+        setSavedWaypointsList(filtered);
       } catch (error) {
         // Silently fail if not authenticated or other error
         console.error('Error loading saved waypoints:', error);
@@ -1228,6 +1247,9 @@ function App() {
           
           // Set view to current location with zoomed out view (zoom level 12 for city-level view)
           map.setView([latitude, longitude], 15);
+          if (isMobile) {
+            updateMobileMapHeight();
+          }
           
           // Update coordinates with accuracy
           setCoordinates({
@@ -1587,6 +1609,10 @@ function App() {
     mapContainer.addEventListener('dragover', handleDragOver);
     mapContainer.addEventListener('dragleave', handleDragLeave);
     mapContainer.addEventListener('drop', handleDrop);
+
+    if (isMobile) {
+      updateMobileMapHeight();
+    }
 
     // Cleanup function to remove map instance when component unmounts
     return () => {
@@ -1990,7 +2016,7 @@ function App() {
         map.off('zoomend', updateCenterCoordinates);
       };
     }
-  }, []); // Empty dependency array - this should always be active
+  }, [hasCursor]); // Re-run when hasCursor changes
 
   // Update red overlay when selected waypoint changes
   useEffect(() => {

@@ -22,7 +22,7 @@ import { useNavigate } from 'react-router-dom';
 
 function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
   const theme = useTheme();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const [waypoints, setWaypoints] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -58,9 +58,17 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
     setError(null);
     try {
       const data = await waypointsAPI.getAll();
-      setWaypoints(data);
+      const filtered = user?.id
+        ? data.filter(
+            (wp) =>
+              wp.user_id === user.id ||
+              wp.userId === user.id ||
+              wp.user?.id === user.id
+          )
+        : data;
+      setWaypoints(filtered);
       if (onShowSnackbar && data.length > 0) {
-        onShowSnackbar(`Loaded ${data.length} saved waypoint${data.length > 1 ? 's' : ''}`, 'success');
+        onShowSnackbar(`Loaded ${filtered.length} saved waypoint${filtered.length > 1 ? 's' : ''}`, 'success');
       }
     } catch (err) {
       let errorMsg = 'Failed to load saved waypoints';

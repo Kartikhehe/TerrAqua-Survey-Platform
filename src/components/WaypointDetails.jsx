@@ -235,7 +235,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           flex: 1,
           overflow: 'auto',
           minHeight: 0,
-          py: { xs: '10px', sm: 0 }, // add vertical padding on mobile to match UI
+          pt: '10px', // top padding to match UI
+          pb: '10px', // bottom padding to match UI
         }}
       >
         <TextField
