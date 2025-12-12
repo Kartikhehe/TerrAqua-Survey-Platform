@@ -1,6 +1,7 @@
+import React from 'react';
 import { Box, Paper, Typography, useTheme } from '@mui/material';
 
-function LiveCoordinates({ coordinates, sidebarOpen = false }) {
+const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates, sidebarOpen = false }, ref) {
   const theme = useTheme();
 
   return (
@@ -42,6 +43,7 @@ function LiveCoordinates({ coordinates, sidebarOpen = false }) {
           flexDirection: 'column',
           overflow: 'hidden',
         }}
+        ref={ref}
       >
         <Box sx={{ 
           display: 'flex', 
@@ -157,7 +159,6 @@ function LiveCoordinates({ coordinates, sidebarOpen = false }) {
       </Box>
     </Paper>
   );
-}
+});
 
 export default LiveCoordinates;
-

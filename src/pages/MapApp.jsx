@@ -85,6 +85,9 @@ function App() {
   const labelLayerRef = useRef(null); // Reference to label layer for satellite hybrid view
   const locateHandlerRef = useRef(null); // Reference to locate handler function
   const fileInputRef = useRef(null); // Reference to file input for import
+  const liveCoordsRef = useRef(null); // Measure live coordinates card height (mobile)
+  const waypointDetailsRef = useRef(null); // Measure waypoint details card height (mobile)
+  const [mapDynamicHeight, setMapDynamicHeight] = useState(null);
   const theme = createAppTheme(darkMode ? 'dark' : 'light');
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isAuthenticated } = useAuth();
@@ -250,6 +253,17 @@ function App() {
         showSnackbar(error.message || 'Failed to save waypoint. Please try again.', 'error');
       }
     }
+  };
+
+  // Compute dynamic map height on mobile based on visible bottom cards
+  const updateMobileMapHeight = () => {
+    if (!isMobile || typeof window === 'undefined') return;
+    const headerEl = document.querySelector('header');
+    const headerHeight = headerEl?.offsetHeight || 56;
+    const liveH = liveCoordsRef.current?.offsetHeight || 0;
+    const detailsH = selectedWaypointId ? (waypointDetailsRef.current?.offsetHeight || 0) : 0;
+    const available = Math.max(200, window.innerHeight - headerHeight - liveH - detailsH);
+    setMapDynamicHeight(available);
   };
 
   const handleDeleteWaypoint = async () => {
@@ -1807,6 +1821,29 @@ function App() {
     }
   }, [surveyActive]);
 
+  // Recalculate map size when mobile padding changes (e.g., waypoint details open)
+  useEffect(() => {
+    if (!isMobile) return;
+    const handler = () => updateMobileMapHeight();
+    handler();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [isMobile, selectedWaypointId, sidebarOpen]);
+
+  useEffect(() => {
+    if (!mapRef.current || !isMobile) return;
+    const map = mapRef.current;
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+    // Wait briefly for layout to settle, then resize and restore center/zoom
+    const timer = setTimeout(() => {
+      if (!mapRef.current) return;
+      mapRef.current.invalidateSize();
+      mapRef.current.setView(currentCenter, currentZoom, { animate: false });
+    }, 140);
+    return () => clearTimeout(timer);
+  }, [mapDynamicHeight, isMobile]);
+
   // Handle location selection mode
   useEffect(() => {
     if (!mapRef.current) return;
@@ -2024,43 +2061,53 @@ function App() {
         }}
       >
         <Box 
-          id="map" 
           sx={{ 
+            position: 'relative',
             width: '100%',
-            height: '100%',
-            position: 'relative'
+            height: isMobile && mapDynamicHeight ? `${mapDynamicHeight}px` : '100%',
+            overflow: 'hidden',
           }}
-        />
-        
-        {/* Center crosshair for touch devices */}
-        {!hasCursor && (
-          <Box
-            sx={{
+        >
+          <Box 
+            id="map" 
+            sx={{ 
               position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '1px',
-              height: { xs: '24px', sm: '30px' },
-              backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
-              zIndex: theme.zIndex.drawer + 1,
-              pointerEvents: 'none',
-              '&::before': {
-                content: '""',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+            }}
+          />
+          
+          {/* Center crosshair for touch devices - relative to map area */}
+          {!hasCursor && (
+            <Box
+              sx={{
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                width: { xs: '24px', sm: '30px' },
-                height: '1px',
+                width: '1px',
+                height: { xs: '24px', sm: '30px' },
                 backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
-              }
-            }}
-          />
-        )}
+                zIndex: theme.zIndex.drawer + 1,
+                pointerEvents: 'none',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: { xs: '24px', sm: '30px' },
+                  height: '1px',
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
+                }
+              }}
+            />
+          )}
+        </Box>
         
         {/* Live Coordinates card - always visible */}
-        <LiveCoordinates coordinates={coordinates} sidebarOpen={sidebarOpen} />
+        <LiveCoordinates coordinates={coordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
 
         {surveyActive && (
           <>
@@ -2073,7 +2120,7 @@ function App() {
 
             {/* Expanded waypoint card - only visible when a point is clicked */}
             {selectedWaypointId && (
-              <WaypointDetails
+            <WaypointDetails
                 selectedWaypointId={selectedWaypointId}
                 waypointData={waypointData}
                 setWaypointData={setWaypointData}
@@ -2091,6 +2138,7 @@ function App() {
                 savedWaypoints={savedWaypointsList}
                 onNavigate={handleNavigate}
                 sidebarOpen={sidebarOpen}
+                ref={waypointDetailsRef}
               />
             )}
           </>
@@ -2167,6 +2215,13 @@ function App() {
             
             const map = mapRef.current;
             const mapContainer = map.getContainer();
+            
+            // Clear previous selection and red circle overlay
+            const previousSelectedId = selectedWaypointId;
+            if (previousSelectedId) {
+              updateSelectedMarkerOverlay(null);
+              setSelectedWaypointId(null);
+            }
             
             // Check if waypoint already exists (by database ID)
             const existingEntry = Object.entries(dbWaypointIds).find(

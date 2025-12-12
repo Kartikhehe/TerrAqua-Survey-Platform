@@ -13,7 +13,7 @@ import {
   Divider,
 } from '@mui/material';
 import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon, LocationOn as LocationOnIcon } from '@mui/icons-material';
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 // Default location to use when GPS is unavailable
 const DEFAULT_LOCATION = {
@@ -21,7 +21,7 @@ const DEFAULT_LOCATION = {
   lng: 80.231507
 };
 
-function WaypointDetails({
+const WaypointDetails = React.forwardRef(function WaypointDetails({
   selectedWaypointId,
   waypointData,
   setWaypointData,
@@ -35,7 +35,7 @@ function WaypointDetails({
   locationSelectionActive = false,
   onToggleLocationSelection,
   sidebarOpen = false,
-}) {
+}, ref) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
@@ -188,6 +188,7 @@ function WaypointDetails({
           duration: theme.transitions.duration.enteringScreen,
         }),
       }}
+      ref={ref}
     >
       <Box sx={{ 
         display: 'flex', 
@@ -596,7 +597,6 @@ function WaypointDetails({
       </Box>
     </Paper>
   );
-}
+});
 
 export default WaypointDetails;
-

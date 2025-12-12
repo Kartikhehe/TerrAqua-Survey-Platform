@@ -104,10 +104,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
-            width: { xs: '1.75rem', sm: '2.1875rem' },
-            height: { xs: '1.75rem', sm: '2.1875rem' },
+            width: { xs: '2.5rem', sm: '2.1875rem' },
+            height: { xs: '2.5rem', sm: '2.1875rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+            },
+            '& .MuiSvgIcon-root': {
+              fontSize: { xs: '1.5rem', sm: '1.25rem' },
             },
           }} 
           size="small"
@@ -135,7 +138,8 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                   mx: { xs: 0.65625, sm: 0.875 },
                   borderRadius: { xs: 0, sm: '0.765625rem', md: '0.875rem' },
                   justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                  minHeight: { xs: '2.40625rem', sm: '2.625rem' },
+                  minHeight: { xs: '3rem', sm: '2.625rem' },
+                  py: { xs: 1, sm: 0.5 },
                   '&:hover': {
                     backgroundColor: theme.palette.action.hover,
                   },
@@ -152,10 +156,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                 <ListItemIcon
                   sx={{
                     color: sidebarOpen ? '#4CAF50' : theme.palette.text.secondary,
-                    minWidth: sidebarOpen ? { xs: '1.75rem', sm: '2.1875rem' } : 'auto',
+                    minWidth: sidebarOpen ? { xs: '2.25rem', sm: '2.1875rem' } : 'auto',
                     justifyContent: 'center',
                     '& .Mui-selected': {
                       color: '#4CAF50',
+                    },
+                    '& .MuiSvgIcon-root': {
+                      fontSize: { xs: '1.5rem', sm: '1.25rem' },
                     },
                   }}
                 >
@@ -167,7 +174,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                     primaryTypographyProps={{
                       fontWeight: 600,
                       color: theme.palette.text.primary,
-                      fontSize: { xs: '0.875rem', sm: '0.8rem', md: '0.83125rem' },
+                      fontSize: { xs: '1rem', sm: '0.8rem', md: '0.83125rem' },
                     }}
                   />
                 )}
