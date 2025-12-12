@@ -4,10 +4,7 @@ const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  // Check if we're on localhost
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'http://localhost:3001';
-  }
+
   // Default to deployed backend
   return 'https://terr-aqua-survey-platform-backend.vercel.app';
 };
