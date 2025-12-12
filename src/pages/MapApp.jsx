@@ -3,6 +3,9 @@ import '../App.css'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-rotate/dist/leaflet-rotate.js';
+import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
+import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
 import { 
   Box, 
   useTheme, 
@@ -16,7 +19,7 @@ import {
   ThemeProvider,
   CssBaseline
 } from '@mui/material';
-import { AddLocation, MyLocation } from '@mui/icons-material';
+import { AddLocation, MyLocation, Menu as MenuIcon } from '@mui/icons-material';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import LiveCoordinates from '../components/LiveCoordinates';
@@ -40,6 +43,14 @@ const INDIA_CENTER = {
   lat: 20.5937,
   lng: 78.9629
 };
+
+// Ensure default Leaflet markers load correctly when bundled (e.g., on Vercel)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2xUrl,
+  iconUrl: markerIconUrl,
+  shadowUrl: markerShadowUrl,
+});
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -134,6 +145,10 @@ function App() {
       }
     } else {
     console.log(`${item} clicked`);
+    }
+    // Close sidebar on mobile after any action
+    if (isMobile) {
+      setSidebarOpen(false);
     }
   };
 
@@ -1188,14 +1203,12 @@ function App() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
+          const hasAccuracy = typeof accuracy === 'number' && !Number.isNaN(accuracy);
           
-          // Only use GPS location if accuracy is reasonable (less than 500m)
-          // This prevents using inaccurate IP-based locations or cached positions
-          // If accuracy is null/undefined, it might be IP-based, so reject it
-          if (!accuracy || accuracy > 500) {
-            console.log('GPS accuracy too low or unavailable, showing warning dialog. Accuracy:', accuracy);
+          // Only reject if we have a reported accuracy and it's very poor (>500m)
+          if (hasAccuracy && accuracy > 500) {
+            console.log('GPS accuracy too low, showing warning dialog. Accuracy:', accuracy);
             setGpsWarningOpen(true);
-            // Keep map on India center, don't navigate to inaccurate location
             return;
           }
           
@@ -1976,6 +1989,28 @@ function App() {
         isMobile={isMobile}
         onMenuItemClick={handleMenuItemClick}
       />
+      {isMobile && (
+        <IconButton
+          onClick={handleSidebarToggle}
+          sx={{
+            position: 'fixed',
+            top: '3.5rem',
+            left: '0.75rem',
+            zIndex: theme.zIndex.drawer + 15,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 2px 8px rgba(0,0,0,0.45)'
+              : '0 2px 8px rgba(0,0,0,0.15)',
+            '&:hover': {
+              backgroundColor: theme.palette.action.hover,
+            }
+          }}
+          size="small"
+        >
+          <MenuIcon />
+        </IconButton>
+      )}
       <Box
         component="main"
         sx={{
@@ -2002,7 +2037,7 @@ function App() {
           <Box
             sx={{
               position: 'absolute',
-              top: '40%',
+              top: '50%',
               left: '50%',
               transform: 'translate(-50%, -50%)',
               width: '1px',

@@ -8,28 +8,34 @@ function LiveCoordinates({ coordinates, sidebarOpen = false }) {
         elevation={0}
         sx={{
           position: 'fixed',
-          bottom: { xs: '1rem', sm: '1.5rem' },
-          right: { xs: '1rem', sm: '1.5rem' },
+          bottom: { xs: '0', sm: '1.5rem' },
+          right: { xs: 0, sm: '1.5rem' },
           left: { 
-            xs: sidebarOpen ? 'calc(14rem + 1rem)' : '1rem', // 14rem sidebar width + 1rem margin
+            xs: 0,
             sm: 'auto' 
           },
           width: { 
-            xs: sidebarOpen 
-              ? 'calc(100% - 14rem - 2rem)' // Account for sidebar + margins
-              : 'calc(100% - 1.75rem)', 
+            xs: '100%', 
             sm: '19.25rem', 
             md: '22.96875rem' 
           },
           maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
-          p: { xs: 1.3125, sm: 1.75, md: 2.625 },
-          borderRadius: { xs: '0.65625rem', sm: '0.875rem' },
+          p: { xs: 1, sm: 1.75, md: 2.625 },
+          borderRadius: { xs: 0, sm: '0.875rem' },
           backgroundColor: theme.palette.background.paper,
-          boxShadow: theme.palette.mode === 'dark' 
-            ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
-            : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
-          border: `1px solid ${theme.palette.divider}`,
-          zIndex: theme.zIndex.drawer + 2,
+          boxShadow: {
+            xs: theme.palette.mode === 'dark'
+              ? '0 -6px 12px rgba(0, 0, 0, 0.35)'
+              : '0 -6px 12px rgba(0, 0, 0, 0.18)',
+            sm: theme.palette.mode === 'dark' 
+              ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+              : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
+          },
+          border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
+          zIndex: {
+            xs: theme.zIndex.drawer + 4, // above waypoint details so shadow falls on it
+            sm: theme.zIndex.drawer + 2,
+          },
           transform: 'translateZ(0)',
           willChange: 'transform',
           display: 'flex',
