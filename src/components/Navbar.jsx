@@ -104,7 +104,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
             flexGrow: 1,
             fontWeight: 600,
             letterSpacing: { xs: '0.2625px', sm: '0.4375px' },
-            fontSize: { xs: '0.7875rem', sm: '0.9625rem', md: '1.3125rem' },
+            fontSize: { xs: '0.9rem', sm: '0.9625rem', md: '1.3125rem' },
             color: 'text.primary',
           }}
         >
@@ -146,6 +146,10 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           id="account-menu"
           open={open}
           onClose={handleClose}
+          MenuListProps={{
+            dense: true,
+            sx: { py: { xs: 0.25, sm: 0.5 } },
+          }}
           PaperProps={{
             elevation: 3,
             sx: {
@@ -197,7 +201,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 <Typography variant="body2" sx={{ 
                   fontWeight: 600, 
                   color: 'text.primary',
-                  fontSize: { xs: '0.7rem', sm: '0.765625rem' },
+                  fontSize: { xs: '0.8rem', sm: '0.8rem' },
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -207,7 +211,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 </Typography>
                 <Typography variant="caption" sx={{ 
                   color: 'text.secondary', 
-                  fontSize: { xs: '0.6125rem', sm: '0.65625rem' },
+                  fontSize: { xs: '0.7rem', sm: '0.7rem' },
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -219,7 +223,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
             </Box>
           </MenuItem>
           <Divider />
-          <MenuItem onClick={handleDarkModeToggle} sx={{ py: 1.5 }}>
+          <MenuItem onClick={handleDarkModeToggle} sx={{ py: { xs: 0.85, sm: 1.1 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 {isDark ? (
@@ -229,7 +233,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 )}
                 <Typography sx={{ 
                   color: 'text.primary', 
-                  fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+                  fontSize: { xs: '0.85rem', sm: '0.85rem' } 
                 }}>
                   {isDark ? 'Dark Mode' : 'Light Mode'}
                 </Typography>
@@ -256,13 +260,13 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
               }
               handleClose();
             }}
-            sx={{ py: 1.5 }}
+            sx={{ py: { xs: 0.85, sm: 1.1 } }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
               <LocationOnIcon sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
               <Typography sx={{ 
                 color: 'text.primary', 
-                fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+                fontSize: { xs: '0.85rem', sm: '0.85rem' } 
               }}>
                 Set Default Location
               </Typography>
@@ -276,13 +280,13 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
               }
               handleClose();
             }}
-            sx={{ py: 1.5 }}
+            sx={{ py: { xs: 0.85, sm: 1.1 } }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
               <SatelliteAltIcon sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
               <Typography sx={{ 
                 color: 'text.primary', 
-                fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+                fontSize: { xs: '0.85rem', sm: '0.85rem' } 
               }}>
                 {satelliteHybridMode ? 'Switch to Map View' : 'Switch to Satellite Hybrid'}
               </Typography>
@@ -290,14 +294,17 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           </MenuItem>
           <Divider />
           {isAuthenticated ? (
-            <MenuItem onClick={handleLogout} sx={{ color: '#d32f2f' }}>
+            <MenuItem 
+              onClick={handleLogout} 
+              sx={{ color: '#d32f2f', py: { xs: 0.85, sm: 1.1 } }}
+            >
               Logout
             </MenuItem>
           ) : (
-            <MenuItem onClick={handleLogin} sx={{ py: 1.5 }}>
+            <MenuItem onClick={handleLogin} sx={{ py: { xs: 0.85, sm: 1.1 } }}>
               <Typography sx={{ 
                 color: 'text.primary', 
-                fontSize: { xs: '0.7rem', sm: '0.7875rem' } 
+                fontSize: { xs: '0.85rem', sm: '0.85rem' } 
               }}>
                 Login
               </Typography>

@@ -132,33 +132,55 @@ function WaypointDetails({
       elevation={0}
       sx={{
         position: 'fixed',
-        right: { xs: '1rem', sm: '1.5rem' },
-        bottom: { xs: '8rem', sm: '10rem', md: '10rem' },
+        right: { xs: 0, sm: '1.5rem' },
+        bottom: { xs: '5.25rem', sm: '10rem', md: '10rem' },
         left: { 
-          xs: sidebarOpen ? 'calc(14rem + 1rem)' : '1rem', // 14rem sidebar width + 1rem margin
+          xs: 0,
           sm: 'auto' 
         },
         width: { 
-          xs: sidebarOpen 
-            ? 'calc(100% - 14rem - 2rem)' // Account for sidebar + margins
-            : 'calc(100% - 1.75rem)', 
+          xs: '100%', 
           sm: '19.25rem', 
           md: '22.96875rem' 
         },
         maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
-        maxHeight: { xs: '35vh', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
-        p: { xs: 1.3125, sm: 1.75, md: 2.625 },
-        borderRadius: { xs: '0.65625rem', sm: '0.875rem' },
+        maxHeight: { xs: '40vh', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
+        p: { xs: 1.1, sm: 1.75, md: 2.625 },
+        borderRadius: { xs: 0, sm: '0.875rem' },
         backgroundColor: theme.palette.background.paper,
-        boxShadow: theme.palette.mode === 'dark' 
-          ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
-          : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
-        border: `1px solid ${theme.palette.divider}`,
-        zIndex: theme.zIndex.drawer + 3,
+        boxShadow: {
+          xs: theme.palette.mode === 'dark'
+            ? '0 8px 18px rgba(0, 0, 0, 0.35)'
+            : '0 8px 18px rgba(0, 0, 0, 0.18)',
+          sm: theme.palette.mode === 'dark' 
+            ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+            : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
+        },
+        border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
+        zIndex: {
+          xs: theme.zIndex.drawer + 3, // keep below LiveCoordinates to avoid shadow on it
+          sm: theme.zIndex.drawer + 3,
+        },
         display: 'flex',
         flexDirection: 'column',
         gap: { xs: 1.5, sm: 2 },
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: { xs: 'scroll', sm: 'hidden' },
+        WebkitOverflowScrolling: { xs: 'touch', sm: 'auto' },
+        scrollbarWidth: { xs: 'thin', sm: 'auto' }, // Firefox - keep scrollbar visible
+        scrollbarColor: { xs: '#9e9e9e #e0e0e0', sm: 'auto' },
+        '&::-webkit-scrollbar': {
+          width: { xs: '8px', sm: '0px' },
+          backgroundColor: { xs: '#e0e0e0', sm: 'transparent' },
+        },
+        '&::-webkit-scrollbar-track': {
+          backgroundColor: { xs: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5', sm: 'transparent' },
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: { xs: theme.palette.mode === 'dark' ? '#9e9e9e' : '#9e9e9e', sm: 'transparent' },
+          borderRadius: '999px',
+          border: { xs: theme.palette.mode === 'dark' ? '2px solid #2a2a2a' : '2px solid #f5f5f5', sm: 'none' },
+        },
         transform: 'translateZ(0)',
         willChange: 'transform',
         transition: theme.transitions.create(['transform', 'opacity', 'box-shadow'], {
@@ -204,7 +226,17 @@ function WaypointDetails({
         </IconButton>
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: { xs: 1.5, sm: 2 },
+          flex: 1,
+          overflow: 'auto',
+          minHeight: 0,
+          py: { xs: '10px', sm: 0 }, // add vertical padding on mobile to match UI
+        }}
+      >
         <TextField
           label="Name"
           value={waypointData.name}
@@ -319,6 +351,7 @@ function WaypointDetails({
             style={{ display: 'none' }}
             id="image-upload"
             type="file"
+            capture="environment"
             onChange={onImageUpload}
           />
           <label htmlFor="image-upload">

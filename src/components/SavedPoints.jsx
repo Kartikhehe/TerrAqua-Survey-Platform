@@ -136,7 +136,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
           component="span"
           variant="h6"
           sx={{
-            fontSize: { xs: '0.75rem', sm: '0.825rem', md: '0.9rem' },
+            fontSize: { xs: '0.9rem', sm: '0.9rem', md: '0.95rem' },
             fontWeight: 600,
             color: theme.palette.text.primary,
           }}
@@ -172,7 +172,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
                 <Typography variant="body2" sx={{ 
                   color: 'text.secondary', 
                   mb: 1,
-                  fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                  fontSize: { xs: '0.9rem', sm: '0.95rem' }
                 }}>
                   Please log in and try again.
                 </Typography>
@@ -183,7 +183,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
           <Box sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
             <Typography sx={{ 
               color: theme.palette.text.secondary,
-              fontSize: { xs: '0.875rem', sm: '1rem' }
+              fontSize: { xs: '1rem', sm: '1.05rem' }
             }}>
               No saved waypoints found
             </Typography>
@@ -225,11 +225,11 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
                     primaryTypographyProps={{
                       fontWeight: 500,
                       color: theme.palette.text.primary,
-                      fontSize: { xs: '0.6375rem', sm: '0.675rem', md: '0.7125rem' },
+                      fontSize: { xs: '0.8rem', sm: '0.825rem', md: '0.875rem' },
                     }}
                     secondaryTypographyProps={{
                       color: theme.palette.text.secondary,
-                      fontSize: { xs: '0.5625rem', sm: '0.6rem', md: '0.6375rem' },
+                      fontSize: { xs: '0.7rem', sm: '0.725rem', md: '0.775rem' },
                     }}
                     sx={{ minWidth: 0, flex: 1 }}
                   />

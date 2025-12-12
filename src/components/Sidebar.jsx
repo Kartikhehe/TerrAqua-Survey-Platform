@@ -29,23 +29,30 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
   const menuItems = [
     { text: 'Start Survey', icon: <AddLocationAltOutlinedIcon />, action: () => onMenuItemClick('Start Survey') },
     { text: 'View Saved Points', icon: <BookmarkAddedOutlinedIcon />, action: () => onMenuItemClick('Saved Points') },
-    { text: 'Import File', icon: <InputOutlinedIcon />, action: () => onMenuItemClick('Import File') },
     { text: 'Export Data', icon: <IosShareOutlinedIcon />, action: () => onMenuItemClick('Export Data') },
+    { text: 'Import File', icon: <InputOutlinedIcon />, action: () => onMenuItemClick('Import File') },
   ];
 
   return (
     <>
-      <Backdrop
-        open={sidebarOpen}
-        onClick={onToggle}
-        sx={(theme) => ({
-          zIndex: theme.zIndex.drawer - 1,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        })}
-      />
       <Drawer
-        variant="persistent"
-        open={true}
+        variant={isMobile ? 'temporary' : 'persistent'}
+        open={isMobile ? sidebarOpen : true}
+        onClose={isMobile ? onToggle : undefined}
+        ModalProps={{
+          keepMounted: true,
+          BackdropProps: {
+            sx: { zIndex: (theme) => theme.zIndex.modal + 18 },
+          },
+          sx: { zIndex: (theme) => theme.zIndex.modal + 20 },
+        }}
+        PaperProps={{
+          square: true,
+          sx: {
+            zIndex: (theme) => (isMobile ? theme.zIndex.modal + 21 : theme.zIndex.drawer),
+            borderRadius: 0,
+          },
+        }}
         sx={(theme) => ({
           width: sidebarOpen 
             ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
@@ -53,13 +60,15 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
           flexShrink: 0,
           whiteSpace: 'nowrap',
           '& .MuiDrawer-paper': {
-            width: sidebarOpen 
-              ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
-              : { xs: drawerCollapsedWidth.xs, sm: drawerCollapsedWidth.sm },
+            width: isMobile
+              ? drawerWidth.xs
+              : sidebarOpen 
+                ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
+                : { xs: drawerCollapsedWidth.xs, sm: drawerCollapsedWidth.sm },
             boxSizing: 'border-box',
             backgroundColor: theme.palette.background.paper,
             borderRight: `1px solid ${theme.palette.divider}`,
-            borderRadius: { xs: '0 0.75rem 0.75rem 0', sm: '0 1rem 1rem 0' },
+            borderRadius: 0,
             transition: theme.transitions.create('width', {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
@@ -69,7 +78,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             height: { xs: 'calc(100vh - 3.0625rem)', sm: 'calc(100vh - 3.5rem)' },
             position: 'fixed',
             left: 0,
-            zIndex: theme.zIndex.drawer,
+            zIndex: isMobile ? theme.zIndex.drawer + 20 : theme.zIndex.drawer,
           },
         })}
       >
@@ -116,10 +125,15 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
               disableHoverListener={sidebarOpen}
             >
               <ListItemButton
-                onClick={item.action}
+                onClick={() => {
+                  item.action();
+                  if (isMobile) {
+                    onToggle();
+                  }
+                }}
                 sx={{
                   mx: { xs: 0.65625, sm: 0.875 },
-                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  borderRadius: { xs: 0, sm: '0.765625rem', md: '0.875rem' },
                   justifyContent: sidebarOpen ? 'flex-start' : 'center',
                   minHeight: { xs: '2.40625rem', sm: '2.625rem' },
                   '&:hover': {
@@ -151,9 +165,9 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                   <ListItemText
                     primary={item.text}
                     primaryTypographyProps={{
-                      fontWeight: 500,
+                      fontWeight: 600,
                       color: theme.palette.text.primary,
-                      fontSize: { xs: '0.74375rem', sm: '0.7875rem', md: '0.83125rem' },
+                      fontSize: { xs: '0.875rem', sm: '0.8rem', md: '0.83125rem' },
                     }}
                   />
                 )}
