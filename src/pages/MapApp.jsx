@@ -80,6 +80,7 @@ function App() {
   const mapRef = useRef(null);
   const markersRef = useRef({}); // Object with waypoint IDs as keys
   const selectedMarkerOverlayRef = useRef(null); // Red circleMarker overlay for selected waypoint
+  const liveLocationMarkerRef = useRef(null); // Blue circle marker for live GPS location
   const customCursorRef = useRef(null); // Store custom cursor for restoration
   const tileLayerRef = useRef(null); // Reference to tile layer for dark mode switching
   const labelLayerRef = useRef(null); // Reference to label layer for satellite hybrid view
@@ -359,6 +360,50 @@ function App() {
       const element = this.getElement();
       if (element) {
         element.style.zIndex = '1000';
+        element.style.pointerEvents = 'none'; // Ensure clicks pass through
+        element.style.cursor = 'default';
+        // Also set on SVG path and circle if they exist
+        const path = element.querySelector('path');
+        if (path) {
+          path.style.pointerEvents = 'none';
+        }
+        const circle = element.querySelector('circle');
+        if (circle) {
+          circle.style.pointerEvents = 'none';
+        }
+        // Set on all children
+        const children = element.querySelectorAll('*');
+        children.forEach(child => {
+          child.style.pointerEvents = 'none';
+        });
+      }
+    });
+    
+    return marker;
+  };
+
+  // Helper function to create blue circle marker for live location
+  const createLiveLocationMarker = (latlng) => {
+    // Responsive marker sizes
+    const isMobile = window.innerWidth < 600;
+    const radius = isMobile ? 8 : 10;
+    
+    const marker = L.circleMarker(latlng, {
+      radius: radius,
+      fillColor: '#2196F3', // Blue for live location
+      color: '#1976D2',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.8,
+      interactive: false, // Make it non-interactive
+      bubblingMouseEvents: false // Prevent event bubbling
+    });
+    
+    // Set pointer-events to none on the element
+    marker.on('add', function() {
+      const element = this.getElement();
+      if (element) {
+        element.style.zIndex = '999';
         element.style.pointerEvents = 'none'; // Ensure clicks pass through
         element.style.cursor = 'default';
         // Also set on SVG path and circle if they exist
@@ -1258,6 +1303,10 @@ function App() {
             accuracy: accuracy ? Math.round(accuracy) : null
           });
           
+          // Create blue circle marker for live location
+          const liveMarker = createLiveLocationMarker([latitude, longitude]).addTo(map);
+          liveLocationMarkerRef.current = liveMarker;
+          
           // Create a default location marker at current position
           const waypointId = `current-location-${Date.now()}`;
           const currentLocationWaypoint = {
@@ -1305,6 +1354,15 @@ function App() {
                 accuracy: newAccuracy ? Math.round(newAccuracy) : null
               });
               
+              // Update live location marker position
+              if (liveLocationMarkerRef.current) {
+                liveLocationMarkerRef.current.setLatLng([newLat, newLng]);
+              } else if (mapRef.current) {
+                // Recreate marker if it was removed
+                const liveMarker = createLiveLocationMarker([newLat, newLng]).addTo(mapRef.current);
+                liveLocationMarkerRef.current = liveMarker;
+              }
+              
               // Update marker position if it exists
               const currentMarker = markersRef.current[waypointId];
               if (currentMarker) {
@@ -1330,6 +1388,11 @@ function App() {
             },
             (error) => {
               console.log('Watch position error:', error);
+              // Remove live location marker if GPS is lost
+              if (liveLocationMarkerRef.current) {
+                liveLocationMarkerRef.current.remove();
+                liveLocationMarkerRef.current = null;
+              }
             },
             {
               enableHighAccuracy: true,
@@ -1620,6 +1683,11 @@ function App() {
       if (watchPositionIdRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchPositionIdRef.current);
         watchPositionIdRef.current = null;
+      }
+      // Remove live location marker
+      if (liveLocationMarkerRef.current) {
+        liveLocationMarkerRef.current.remove();
+        liveLocationMarkerRef.current = null;
       }
       // Remove drag-and-drop handlers
       mapContainer.removeEventListener('dragover', handleDragOver);
