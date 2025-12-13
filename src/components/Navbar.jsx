@@ -30,6 +30,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
 
   // Get user data from auth context
   const userName = isAuthenticated ? (user?.full_name || 'User') : 'Guest User';
+  const userFirstName = userName && userName.split(' ')[0];
   const userEmail = isAuthenticated ? (user?.email || '') : 'Not Logged in';
   
   // Generate avatar initials from full name
@@ -128,7 +129,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           aria-expanded={open ? 'true' : undefined}
         >
           <Avatar 
-            src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userName)}&size=40`}
+            src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
             sx={{ 
               width: { xs: '1.75rem', sm: '2.1875rem' }, 
               height: { xs: '1.75rem', sm: '2.1875rem' },
@@ -186,7 +187,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           <MenuItem onClick={handleClose}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
               <Avatar 
-                src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userName)}&size=32`}
+                src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
                 sx={{ 
                   width: { xs: '1.53125rem', sm: '1.75rem' }, 
                   height: { xs: '1.53125rem', sm: '1.75rem' },

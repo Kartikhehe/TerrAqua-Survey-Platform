@@ -1210,6 +1210,18 @@ function App() {
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+    // Client-side validation: only accept images and size <= 10MB
+    const maxBytes = 10 * 1024 * 1024;
+    if (!file.type || !file.type.startsWith('image/')) {
+      setSnackbar({ open: true, message: 'Only image files allowed', severity: 'error' });
+      event.target.value = '';
+      return;
+    }
+    if (file.size > maxBytes) {
+      setSnackbar({ open: true, message: 'Image too large. Max size is 10MB', severity: 'error' });
+      event.target.value = '';
+      return;
+    }
     // Prevent multiple uploads
     if (imageUploading) return;
     setImageUploading(true);
