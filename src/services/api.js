@@ -144,17 +144,42 @@ export const uploadAPI = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const uploadUrl = `${API_BASE_URL}/upload`;
+    // If frontend origin differs from backend origin, avoid sending cookies (require token instead)
+    let credentialsMode = 'include';
+    try {
+      const backendOrigin = new URL(API_BASE_URL).origin;
+      const frontendOrigin = typeof window !== 'undefined' && window.location.origin;
+      if (frontendOrigin && backendOrigin !== frontendOrigin) {
+        credentialsMode = 'omit';
+      }
+    } catch (err) {
+      // Failed to parse URL (unlikely), default to include
+      credentialsMode = 'include';
+    }
+
     let response;
     try {
-      response = await fetch(`${API_BASE_URL}/upload`, {
-      method: 'POST',
-      body: formData,
-      credentials: 'include',
-      headers: headers,
-    });
+      response = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData,
+        credentials: credentialsMode,
+        mode: 'cors',
+        headers: headers,
+      });
     } catch (err) {
       console.error('Network error during image upload:', err);
-      throw new Error('NetworkError: Failed to reach upload server');
+      // Try a simple CORS/test probe to help diagnose CORS issues from frontend
+      try {
+        const testUrl = `${API_BASE_URL}/upload/test`;
+        const probe = await fetch(testUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
+        const acao = probe.headers.get('access-control-allow-origin');
+        console.warn('Probe response status:', probe.status, 'Access-Control-Allow-Origin:', acao);
+        throw new Error(`NetworkError: Failed to reach upload server (probe status=${probe.status}, Access-Control-Allow-Origin=${acao})`);
+      } catch (probeErr) {
+        console.warn('Upload probe failed:', probeErr);
+        throw new Error('NetworkError: Failed to reach upload server (possible CORS/network error)');
+      }
     }
     if (!response.ok) {
       if (response.status === 401) throw new Error('Authentication required');
