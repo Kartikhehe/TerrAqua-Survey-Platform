@@ -131,8 +131,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           <Avatar 
             src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
             sx={{ 
-              width: { xs: '1.75rem', sm: '2.1875rem' }, 
-              height: { xs: '1.75rem', sm: '2.1875rem' },
+              width: 32,
+              height: 32,
               bgcolor: theme.palette.primary.main,
               color: 'white',
               fontWeight: 600,
@@ -189,8 +189,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
               <Avatar 
                 src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
                 sx={{ 
-                  width: { xs: '1.53125rem', sm: '1.75rem' }, 
-                  height: { xs: '1.53125rem', sm: '1.75rem' },
+                  width: 32,
+                  height: 32,
                   bgcolor: theme.palette.primary.main,
                   color: 'white',
                   fontWeight: 600,

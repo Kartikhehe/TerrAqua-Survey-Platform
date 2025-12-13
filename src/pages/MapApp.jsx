@@ -20,15 +20,20 @@ import {
   CssBaseline
 } from '@mui/material';
 import { AddLocation, MyLocation, Menu as MenuIcon } from '@mui/icons-material';
+import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
+import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import LiveCoordinates from '../components/LiveCoordinates';
 import WaypointDetails from '../components/WaypointDetails';
 import WaypointSelector from '../components/WaypointSelector';
 import SavedPoints from '../components/SavedPoints';
+import StartSurveyDialog from '../components/StartSurveyDialog';
 import ExportDialog from '../components/ExportDialog';
 import CustomSnackbar from '../components/Snackbar';
-import { waypointsAPI, uploadAPI } from '../services/api';
+import { waypointsAPI, uploadAPI, projectsAPI } from '../services/api';
 import { createAppTheme } from '../theme/theme.js';
 import { useAuth } from '../context/AuthContext';
 import LoginPromptDialog from '../components/LoginPromptDialog';
@@ -54,7 +59,7 @@ L.Icon.Default.mergeOptions({
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [surveyActive, setSurveyActive] = useState(false);
+  const [singlePointCaptureActive, setSinglePointCaptureActive] = useState(false);
   const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [currentLocationWaypointId, setCurrentLocationWaypointId] = useState(null);
   const [selectedWaypointId, setSelectedWaypointId] = useState(null);
@@ -74,6 +79,14 @@ function App() {
   const [gpsWarningOpen, setGpsWarningOpen] = useState(false); // GPS warning dialog state
   const [locationSelectionActive, setLocationSelectionActive] = useState(false); // Location selection mode state
   const [defaultLocation, setDefaultLocation] = useState({ lat: 26.516654, lng: 80.231507 }); // Default location from database
+  const [startSurveyDialogOpen, setStartSurveyDialogOpen] = useState(false);
+  const [activeProject, setActiveProject] = useState(null); // { id, name }
+  const [projectRecording, setProjectRecording] = useState(false);
+  const recordingIntervalRef = useRef(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const timerIntervalRef = useRef(null);
+  const [autoPausedPromptShown, setAutoPausedPromptShown] = useState(false);
+  const [isProjectMode, setIsProjectMode] = useState(false);
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
   const watchPositionIdRef = useRef(null); // Reference to watchPosition ID for cleanup
   const routePolylineRef = useRef(null); // Reference to route polyline on map
@@ -93,6 +106,11 @@ function App() {
   const theme = createAppTheme(darkMode ? 'dark' : 'light');
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isAuthenticated, user } = useAuth();
+
+  // Compute which waypoints should be shown in the top selector
+  const selectorWaypoints = (isProjectMode && activeProject && activeProject.id)
+    ? waypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id))
+    : waypoints;
   
   // Detect if device has cursor (mouse) or is touch-only
   // Check for touch support - if device supports touch, assume no cursor
@@ -129,6 +147,372 @@ function App() {
     setSnackbar({ open: true, message, severity });
   };
 
+  // Start Survey handlers
+  const handleStartSurveyNew = (project) => {
+    if (!isAuthenticated) {
+      setLoginPromptOpen(true);
+      setStartSurveyDialogOpen(false);
+      return;
+    }
+    setActiveProject({ id: project.id, name: project.name });
+    setIsProjectMode(true);
+    setSinglePointCaptureActive(true);
+    setProjectRecording(true); // still start recording automatically for new project
+    setStartSurveyDialogOpen(false);
+    showSnackbar(`Started project: ${project.name}`, 'success');
+    // Persist state: set project status to playing (do NOT auto-add a Start Point)
+    (async () => {
+      try {
+        await projectsAPI.setStatus(project.id, 'playing');
+      } catch (err) {
+        console.error('Error setting project to playing:', err);
+      }
+    })();
+  };
+
+  const handleStartSurveyContinue = (project) => {
+    if (!isAuthenticated) {
+      setLoginPromptOpen(true);
+      setStartSurveyDialogOpen(false);
+      return;
+    }
+    setActiveProject({ id: project.id, name: project.name });
+    setIsProjectMode(true);
+    setSinglePointCaptureActive(true);
+    setProjectRecording(true);
+    setStartSurveyDialogOpen(false);
+    showSnackbar(`Loaded project: ${project.name}`, 'info');
+    // Load project waypoints onto map (no automatic Start Point)
+    (async () => {
+      try {
+        const detail = await projectsAPI.getById(project.id);
+        if (!detail || !detail.waypoints) return;
+        // Populate waypoints to map and state
+        loadProjectWaypointsToMap(detail, project);
+
+        detail.waypoints.forEach((wp, idx) => {
+          const localId = `project-${project.id}-${wp.id}`;
+          newWaypoints.push({
+            id: localId,
+            lat: parseFloat(wp.latitude),
+            lng: parseFloat(wp.longitude),
+            name: wp.name || `Point ${idx + 1}`,
+            notes: wp.notes || '',
+            image: wp.image_url || null,
+            project_id: wp.project_id || project.id,
+            project_name: wp.project_name || project.name,
+          });
+          newDbMapping[localId] = wp.id;
+          if (map) {
+            const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)]).addTo(map);
+            marker.on('click', function() { handleSelectWaypoint(localId); });
+            newMarkers[localId] = marker;
+          }
+        });
+
+        // Merge into current state
+        setWaypoints(prev => {
+          // Avoid adding duplicates by filtering existing DB mappings
+          const existingDbIds = new Set(Object.values(dbWaypointIds));
+          const filtered = newWaypoints.filter(wp => !existingDbIds.has(newDbMapping[wp.id]));
+          return [...prev, ...filtered];
+        });
+        setDbWaypointIds(prev => ({ ...prev, ...newDbMapping }));
+        Object.assign(markersRef.current, newMarkers);
+        // Fit map to loaded project waypoints
+        if (map && newWaypoints.length > 0) {
+          const bounds = L.latLngBounds(newWaypoints.map(w => [w.lat, w.lng]));
+          try { map.fitBounds(bounds, { padding: [50, 50] }); } catch (e) { /* ignore */ }
+        }
+        // Persist to backend that project is playing
+        try {
+          await projectsAPI.setStatus(project.id, 'playing');
+          // start timer
+          startTimerFromProject(detail.project);
+        } catch (err) { console.error('Error setting project to playing:', err); }
+      } catch (err) {
+        console.error('Error loading project waypoints:', err);
+      }
+    })();
+  };
+
+  const handleStopProject = async () => {
+    // Save end point for project
+    try {
+      await createProjectWaypoint('End Point');
+    } catch (err) {
+      console.error('Error saving end point:', err);
+    }
+    // Update backend status
+    try {
+      if (activeProject && activeProject.id) {
+        await projectsAPI.setStatus(activeProject.id, 'ended');
+      }
+    } catch (err) {
+      console.error('Error setting project to ended:', err);
+    }
+    setActiveProject(null);
+    setIsProjectMode(false);
+    setProjectRecording(false);
+    // Stop auto-recording if running
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    // Stop timer
+    stopTimer();
+    showSnackbar('Project ended', 'info');
+  };
+
+  const handleToggleRecording = () => {
+    const newVal = !projectRecording;
+    setProjectRecording(newVal);
+    showSnackbar(newVal ? 'Recording started' : 'Recording paused', 'info');
+  };
+
+  const handleStartRecording = () => {
+    if (!isAuthenticated) {
+      setLoginPromptOpen(true);
+      return;
+    }
+    if (!isProjectMode || !activeProject) {
+      showSnackbar('Start or load a project first', 'error');
+      return;
+    }
+    setProjectRecording(true);
+    // Persist server status
+    projectsAPI.setStatus(activeProject.id, 'playing')
+      .then(updated => {
+        // start timer from updated project info
+        if (updated) startTimerFromProject(updated);
+      })
+      .catch(err => console.error('setStatus playing err', err));
+    showSnackbar('Recording started', 'info');
+  };
+
+  // Helper used by continue and mount to load project's waypoints into state/map
+  const loadProjectWaypointsToMap = (detail, project) => {
+    try {
+      if (!detail || !detail.waypoints || detail.waypoints.length === 0) return;
+      const map = mapRef.current;
+      const newWaypoints = [];
+      const newDbMapping = {};
+      const newMarkers = {};
+
+      detail.waypoints.forEach((wp, idx) => {
+        const localId = `project-${project.id}-${wp.id}`;
+        newWaypoints.push({
+          id: localId,
+          lat: parseFloat(wp.latitude),
+          lng: parseFloat(wp.longitude),
+          name: wp.name || `Point ${idx + 1}`,
+          notes: wp.notes || '',
+          image: wp.image_url || null,
+          project_id: wp.project_id || project.id,
+          project_name: wp.project_name || project.name,
+        });
+        newDbMapping[localId] = wp.id;
+        if (map) {
+          const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)]).addTo(map);
+          marker.on('click', function () { handleSelectWaypoint(localId); });
+          newMarkers[localId] = marker;
+        }
+      });
+
+      // Merge into current state
+      setWaypoints((prev) => {
+        const existingDbIds = new Set(Object.values(dbWaypointIds));
+        const filtered = newWaypoints.filter((wp) => !existingDbIds.has(newDbMapping[wp.id]));
+        return [...prev, ...filtered];
+      });
+      setDbWaypointIds((prev) => ({ ...prev, ...newDbMapping }));
+      Object.assign(markersRef.current, newMarkers);
+      // Fit map to loaded project waypoints
+      if (map && newWaypoints.length > 0) {
+        const bounds = L.latLngBounds(newWaypoints.map((w) => [w.lat, w.lng]));
+        try { map.fitBounds(bounds, { padding: [50, 50] }); } catch (e) { /* ignore */ }
+      }
+    } catch (err) { console.error('Error populating project waypoints:', err); }
+  };
+
+  const handlePauseRecording = () => {
+    setProjectRecording(false);
+    // Persist server status
+    if (activeProject && activeProject.id) {
+      projectsAPI.setStatus(activeProject.id, 'paused')
+        .then(updated => {
+          if (updated) {
+            // set timer to the returned elapsed_seconds and stop
+            setTimerSeconds(updated.elapsed_seconds || 0);
+            stopTimer();
+          }
+        })
+        .catch(err => console.error('setStatus paused err', err));
+    }
+    showSnackbar('Recording paused', 'info');
+  };
+
+  const handlePinPointToProject = async () => {
+    // Capture current coordinates and save as a waypoint under the active project
+    if (!isAuthenticated) {
+      setLoginPromptOpen(true);
+      return;
+    }
+    if (!activeProject || !activeProject.id) {
+      showSnackbar('No active project to add point to', 'error');
+      return;
+    }
+    const map = mapRef.current;
+    if (!map) return;
+    const center = map.getCenter();
+    // Compute next Point number in project
+    let nextPointName = `Point 1`;
+    try {
+      const projectDetail = await projectsAPI.getById(activeProject.id);
+      const items = projectDetail?.waypoints || [];
+      // find highest numeric Point N
+      const nums = items.map(it => {
+        const match = (it.name || '').match(/Point\s*(\d+)/i);
+        return match ? parseInt(match[1], 10) : null;
+      }).filter(Boolean);
+      const maxNum = nums.length ? Math.max(...nums) : 0;
+      nextPointName = `Point ${maxNum + 1}`;
+    } catch (err) {
+      // fallback default; keep Point 1
+    }
+    const newWp = {
+      name: nextPointName,
+      lat: center.lat.toFixed(6),
+      lng: center.lng.toFixed(6),
+      notes: `Captured live at ${new Date().toLocaleString()}`,
+      image: null,
+      project_id: activeProject.id,
+      project_name: activeProject.name,
+    };
+    try {
+      const saved = await waypointsAPI.create(newWp);
+      // Add to map and local list
+      const waypointId = `waypoint-${Date.now()}`;
+      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, image: saved.image_url, project_id: saved.project_id, project_name: saved.project_name };
+      setWaypoints(prev => [...prev, waypoint]);
+      // create marker
+      const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
+      marker.on('click', function() { handleSelectWaypoint(waypointId); });
+      markersRef.current[waypointId] = marker;
+      setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
+      showSnackbar('Project point added', 'success');
+    } catch (err) {
+      console.error('Error adding project point:', err);
+      showSnackbar(err.message || 'Failed to add point to project', 'error');
+    }
+  };
+
+  // Create and persist a waypoint for the active project with a given name
+  const createProjectWaypoint = async (name = 'Point') => {
+    if (!isAuthenticated) {
+      setLoginPromptOpen(true);
+      return null;
+    }
+    if (!activeProject || !activeProject.id) {
+      showSnackbar('No active project to add point to', 'error');
+      return null;
+    }
+    const map = mapRef.current;
+    let lat = coordinates.lat;
+    let lng = coordinates.lng;
+    try {
+      if (map) {
+        const center = map.getCenter();
+        lat = center.lat;
+        lng = center.lng;
+      }
+    } catch (e) {}
+    if (!lat || !lng) {
+      showSnackbar('Unable to determine current location', 'error');
+      return null;
+    }
+
+    const newWp = {
+      name: name,
+      lat: parseFloat(lat).toFixed(6),
+      lng: parseFloat(lng).toFixed(6),
+      notes: `${name} for project ${activeProject.name}`,
+      image: null,
+      project_id: activeProject.id,
+      project_name: activeProject.name,
+    };
+
+    try {
+      const saved = await waypointsAPI.create(newWp);
+      // Add to map and local list
+      const waypointId = `waypoint-${Date.now()}`;
+      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, image: saved.image_url, project_id: saved.project_id, project_name: saved.project_name };
+      setWaypoints(prev => [...prev, waypoint]);
+      // create marker
+      if (map) {
+        const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
+        marker.on('click', function() { handleSelectWaypoint(waypointId); });
+        markersRef.current[waypointId] = marker;
+      }
+      setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
+      showSnackbar(`${name} saved`, 'success');
+      return saved;
+    } catch (err) {
+      console.error(`Error adding ${name} to project:`, err);
+      showSnackbar(err.message || `Failed to add ${name}`, 'error');
+      return null;
+    }
+  };
+
+  // Timer helpers
+  const startTimerFromProject = (project) => {
+    if (!project) return;
+    // Compute base seconds
+    let base = project.elapsed_seconds || 0;
+    if (project.started_at && project.status === 'playing') {
+      const startedAt = new Date(project.started_at).getTime();
+      base += Math.floor((Date.now() - startedAt) / 1000);
+    }
+    setTimerSeconds(base);
+    // Start timer interval
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+    timerIntervalRef.current = setInterval(() => {
+      setTimerSeconds(prev => prev + 1);
+    }, 1000);
+  };
+
+  const stopTimer = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  };
+
+  // Format seconds into HH:MM:SS
+  const formatTime = (secs) => {
+    if (!secs || secs < 0) return '00:00:00';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  };
+
+  // When projectRecording toggles, start/stop timer accordingly
+  useEffect(() => {
+    if (projectRecording && isProjectMode && activeProject) {
+      // Fetch project for latest elapsed and started_at
+      projectsAPI.getById(activeProject.id).then((detail) => {
+        const projectData = detail.project || detail;
+        startTimerFromProject(projectData);
+      }).catch(err => console.error('getById for timer err', err));
+    } else {
+      stopTimer();
+    }
+    return () => { /* cleanup kept by stopTimer */ };
+  }, [projectRecording, isProjectMode, activeProject]);
+
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
@@ -138,14 +522,20 @@ function App() {
   };
 
   const handleMenuItemClick = (item) => {
-    if (item === 'Start Survey') {
-      setSurveyActive(!surveyActive);
-      if (surveyActive) {
+    if (item === 'Single Point Capture') {
+      setSinglePointCaptureActive(!singlePointCaptureActive);
+      if (singlePointCaptureActive) {
         // Reset when turning off survey
         setSelectedWaypointId(null);
         setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
         updateSelectedMarkerOverlay(null);
       }
+    } else if (item === 'Start Survey') {
+      if (!isAuthenticated) {
+        setLoginPromptOpen(true);
+        return;
+      }
+      setStartSurveyDialogOpen(true);
     } else if (item === 'Saved Points') {
       if (!isAuthenticated) {
         setLoginPromptOpen(true);
@@ -206,15 +596,18 @@ function App() {
     }
     
     try {
-      // Validate file type and size client-side before attempting upload
-      if (!file.type || !file.type.startsWith('image/')) {
-        setSnackbar({ open: true, message: 'Only image files are allowed', severity: 'error' });
-        return;
-      }
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      if (file.size > maxSize) {
-        setSnackbar({ open: true, message: 'Image is too large. Max 10MB allowed', severity: 'error' });
-        return;
+      // Validate image if a file object was provided in waypointData.image (skip if it's already a URL)
+      const imageCandidate = waypointData.image;
+      if (imageCandidate && typeof imageCandidate !== 'string') {
+        if (!imageCandidate.type || !imageCandidate.type.startsWith('image/')) {
+          setSnackbar({ open: true, message: 'Only image files are allowed', severity: 'error' });
+          return;
+        }
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (imageCandidate.size > maxSize) {
+          setSnackbar({ open: true, message: 'Image is too large. Max 10MB allowed', severity: 'error' });
+          return;
+        }
       }
       const waypoint = waypoints.find(wp => wp.id === selectedWaypointId);
       if (!waypoint) return;
@@ -229,6 +622,8 @@ function App() {
         lng: waypointData.lng,
         notes: waypointData.notes || '',
         image: waypointData.image || null,
+        project_id: waypointData.project_id || (isProjectMode && activeProject ? activeProject.id : null),
+        project_name: waypointData.project_name || (isProjectMode && activeProject ? activeProject.name : null),
       };
 
       const dbId = dbWaypointIds[selectedWaypointId];
@@ -533,8 +928,8 @@ function App() {
       }
       
       // Activate survey mode if not already active
-      if (!surveyActive) {
-        setSurveyActive(true);
+      if (!singlePointCaptureActive) {
+        setSinglePointCaptureActive(true);
       }
       
       // Add waypoints to the map
@@ -775,8 +1170,8 @@ function App() {
       }
       
       // Activate survey mode if not already active
-      if (!surveyActive) {
-        setSurveyActive(true);
+      if (!singlePointCaptureActive) {
+        setSinglePointCaptureActive(true);
       }
       
       // Update coordinates to show the waypoint location
@@ -1178,6 +1573,44 @@ function App() {
     fetchDefaultLocation();
   }, []);
 
+  // On login or mount, fetch any active project for this user
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    const loadActive = async () => {
+      try {
+        const res = await projectsAPI.getActive();
+        const projectData = res?.project || null;
+        if (!projectData || cancelled) return;
+        setActiveProject({ id: projectData.id, name: projectData.name, status: projectData.status });
+        setIsProjectMode(true);
+        setProjectRecording(projectData.status === 'playing');
+        // Load and show project waypoints in UI the same way as Single Point Capture
+        try {
+          loadProjectWaypointsToMap({ waypoints: projectData.waypoints || [] }, projectData);
+          // Open the selector UI to show points
+          setSinglePointCaptureActive(true);
+        } catch (err) {
+          console.error('Error loading active project waypoints:', err);
+        }
+        // Show prompts
+        if (projectData.status === 'playing') {
+          showSnackbar(`Survey of "${projectData.name}" is ongoing.`, 'info');
+          startTimerFromProject(projectData);
+        }
+        // If the project was auto_paused due to inactivity, inform user once
+        if (projectData.auto_paused && !autoPausedPromptShown) {
+          showSnackbar(`Survey "${projectData.name}" has been paused due to inactivity for 6 hours.`, 'warning');
+          setAutoPausedPromptShown(true);
+        }
+      } catch (err) {
+        console.error('Error loading active project:', err);
+      }
+    };
+    loadActive();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
   // Load saved waypoints for navigation dropdown
   useEffect(() => {
     const loadSavedWaypoints = async () => {
@@ -1206,6 +1639,48 @@ function App() {
     };
     loadSavedWaypoints();
   }, [savedPointsOpen, selectedWaypointId, isAuthenticated]); // Reload when saved points dialog opens/closes or waypoint is selected or auth changes
+
+  // Auto-recording interval: if recording is enabled, periodically pin points to active project
+  useEffect(() => {
+    // If recording is active and we are in project mode with an active project
+    if (projectRecording && isProjectMode && activeProject) {
+      const intervalMs = 10000; // default 10s interval
+      recordStart();
+      function recordStart() {
+        // Safety: clear existing
+        if (recordingIntervalRef.current) {
+          clearInterval(recordingIntervalRef.current);
+          recordingIntervalRef.current = null;
+        }
+        recordingIntervalRef.current = setInterval(() => {
+          // Pin current live location to project
+          handlePinPointToProject();
+        }, intervalMs);
+      }
+      return () => {
+        if (recordingIntervalRef.current) {
+          clearInterval(recordingIntervalRef.current);
+          recordingIntervalRef.current = null;
+        }
+      };
+    } else {
+      // Stop any running interval
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    }
+  }, [projectRecording, isProjectMode, activeProject]);
+
+  // Cleanup on unmount: ensure any interval is cleared
+  useEffect(() => {
+    return () => {
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
@@ -1593,7 +2068,7 @@ function App() {
                 locateButton.style.opacity = '1';
                 
                 // Activate survey mode if not already active
-                setSurveyActive(prev => {
+                setSinglePointCaptureActive(prev => {
                   if (!prev) {
                     return true;
                   }
@@ -1815,7 +2290,7 @@ function App() {
     const map = mapRef.current;
     const mapContainer = map.getContainer();
 
-    if (surveyActive) {
+    if (singlePointCaptureActive) {
       // Use Leaflet's default crosshair cursor
       mapContainer.style.cursor = 'crosshair';
       
@@ -1973,7 +2448,7 @@ function App() {
         updateSelectedMarkerOverlay(null);
       }
     }
-  }, [surveyActive]);
+  }, [singlePointCaptureActive]);
 
   // Recalculate map size when mobile padding changes (e.g., waypoint details open)
   useEffect(() => {
@@ -2058,7 +2533,7 @@ function App() {
         setLocationSelectionActive(false);
         
         // Restore cursor based on survey mode
-        if (surveyActive) {
+        if (singlePointCaptureActive) {
           mapContainer.style.cursor = 'crosshair';
           customCursorRef.current = 'crosshair';
             } else {
@@ -2078,7 +2553,7 @@ function App() {
         map.off('dragstart', handleDragStart);
         map.off('dragend', handleDragEnd);
         // Restore cursor based on survey mode when location selection deactivates
-        if (surveyActive) {
+        if (singlePointCaptureActive) {
           mapContainer.style.cursor = 'crosshair';
           customCursorRef.current = 'crosshair';
         } else {
@@ -2088,7 +2563,7 @@ function App() {
       };
     } else {
       // When location selection is not active, restore cursor based on survey mode
-      if (surveyActive) {
+      if (singlePointCaptureActive) {
         mapContainer.style.cursor = 'crosshair';
         customCursorRef.current = 'crosshair';
       } else {
@@ -2096,7 +2571,7 @@ function App() {
         customCursorRef.current = null;
       }
     }
-  }, [locationSelectionActive, selectedWaypointId, surveyActive]);
+  }, [locationSelectionActive, selectedWaypointId, singlePointCaptureActive]);
 
   // Update live coordinates based on device type
   useEffect(() => {
@@ -2179,6 +2654,12 @@ function App() {
         onToggle={handleSidebarToggle}
         isMobile={isMobile}
         onMenuItemClick={handleMenuItemClick}
+      />
+      <StartSurveyDialog
+        open={startSurveyDialogOpen}
+        onClose={() => setStartSurveyDialogOpen(false)}
+        onStartNew={handleStartSurveyNew}
+        onContinue={handleStartSurveyContinue}
       />
       {isMobile && (
         <IconButton
@@ -2263,11 +2744,11 @@ function App() {
         {/* Live Coordinates card - always visible */}
         <LiveCoordinates coordinates={coordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
 
-        {surveyActive && (
+        {(singlePointCaptureActive || isProjectMode) && (
           <>
             {/* Waypoint Selector - horizontal scrollable tabs */}
             <WaypointSelector
-              waypoints={waypoints}
+              waypoints={selectorWaypoints}
               selectedWaypointId={selectedWaypointId}
               onSelectWaypoint={handleSelectWaypoint}
             />
@@ -2293,6 +2774,7 @@ function App() {
                 savedWaypoints={savedWaypointsList}
                 onNavigate={handleNavigate}
                 sidebarOpen={sidebarOpen}
+                isProjectMode={isProjectMode}
                 ref={waypointDetailsRef}
               />
             )}
@@ -2331,11 +2813,12 @@ function App() {
                 onNavigate={handleNavigate}
                 currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
             sidebarOpen={sidebarOpen}
+            isProjectMode={isProjectMode}
               />
         )}
 
         {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
-        {selectedWaypointId && !surveyActive && currentLocationWaypointId === selectedWaypointId && (
+        {selectedWaypointId && !singlePointCaptureActive && currentLocationWaypointId === selectedWaypointId && (
           <WaypointDetails
             selectedWaypointId={selectedWaypointId}
             waypointData={waypointData}
@@ -2359,6 +2842,7 @@ function App() {
             onNavigate={handleNavigate}
             currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
             sidebarOpen={sidebarOpen}
+            isProjectMode={isProjectMode}
           />
         )}
 
@@ -2426,8 +2910,8 @@ function App() {
             }
             
             // Activate survey mode if not already active
-            if (!surveyActive) {
-              setSurveyActive(true);
+            if (!singlePointCaptureActive) {
+              setSinglePointCaptureActive(true);
             }
             
             // Update coordinates to show the waypoint location
@@ -2497,6 +2981,40 @@ function App() {
           onChange={handleFileSelect}
         />
       </Box>
+
+      {/* Floating bottom bar for project controls */}
+      {isProjectMode && (
+        <Paper elevation={8} sx={{
+          position: 'fixed',
+          top: isMobile ? '3.5rem' : 'auto',
+          bottom: isMobile ? 'auto' : 32,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: isMobile ? 'min(50%, 320px)' : 'auto',
+          zIndex: theme.zIndex.drawer + 30,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 2,
+          py: 1,
+          borderRadius: 4,
+        }}>
+          <Typography sx={{ mr: 1, fontWeight: 600 }}>{activeProject ? activeProject.name : 'Project'}</Typography>
+          <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary }}>{formatTime(timerSeconds)}</Typography>
+          <IconButton aria-label="start" title="Start" onClick={handleStartRecording} disabled={projectRecording} sx={{ bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white' }}>
+            <PlayArrowOutlinedIcon />
+          </IconButton>
+          <IconButton aria-label="pause" title="Pause" onClick={handlePauseRecording} disabled={!projectRecording}>
+            <PauseOutlinedIcon />
+          </IconButton>
+          <IconButton aria-label="pin" title="Pin point" onClick={handlePinPointToProject}>
+            <LocationOnOutlinedIcon />
+          </IconButton>
+          <IconButton aria-label="stop" title="End" color="error" onClick={handleStopProject}>
+            <StopCircleOutlinedIcon />
+          </IconButton>
+        </Paper>
+      )}
     </Box>
     </ThemeProvider>
   )

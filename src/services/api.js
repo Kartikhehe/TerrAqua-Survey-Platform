@@ -80,6 +80,8 @@ export const waypointsAPI = {
         longitude: parseFloat(waypoint.lng),
         notes: waypoint.notes || '',
         image_url: waypoint.image || null,
+        project_id: waypoint.project_id || null,
+        project_name: waypoint.project_name || null,
       }),
     });
     if (!response.ok) {
@@ -103,6 +105,8 @@ export const waypointsAPI = {
         longitude: parseFloat(waypoint.lng),
         notes: waypoint.notes || '',
         image_url: waypoint.image || null,
+        project_id: waypoint.project_id || null,
+        project_name: waypoint.project_name || null,
       }),
     });
     if (!response.ok) {
@@ -264,5 +268,67 @@ export const authAPI = {
       headers: getAuthHeaders(),
     });
   },
+};
+
+// Projects API
+export const projectsAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/projects`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      throw new Error('Failed to fetch projects');
+    }
+    return response.json();
+  },
+
+  getById: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch project');
+    return response.json();
+  },
+
+  create: async (project) => {
+    const response = await fetch(`${API_BASE_URL}/projects`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ name: project.name }),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to create project');
+    }
+    return response.json();
+  }
+  ,
+  getActive: async () => {
+    const response = await fetch(`${API_BASE_URL}/projects/active`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch active project');
+    return response.json();
+  },
+  setStatus: async (id, status) => {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}/status`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to update project status');
+    }
+    return response.json();
+  }
 };
 

@@ -19,6 +19,7 @@ import {
   ChevronLeft, 
   ChevronRight 
 } from '@mui/icons-material';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 
 // Responsive drawer widths (87.5% of original)
 const drawerWidth = { xs: '14rem', sm: '14.21875rem', md: '15.3125rem' };
@@ -27,6 +28,7 @@ const drawerCollapsedWidth = { xs: '3.0625rem', sm: '3.5rem' };
 function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
   const theme = useTheme();
   const menuItems = [
+    { text: 'Single Point Capture', icon: <LocationOnOutlinedIcon />, action: () => onMenuItemClick('Single Point Capture') },
     { text: 'Start Survey', icon: <AddLocationAltOutlinedIcon />, action: () => onMenuItemClick('Start Survey') },
     { text: 'View Saved Points', icon: <BookmarkAddedOutlinedIcon />, action: () => onMenuItemClick('Saved Points') },
     { text: 'Export Data', icon: <IosShareOutlinedIcon />, action: () => onMenuItemClick('Export Data') },

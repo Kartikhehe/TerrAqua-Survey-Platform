@@ -37,6 +37,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   onToggleLocationSelection,
   sidebarOpen = false,
   imageUploading = false,
+  isProjectMode = false,
 }, ref) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -453,6 +454,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               variant="outlined"
               startIcon={<ArrowOutwardOutlinedIcon />}
               onClick={handleNavigateClick}
+              disabled={isProjectMode}
               sx={{
                 py: { xs: 1.25, sm: 1.5 },
                 minWidth: { xs: '5rem', sm: '7.5rem' },
@@ -498,7 +500,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           >
             Delete
           </Button>
-          <Menu
+            <Menu
             anchorEl={anchorEl}
             open={open}
             onClose={handleNavigateClose}
@@ -537,7 +539,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               Navigate from
             </MenuItem>
             {/* Current Location option - always available */}
-            {currentLocation && (
+            {currentLocation && !isProjectMode && (
               <MenuItem
                 onClick={handleCurrentLocationSelect}
                 sx={{

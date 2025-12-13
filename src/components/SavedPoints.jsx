@@ -14,7 +14,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { Close, LocationOn } from '@mui/icons-material';
+import { Close, LocationOn, Folder as FolderIcon, ArrowBack } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 import { waypointsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +27,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
   const [waypoints, setWaypoints] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [viewProjectId, setViewProjectId] = useState(null);
 
   // Load waypoints when dialog opens
   useEffect(() => {
@@ -109,6 +110,17 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
     }
     onClose();
   };
+
+  // Group waypoints into projects and singles
+  const projectsGrouped = waypoints.reduce((acc, wp) => {
+    const pid = wp.project_id || null;
+    if (pid) {
+      if (!acc[pid]) acc[pid] = { project_id: pid, project_name: wp.project_name || 'Project', items: [] };
+      acc[pid].items.push(wp);
+    }
+    return acc;
+  }, {});
+  const singles = waypoints.filter(wp => !wp.project_id);
 
   return (
     <Dialog
@@ -201,54 +213,87 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar }) {
           </Box>
         ) : (
           <List sx={{ p: 0 }}>
-            {waypoints.map((waypoint, index) => (
-              <ListItem key={waypoint.id} disablePadding>
-                <ListItemButton
-                  onClick={() => handleWaypointClick(waypoint)}
-                  sx={{
-                    mx: { xs: 0.75, sm: 1 },
-                    my: { xs: 0.5, sm: 0.5 },
-                    borderRadius: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
-                    minHeight: { xs: '3.5rem', sm: 'auto' },
-                    py: { xs: 1, sm: 0.5 },
-                    '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: { xs: '2.5rem', sm: '2.5rem' },
-                      height: { xs: '2.5rem', sm: '2.5rem' },
-                      borderRadius: '50%',
-                      backgroundColor: '#E8F5E9',
-                      color: '#4CAF50',
-                      mr: { xs: 1.5, sm: 2 },
-                      flexShrink: 0,
-                    }}
-                  >
-                    <LocationOn sx={{ fontSize: { xs: '1.5rem', sm: '1.5rem' } }} />
-                  </Box>
-                  <ListItemText
-                    primary={waypoint.name}
-                    secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)}`}
-                    primaryTypographyProps={{
-                      fontWeight: 500,
-                      color: theme.palette.text.primary,
-                      fontSize: { xs: '0.95rem', sm: '0.825rem', md: '0.875rem' },
-                    }}
-                    secondaryTypographyProps={{
-                      color: theme.palette.text.secondary,
-                      fontSize: { xs: '0.85rem', sm: '0.725rem', md: '0.775rem' },
-                    }}
-                    sx={{ minWidth: 0, flex: 1 }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
+            {viewProjectId === null ? (
+              // Root view: list projects as folders and single points
+              <>
+                {Object.values(projectsGrouped).map((p) => (
+                  <ListItem key={`project-${p.project_id}`} disablePadding>
+                    <ListItemButton
+                      onClick={() => setViewProjectId(p.project_id)}
+                      sx={{
+                        mx: { xs: 0.75, sm: 1 },
+                        my: { xs: 0.5, sm: 0.5 },
+                        borderRadius: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
+                        minHeight: { xs: '3.5rem', sm: 'auto' },
+                        py: { xs: 1, sm: 0.5 },
+                        '&:hover': {
+                          backgroundColor: theme.palette.action.hover,
+                        },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, mr: { xs: 1.5, sm: 2 } }}>
+                        <FolderIcon sx={{ color: '#4CAF50' }} />
+                      </Box>
+                      <ListItemText
+                        primary={`${p.project_name} (${p.items.length})`}
+                        secondary={'Project'}
+                        primaryTypographyProps={{ fontWeight: 600 }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+                {singles.map((waypoint) => (
+                  <ListItem key={waypoint.id} disablePadding>
+                    <ListItemButton
+                      onClick={() => handleWaypointClick(waypoint)}
+                      sx={{
+                        mx: { xs: 0.75, sm: 1 },
+                        my: { xs: 0.5, sm: 0.5 },
+                        borderRadius: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
+                        minHeight: { xs: '3.5rem', sm: 'auto' },
+                        py: { xs: 1, sm: 0.5 },
+                        '&:hover': {
+                          backgroundColor: theme.palette.action.hover,
+                        },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, borderRadius: '50%', backgroundColor: '#E8F5E9', color: '#4CAF50', mr: { xs: 1.5, sm: 2 } }}>
+                        <LocationOn sx={{ fontSize: { xs: '1.5rem', sm: '1.5rem' } }} />
+                      </Box>
+                      <ListItemText
+                        primary={waypoint.name}
+                        secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)}`}
+                        primaryTypographyProps={{ fontWeight: 500 }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </>
+            ) : (
+              // Project view: show points for that project and back button
+              <>
+                <ListItem disablePadding>
+                  <ListItemButton onClick={() => setViewProjectId(null)}>
+                    <ArrowBack sx={{ mr: 1 }} />
+                    <ListItemText primary={'Back to projects'} />
+                  </ListItemButton>
+                </ListItem>
+                {projectsGrouped[viewProjectId] && projectsGrouped[viewProjectId].items.map((waypoint) => (
+                  <ListItem key={waypoint.id} disablePadding>
+                    <ListItemButton onClick={() => handleWaypointClick(waypoint)}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, borderRadius: '50%', backgroundColor: '#E8F5E9', color: '#4CAF50', mr: { xs: 1.5, sm: 2 } }}>
+                        <LocationOn sx={{ fontSize: { xs: '1.5rem', sm: '1.5rem' } }} />
+                      </Box>
+                      <ListItemText
+                        primary={waypoint.name}
+                        secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)} — ${new Date(waypoint.created_at).toLocaleString()}`}
+                        primaryTypographyProps={{ fontWeight: 500 }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </>
+            )}
           </List>
         )}
       </DialogContent>
