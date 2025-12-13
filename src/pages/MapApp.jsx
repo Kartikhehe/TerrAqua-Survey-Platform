@@ -64,6 +64,7 @@ function App() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [dbWaypointIds, setDbWaypointIds] = useState({}); // Map local waypoint IDs to database IDs
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [imageUploading, setImageUploading] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('themeMode');
     return saved === 'dark';
@@ -205,6 +206,16 @@ function App() {
     }
     
     try {
+      // Validate file type and size client-side before attempting upload
+      if (!file.type || !file.type.startsWith('image/')) {
+        setSnackbar({ open: true, message: 'Only image files are allowed', severity: 'error' });
+        return;
+      }
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        setSnackbar({ open: true, message: 'Image is too large. Max 10MB allowed', severity: 'error' });
+        return;
+      }
       const waypoint = waypoints.find(wp => wp.id === selectedWaypointId);
       if (!waypoint) return;
 
@@ -1199,16 +1210,48 @@ function App() {
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+    // Prevent multiple uploads
+    if (imageUploading) return;
+    setImageUploading(true);
+    let attempt = 0;
+    const maxAttempts = 2;
 
     try {
-      // Show loading state (optional - you can add a loading indicator)
-      const uploadResult = await uploadAPI.uploadImage(file);
+      // Try upload with a small retry mechanism for transient network errors
+      let uploadResult = null;
+      while (attempt < maxAttempts) {
+        try {
+          uploadResult = await uploadAPI.uploadImage(file);
+          break;
+        } catch (err) {
+          attempt += 1;
+          console.warn(`Upload attempt ${attempt} failed:`, err);
+          // If we've reached max attempts, rethrow to outer catch
+          if (attempt >= maxAttempts) throw err;
+          // Wait briefly before retrying
+          await new Promise((res) => setTimeout(res, 700));
+        }
+      }
       
       // Update waypoint data with Cloudinary URL
       setWaypointData(prev => ({ ...prev, image: uploadResult.image_url }));
+      setSnackbar({ open: true, message: 'Image uploaded successfully', severity: 'success' });
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image. Please try again.');
+      if (error && error.message && error.message.toLowerCase().includes('authentication')) {
+        setLoginPromptOpen(true);
+        setSnackbar({ open: true, message: 'Please login to upload images', severity: 'error' });
+      } else if (error && error.message && error.message.toLowerCase().includes('networkerror')) {
+        setSnackbar({ open: true, message: 'Network error: Unable to reach upload server', severity: 'error' });
+      } else {
+        setSnackbar({ open: true, message: 'Failed to upload image. Please try again.', severity: 'error' });
+      }
+    }
+    finally {
+      setImageUploading(false);
+      // Reset file input value so same file can be uploaded again if needed
+      const input = document.getElementById('image-upload');
+      if (input) input.value = '';
     }
   };
 
@@ -1283,11 +1326,11 @@ function App() {
           const { latitude, longitude, accuracy } = position.coords;
           const hasAccuracy = typeof accuracy === 'number' && !Number.isNaN(accuracy);
           
-          // Only reject if we have a reported accuracy and it's very poor (>500m)
-          if (hasAccuracy && accuracy > 500) {
-            console.log('GPS accuracy too low, showing warning dialog. Accuracy:', accuracy);
-            setGpsWarningOpen(true);
-            return;
+          // If accuracy is reported but is low, log a warning and show a small snackbar
+          // Do NOT block or return — still show the live location even if accuracy is poor.
+          if (hasAccuracy && accuracy > 100) {
+            console.log('Low GPS accuracy detected. Accuracy (m):', accuracy);
+            setSnackbar({ open: true, message: `Low GPS accuracy: ±${Math.round(accuracy)}m — location may be imprecise`, severity: 'warning' });
           }
           
           // Set view to current location with zoomed out view (zoom level 12 for city-level view)
@@ -1353,6 +1396,11 @@ function App() {
                 lng: newLng.toFixed(6),
                 accuracy: newAccuracy ? Math.round(newAccuracy) : null
               });
+
+              // If accuracy becomes low, show a lightweight snackbar warning (non-blocking)
+              if (typeof newAccuracy === 'number' && !Number.isNaN(newAccuracy) && newAccuracy > 100) {
+                setSnackbar({ open: true, message: `Low GPS accuracy: ±${Math.round(newAccuracy)}m — location may be imprecise`, severity: 'warning' });
+              }
               
               // Update live location marker position
               if (liveLocationMarkerRef.current) {
@@ -2229,6 +2277,7 @@ function App() {
                 onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
                 onDelete={handleDeleteWaypoint}
                 onImageUpload={handleImageUpload}
+                imageUploading={imageUploading}
                 savedWaypoints={savedWaypointsList}
                 onNavigate={handleNavigate}
                 sidebarOpen={sidebarOpen}
@@ -2265,6 +2314,7 @@ function App() {
             onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
                 onDelete={handleDeleteWaypoint}
                 onImageUpload={handleImageUpload}
+                imageUploading={imageUploading}
                 savedWaypoints={savedWaypointsList}
                 onNavigate={handleNavigate}
                 currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
@@ -2292,6 +2342,7 @@ function App() {
               showSnackbar('Cannot delete current location marker', 'info');
             }}
             onImageUpload={handleImageUpload}
+            imageUploading={imageUploading}
             savedWaypoints={savedWaypointsList}
             onNavigate={handleNavigate}
             currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}

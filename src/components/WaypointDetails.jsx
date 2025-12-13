@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon, LocationOn as LocationOnIcon } from '@mui/icons-material';
 import React, { useState } from 'react';
+import { CircularProgress } from '@mui/material';
 
 // Default location to use when GPS is unavailable
 const DEFAULT_LOCATION = {
@@ -35,6 +36,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   locationSelectionActive = false,
   onToggleLocationSelection,
   sidebarOpen = false,
+  imageUploading = false,
 }, ref) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -126,6 +128,10 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
       handleNavigateClose();
     }
   };
+
+  // Determine whether to set the capture attribute (open camera) on touch/mobile devices
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  const captureAttr = isTouchDevice ? 'environment' : undefined;
 
   return (
     <Paper
@@ -353,15 +359,17 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             style={{ display: 'none' }}
             id="image-upload"
             type="file"
-            capture="environment"
+            capture={captureAttr}
             onChange={onImageUpload}
+            disabled={imageUploading}
           />
           <label htmlFor="image-upload">
             <Button
               variant="outlined"
               component="span"
-              startIcon={<CloudUpload />}
+              startIcon={imageUploading ? <CircularProgress color="inherit" size={16} /> : <CloudUpload />}
               fullWidth
+              disabled={imageUploading}
               sx={{
                 py: 1.5,
                 borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
@@ -375,7 +383,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 },
               }}
             >
-              {waypointData.image ? 'Change Image' : 'Upload Image'}
+              {imageUploading ? 'Uploading image...' : (waypointData.image ? 'Change Image' : 'Upload Image')}
             </Button>
           </label>
           {waypointData.image && (

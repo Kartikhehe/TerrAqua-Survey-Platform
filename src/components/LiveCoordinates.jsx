@@ -66,6 +66,8 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
           </Typography>
         </Box>
 
+        {/* Inline low-accuracy alert removed — use snackbar from parent instead */}
+
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, flex: 1, overflow: 'auto', minHeight: 0 }}>
         <Box sx={{ 
           display: 'flex', 

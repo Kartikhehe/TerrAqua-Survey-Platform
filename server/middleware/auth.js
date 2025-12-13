@@ -3,6 +3,10 @@ import pool from '../database/connection.js';
 
 export const authenticateToken = async (req, res, next) => {
   try {
+    // Allow preflight requests to pass through without authentication
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
     // Get token from Authorization header or cookies
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN

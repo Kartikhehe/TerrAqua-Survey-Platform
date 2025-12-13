@@ -144,13 +144,23 @@ export const uploadAPI = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}/upload`, {
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
       body: formData,
       credentials: 'include',
       headers: headers,
     });
-    if (!response.ok) throw new Error('Failed to upload image');
+    } catch (err) {
+      console.error('Network error during image upload:', err);
+      throw new Error('NetworkError: Failed to reach upload server');
+    }
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to upload image');
+    }
     return response.json();
   },
 };
