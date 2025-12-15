@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Tabs, Tab, List, ListItem, ListItemText, IconButton, Box, useTheme } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Tabs, Tab, List, ListItem, ListItemText, IconButton, Box, useTheme, CircularProgress } from '@mui/material';
 import { ArrowBack, Folder as FolderIcon } from '@mui/icons-material';
 import { projectsAPI } from '../services/api';
 
@@ -10,14 +10,19 @@ function StartSurveyDialog({ open, onClose, onStartNew, onContinue }) {
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   useEffect(() => {
     const loadProjects = async () => {
       try {
+        setProjectsLoading(true);
         const data = await projectsAPI.getAll();
         setProjects(data);
       } catch (err) {
         console.error('Error loading projects:', err);
+        setProjects([]);
+      } finally {
+        setProjectsLoading(false);
       }
     };
     if (tab === 1 && open) loadProjects();
@@ -60,15 +65,21 @@ function StartSurveyDialog({ open, onClose, onStartNew, onContinue }) {
         )}
         {tab === 1 && (
           <Box sx={{ mt: 2 }}>
-            <List>
-              {projects.map((p) => (
-                <ListItem key={p.id} onClick={() => setSelectedProjectId(p.id)} button selected={selectedProjectId === p.id}>
-                  <FolderIcon sx={{ mr: 1 }} />
-                  <ListItemText primary={p.name} secondary={new Date(p.created_at).toLocaleString()} />
-                </ListItem>
-              ))}
-              {projects.length === 0 && <ListItem><ListItemText primary="No projects found" /></ListItem>}
-            </List>
+            {projectsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <List>
+                {projects.map((p) => (
+                  <ListItem key={p.id} onClick={() => setSelectedProjectId(p.id)} button selected={selectedProjectId === p.id}>
+                    <FolderIcon sx={{ mr: 1 }} />
+                    <ListItemText primary={p.name} secondary={new Date(p.created_at).toLocaleString()} />
+                  </ListItem>
+                ))}
+                {projects.length === 0 && !projectsLoading && <ListItem><ListItemText primary="No projects found" /></ListItem>}
+              </List>
+            )}
           </Box>
         )}
       </DialogContent>

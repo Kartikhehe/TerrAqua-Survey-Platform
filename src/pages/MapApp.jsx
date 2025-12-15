@@ -24,6 +24,7 @@ import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import LiveCoordinates from '../components/LiveCoordinates';
@@ -63,6 +64,8 @@ function App() {
   const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [cursorCoordinates, setCursorCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [currentLocationWaypointId, setCurrentLocationWaypointId] = useState(null);
+  const currentLocationWaypointRef = useRef(null);
+  useEffect(() => { currentLocationWaypointRef.current = currentLocationWaypointId; }, [currentLocationWaypointId]);
   const [selectedWaypointId, setSelectedWaypointId] = useState(null);
   const [waypoints, setWaypoints] = useState([]); // Array of { id, lat, lng, name, notes, image }
   const [waypointData, setWaypointData] = useState({ name: '', lat: '', lng: '', notes: '', image: null });
@@ -89,6 +92,13 @@ function App() {
   const timerIntervalRef = useRef(null);
   const heartbeatRef = useRef(null);
   const [waypointDetailsOpen, setWaypointDetailsOpen] = useState(false);
+  const [projectBarExpanded, setProjectBarExpanded] = useState(true);
+  const projectBarRef = useRef(null);
+  const infoBoxRef = useRef(null);
+  const optionsRef = useRef(null);
+  const [collapsedWidth, setCollapsedWidth] = useState(null);
+  const [expandedWidth, setExpandedWidth] = useState(null);
+  const [projectBarWidth, setProjectBarWidth] = useState(null);
   const [autoPausedPromptShown, setAutoPausedPromptShown] = useState(false);
   const [isProjectMode, setIsProjectMode] = useState(false);
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
@@ -110,6 +120,10 @@ function App() {
   const theme = createAppTheme(darkMode ? 'dark' : 'light');
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { isAuthenticated, user } = useAuth();
+
+  useEffect(() => {
+    setProjectBarExpanded(isMobile ? false : true);
+  }, [isMobile]);
 
   // Compute which waypoints should be shown in the top selector
   const selectorWaypoints = (isProjectMode && activeProject && activeProject.id)
@@ -250,6 +264,8 @@ function App() {
     setSelectedWaypointId(null);
     // Ensure markers are filtered for project mode
     setTimeout(() => refreshMapMarkers(), 50);
+    // For mobile, start collapsed
+    setProjectBarExpanded(isMobile ? false : true);
   };
 
   const handleStartSurveyContinue = (project) => {
@@ -286,6 +302,8 @@ function App() {
     })();
     // After loading, ensure markers are filtered to project
     setTimeout(() => refreshMapMarkers(), 100);
+    // For mobile, start collapsed
+    setProjectBarExpanded(isMobile ? false : true);
   };
 
   const handleStopProject = async () => {
@@ -306,6 +324,7 @@ function App() {
     setActiveProject(null);
     setIsProjectMode(false);
     setProjectRecording(false);
+    setProjectBarExpanded(false);
     // Stop auto-recording if running
     if (recordingIntervalRef.current) {
       clearInterval(recordingIntervalRef.current);
@@ -443,6 +462,64 @@ function App() {
       showSnackbar('Unable to determine current location', 'error');
       return;
     }
+    // If the selected waypoint is the live-following waypoint, persist it and convert it to a pinned project point
+    const selectedIsLive = selectedWaypointId && selectedWaypointId === currentLocationWaypointRef.current;
+    if (selectedIsLive) {
+      // find the waypoint in state
+      const liveWp = waypoints.find(wp => wp.id === selectedWaypointId);
+      if (!liveWp || !liveWp.lat || !liveWp.lng) {
+        showSnackbar('Unable to determine current location', 'error');
+        return;
+      }
+      const latToSave = (typeof liveWp.lat === 'number') ? liveWp.lat : parseFloat(liveWp.lat);
+      const lngToSave = (typeof liveWp.lng === 'number') ? liveWp.lng : parseFloat(liveWp.lng);
+
+      // Compute next Point name
+      let nextPointName = `Point 1`;
+      try {
+        const projectDetail = await projectsAPI.getById(activeProject.id);
+        const items = projectDetail?.waypoints || [];
+        const nums = items.map(it => {
+          const match = (it.name || '').match(/Point\s*(\d+)/i);
+          return match ? parseInt(match[1], 10) : null;
+        }).filter(Boolean);
+        const maxNum = nums.length ? Math.max(...nums) : 0;
+        nextPointName = `Point ${maxNum + 1}`;
+      } catch (err) {}
+
+      try {
+        const saved = await waypointsAPI.create({
+          name: nextPointName,
+          lat: latToSave.toFixed(6),
+          lng: lngToSave.toFixed(6),
+          notes: `Captured live at ${new Date().toLocaleString()}`,
+          project_id: activeProject.id,
+          project_name: activeProject.name
+        });
+        // Update existing local waypoint to reflect saved DB values and turn off followsLive
+        setWaypoints(prev => prev.map(wp => wp.id === selectedWaypointId ? ({
+          ...wp,
+          lat: parseFloat(saved.latitude),
+          lng: parseFloat(saved.longitude),
+          name: saved.name,
+          notes: saved.notes,
+          image: saved.image_url,
+          project_id: saved.project_id,
+          project_name: saved.project_name,
+          followsLive: false
+        }) : wp));
+        setDbWaypointIds(prev => ({ ...prev, [selectedWaypointId]: saved.id }));
+        // Stop following live GPS for this waypoint now that it's pinned
+        setCurrentLocationWaypointId(null);
+        showSnackbar('Project point added', 'success');
+      } catch (err) {
+        console.error('Error adding project point:', err);
+        showSnackbar(err.message || 'Failed to add point to project', 'error');
+      }
+      return;
+    }
+
+    // Otherwise default behavior: save current live coords as a new point
     const lat = parseFloat(coordinates.lat);
     const lng = parseFloat(coordinates.lng);
     // Compute next Point number in project
@@ -1976,6 +2053,21 @@ function App() {
   };
 
   useEffect(() => {
+    // Keep waypoint details in sync if the selected waypoint is following live GPS
+    if (!selectedWaypointId) return;
+    const wp = waypoints.find(w => w.id === selectedWaypointId);
+    if (!wp) return;
+    if (wp.followsLive) {
+      setWaypointData(prev => ({
+        ...prev,
+        lat: (typeof wp.lat === 'number' ? wp.lat.toFixed(6) : wp.lat),
+        lng: (typeof wp.lng === 'number' ? wp.lng.toFixed(6) : wp.lng),
+        notes: wp.notes || prev.notes
+      }));
+    }
+  }, [waypoints, selectedWaypointId]);
+
+  useEffect(() => {
     // initialize map only once
     // Start with default location, will update to user's location if available
     const map = L.map('map', {
@@ -2057,6 +2149,11 @@ function App() {
           map.setView([latitude, longitude], 15);
           if (isMobile) {
             updateMobileMapHeight();
+            // ensure layout settles then re-center at desired zoom on mobile
+            setTimeout(() => {
+              try { map.invalidateSize(); } catch (e) {}
+              try { map.setView([latitude, longitude], 15, { animate: false }); } catch (e) {}
+            }, 120);
           }
           
           // Update coordinates with accuracy
@@ -2113,6 +2210,13 @@ function App() {
                 const liveMarker = createLiveLocationMarker([newLat, newLng]).addTo(mapRef.current);
                 liveLocationMarkerRef.current = liveMarker;
               }
+              // On first watch update on mobile ensure centering at desired zoom
+              if (isMobile && gpsActive) {
+                setTimeout(() => {
+                  try { mapRef.current.invalidateSize(); } catch (e) {}
+                  try { mapRef.current.setView([newLat, newLng], 15, { animate: false }); } catch (e) {}
+                }, 120);
+              }
               
               // Live marker is managed separately; update it here
               if (liveLocationMarkerRef.current) {
@@ -2129,12 +2233,32 @@ function App() {
                 }));
               }
               
-              // Update waypoint in array
-              setWaypoints(prev => prev.map(wp => 
-                wp.id === waypointId 
-                  ? { ...wp, lat: newLat, lng: newLng, notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}` }
-                  : wp
-              ));
+              // Update any waypoint that is flagged to follow live GPS (or matches currentLocationWaypointId)
+              const liveId = currentLocationWaypointRef.current || 'current-location';
+              setWaypoints(prev => prev.map(wp => {
+                if (wp.followsLive || wp.id === liveId) {
+                  return { ...wp, lat: newLat, lng: newLng, notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}` };
+                }
+                return wp;
+              }));
+
+              // Also update the marker position for the live-following waypoint if present
+              try {
+                const liveWaypointId = currentLocationWaypointRef.current;
+                if (liveWaypointId && markersRef.current[liveWaypointId]) {
+                  markersRef.current[liveWaypointId].setLatLng([newLat, newLng]);
+                }
+              } catch (e) {}
+
+              // If the live-following waypoint is selected, update details live
+              if (selectedWaypointId && selectedWaypointId === currentLocationWaypointRef.current) {
+                setWaypointData(prev => ({
+                  ...prev,
+                  lat: newLat.toFixed(6),
+                  lng: newLng.toFixed(6),
+                  notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}`
+                }));
+              }
             },
             (error) => {
               console.log('Watch position error:', error);
@@ -2451,6 +2575,30 @@ function App() {
   }, [darkMode, satelliteHybridMode]);
 
   // Update tile layer when dark mode changes (only if not in satellite hybrid mode)
+  useEffect(() => {
+    // Measure project bar widths on relevant changes
+    const measure = () => {
+      if (!isMobile) return;
+      const infoW = infoBoxRef.current?.offsetWidth || 0;
+      const optionsW = optionsRef.current?.scrollWidth || 0;
+      const expandBtnW = 40; // approx icon button
+      const padding = 32; // px for left/right padding
+      const collapsed = Math.min(Math.max(infoW + expandBtnW + padding, 120), window.innerWidth * 0.6);
+      const expanded = Math.min(optionsW + padding + expandBtnW, window.innerWidth * 0.95);
+      setCollapsedWidth(collapsed);
+      setExpandedWidth(expanded);
+      setProjectBarWidth(projectBarExpanded ? expanded : collapsed);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (projectBarRef.current) ro.observe(projectBarRef.current);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      try { ro.disconnect(); } catch (e) {}
+    };
+  }, [isMobile, projectBarExpanded, waypoints.length, projectRecording]);
+
   useEffect(() => {
     if (!mapRef.current || satelliteHybridMode) return;
     
@@ -3217,83 +3365,111 @@ function App() {
 
       {/* Floating bottom bar for project controls */}
       {isProjectMode && (
-        <Paper elevation={8} sx={{
+        <Paper ref={projectBarRef} elevation={8} sx={{
           position: 'fixed',
           top: isMobile ? '3.5rem' : 'auto',
           bottom: isMobile ? 'auto' : 32,
           left: '50%',
           transform: 'translateX(-50%)',
-          width: isMobile ? 'min(50%, 320px)' : 'auto',
+          width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(60%,320px)') : 'auto',
           zIndex: theme.zIndex.drawer + 30,
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           alignItems: 'center',
           gap: 1,
           px: 2,
           py: 1,
           borderRadius: 4,
-        }}>
-          <Typography sx={{ mr: 1, fontWeight: 600 }}>{activeProject ? activeProject.name : 'Project'}</Typography>
-          <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary }}>{formatTime(timerSeconds)}</Typography>
-          {/* Add new unsaved point (opens details with live coords) */}
-          <IconButton aria-label="add-current" title="Add point (live coords)" onClick={() => {
-            const map = mapRef.current;
-            // Use device GPS coordinates for the seeded point
-            if (!coordinates || !coordinates.lat || !coordinates.lng) {
-              showSnackbar('Unable to determine current live location (GPS).', 'error');
-              return;
-            }
-            const waypointId = `waypoint-${Date.now()}`;
-            const latNum = parseFloat(coordinates.lat);
-            const lngNum = parseFloat(coordinates.lng);
-
-            const newWp = {
-              id: waypointId,
-              lat: latNum,
-              lng: lngNum,
-              name: `Point ${ (waypoints.filter(w=> w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1 }`,
-              notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
-              image: null,
-              project_id: activeProject?.id || null,
-              project_name: activeProject?.name || null,
-            };
-
-            // Add to waypoints and map as a fixed marker at current GPS location
-            setWaypoints(prev => [...prev, newWp]);
-            if (map) {
-              const marker = L.marker([latNum, lngNum]).addTo(map);
-              marker.on('click', function() { handleSelectWaypoint(waypointId); });
-              markersRef.current[waypointId] = marker;
-            }
-
-            // Open details but do NOT select the fixed marker — details will show live GPS coords
-            setSelectedWaypointId(null);
-            setWaypointDetailsOpen(true);
-            setWaypointData(prev => ({
-              ...prev,
-              name: newWp.name,
-              notes: newWp.notes
-            }));
-          }}>
-            <AddLocation />
-          </IconButton>
-          <IconButton aria-label="start" title="Start" onClick={handleStartRecording} disabled={projectRecording} sx={{ bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white' }}>
-            <PlayArrowOutlinedIcon />
-          </IconButton>
-          <IconButton aria-label="pause" title="Pause" onClick={handlePauseRecording} disabled={!projectRecording}>
-            <PauseOutlinedIcon />
-          </IconButton>
-          {/* When paused, show an animated close button to exit survey mode */}
-          {!projectRecording && (
-            <IconButton aria-label="exit" title="Exit survey" onClick={exitSurveyMode} sx={{ ml: 1, animation: 'pulse 1.2s infinite' }}>
-              <CloseIcon />
+          cursor: isMobile ? 'pointer' : 'default',
+          transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)'
+        }} onClick={() => { if (isMobile) setProjectBarExpanded(prev => !prev); }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
+            <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%', pr: isMobile && !projectBarExpanded ? '2.5rem' : 0, overflow: 'hidden' }}>
+              <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile && !projectBarExpanded ? 'calc(100% - 60px)' : '100%' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
+              <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
+              {isMobile && (
+                <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
+              )}
+            </Box>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setProjectBarExpanded(prev => !prev); }} aria-label="expand" title="Expand" sx={{ position: 'absolute', right: 6, top: '50%', transform: `translateY(-50%)`, flexShrink: 0 }}>
+              <ExpandMoreIcon sx={{ transform: projectBarExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }} />
             </IconButton>
+          </Box>
+
+          {( !isMobile || projectBarExpanded ) && (
+            <Box ref={optionsRef} sx={{ display: 'flex', gap: 1, mt: isMobile ? 1 : 0, width: '100%', flexWrap: 'nowrap', justifyContent: 'space-between', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+              <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation();
+                const map = mapRef.current;
+                if (!coordinates || !coordinates.lat || !coordinates.lng) {
+                  showSnackbar('Unable to determine current live location (GPS).', 'error');
+                  return;
+                }
+                const waypointId = `waypoint-${Date.now()}`;
+                const latNum = parseFloat(coordinates.lat);
+                const lngNum = parseFloat(coordinates.lng);
+
+                const newWp = {
+                  id: waypointId,
+                  lat: latNum,
+                  lng: lngNum,
+                  name: `Point ${ (waypoints.filter(w=> w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1 }`,
+                  notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
+                  image: null,
+                  project_id: activeProject?.id || null,
+                  project_name: activeProject?.name || null,
+                  followsLive: true // mark this waypoint to follow live GPS
+                };
+
+                // Ensure only one live-following waypoint at a time: remove followsLive from others
+                setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
+                // Mark this as current live-following waypoint so watchPosition can update it
+                setCurrentLocationWaypointId(waypointId);
+
+                if (map) {
+                  const marker = L.marker([latNum, lngNum]).addTo(map);
+                  marker.on('click', function() { handleSelectWaypoint(waypointId); });
+                  markersRef.current[waypointId] = marker;
+                }
+
+                // Select the newly created live-following waypoint and open details
+                setSelectedWaypointId(waypointId);
+                setWaypointDetailsOpen(true);
+                setWaypointData({
+                  name: newWp.name,
+                  lat: latNum.toFixed(6),
+                  lng: lngNum.toFixed(6),
+                  notes: newWp.notes,
+                  image: null,
+                  project_id: newWp.project_id,
+                  project_name: newWp.project_name
+                });
+              }}>
+                <AddLocation />
+              </IconButton>
+
+              <IconButton aria-label="start" title="Start" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white' }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                <PlayArrowOutlinedIcon />
+              </IconButton>
+
+              <IconButton aria-label="pause" title="Pause" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
+                <PauseOutlinedIcon />
+              </IconButton>
+
+              {!projectRecording && (
+                <IconButton aria-label="exit" title="Exit survey" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', animation: 'pulse 1.2s infinite', ml: isMobile ? 0 : 1 }} onClick={(e) => { e.stopPropagation(); exitSurveyMode(); }}>
+                  <CloseIcon />
+                </IconButton>
+              )}
+
+              <IconButton aria-label="pin" title="Pin point" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); handlePinPointToProject(); }}>
+                <LocationOnOutlinedIcon />
+              </IconButton>
+
+              <IconButton aria-label="stop" title="End" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
+                <StopCircleOutlinedIcon />
+              </IconButton>
+            </Box>
           )}
-          <IconButton aria-label="pin" title="Pin point" onClick={handlePinPointToProject}>
-            <LocationOnOutlinedIcon />
-          </IconButton>
-          <IconButton aria-label="stop" title="End" color="error" onClick={handleStopProject}>
-            <StopCircleOutlinedIcon />
-          </IconButton>
         </Paper>
       )}
     </Box>
