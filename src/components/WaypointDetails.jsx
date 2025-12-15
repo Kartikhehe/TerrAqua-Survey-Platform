@@ -38,6 +38,9 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   sidebarOpen = false,
   imageUploading = false,
   isProjectMode = false,
+  activeProjectId = null,
+  currentLocationId = null,
+  canSaveDuringProject = true,
 }, ref) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -274,9 +277,10 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1.5, md: 2 }, alignItems: 'flex-start', flexWrap: 'nowrap' }}>
           <TextField
             label="Latitude"
-            value={waypointData.lat}
+            value={selectedWaypointId ? waypointData.lat : (currentLocation && currentLocation.lat ? parseFloat(currentLocation.lat).toFixed(6) : '')}
             onChange={(e) => setWaypointData(prev => ({ ...prev, lat: e.target.value }))}
             size="small"
+            disabled={isProjectMode && !selectedWaypointId}
             sx={{
               flex: 1,
               minWidth: 0,
@@ -300,11 +304,13 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 color: theme.palette.text.secondary,
               },
             }}
+            disabled={isProjectMode}
           />
           <TextField
             label="Longitude"
-            value={waypointData.lng}
+            value={selectedWaypointId ? waypointData.lng : (currentLocation && currentLocation.lng ? parseFloat(currentLocation.lng).toFixed(6) : '')}
             onChange={(e) => setWaypointData(prev => ({ ...prev, lng: e.target.value }))}
+            disabled={isProjectMode && !selectedWaypointId}
             size="small"
             sx={{
               flex: 1,
@@ -332,6 +338,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           />
           <IconButton
             onClick={onToggleLocationSelection}
+            disabled={locationSelectionActive || isProjectMode}
             sx={{
               mt: 0.5,
               flexShrink: 0,
@@ -348,7 +355,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               width: { xs: '1.96875rem', sm: '2.1875rem' },
               height: { xs: '1.96875rem', sm: '2.1875rem' },
             }}
-            title={locationSelectionActive ? 'Click on map to set location' : 'Select location from map'}
+            title={isProjectMode ? 'Location selection disabled during survey' : (locationSelectionActive ? 'Click on map to set location' : 'Select location from map')}
           >
             <LocationSearchingIcon />
           </IconButton>
@@ -426,6 +433,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               },
             },
           }}
+          disabled={isProjectMode}
         />
 
         <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
@@ -434,6 +442,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               variant="contained"
               startIcon={<Save />}
               onClick={onSave}
+              disabled={!canSaveDuringProject}
+              title={!canSaveDuringProject ? 'Only current location or project points can be saved during survey' : undefined}
               sx={{
                 flex: 1,
                 py: { xs: 1.25, sm: 1.5 },

@@ -19,7 +19,7 @@ import {
   ThemeProvider,
   CssBaseline
 } from '@mui/material';
-import { AddLocation, MyLocation, Menu as MenuIcon } from '@mui/icons-material';
+import { AddLocation, MyLocation, Menu as MenuIcon, Close as CloseIcon } from '@mui/icons-material';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
@@ -61,6 +61,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [singlePointCaptureActive, setSinglePointCaptureActive] = useState(false);
   const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
+  const [cursorCoordinates, setCursorCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [currentLocationWaypointId, setCurrentLocationWaypointId] = useState(null);
   const [selectedWaypointId, setSelectedWaypointId] = useState(null);
   const [waypoints, setWaypoints] = useState([]); // Array of { id, lat, lng, name, notes, image }
@@ -77,6 +78,7 @@ function App() {
   const [savedWaypointsList, setSavedWaypointsList] = useState([]); // List of all saved waypoints for navigation
   const [loginPromptOpen, setLoginPromptOpen] = useState(false); // Login prompt dialog state
   const [gpsWarningOpen, setGpsWarningOpen] = useState(false); // GPS warning dialog state
+  const [gpsActive, setGpsActive] = useState(false); // Whether device GPS watch is active
   const [locationSelectionActive, setLocationSelectionActive] = useState(false); // Location selection mode state
   const [defaultLocation, setDefaultLocation] = useState({ lat: 26.516654, lng: 80.231507 }); // Default location from database
   const [startSurveyDialogOpen, setStartSurveyDialogOpen] = useState(false);
@@ -85,6 +87,8 @@ function App() {
   const recordingIntervalRef = useRef(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const timerIntervalRef = useRef(null);
+  const heartbeatRef = useRef(null);
+  const [waypointDetailsOpen, setWaypointDetailsOpen] = useState(false);
   const [autoPausedPromptShown, setAutoPausedPromptShown] = useState(false);
   const [isProjectMode, setIsProjectMode] = useState(false);
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
@@ -111,6 +115,77 @@ function App() {
   const selectorWaypoints = (isProjectMode && activeProject && activeProject.id)
     ? waypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id))
     : waypoints;
+
+  // Rebuild markers on map according to mode (project mode shows only project's points + live location)
+  const clearAllMarkers = () => {
+    try {
+      Object.keys(markersRef.current).forEach(id => {
+        try { markersRef.current[id].remove(); } catch (e) {}
+        delete markersRef.current[id];
+      });
+    } catch (e) { console.error('Error clearing markers:', e); }
+    // clear selected overlay too
+    if (selectedMarkerOverlayRef.current) {
+      try { selectedMarkerOverlayRef.current.remove(); } catch (e) {}
+      selectedMarkerOverlayRef.current = null;
+    }
+  };
+
+  const addMarkerForWaypoint = (wp) => {
+    const map = mapRef.current;
+    if (!map) return null;
+    try {
+      const marker = L.marker([parseFloat(wp.lat), parseFloat(wp.lng)]).addTo(map);
+      marker.on('click', function (e) {
+        e.originalEvent && e.originalEvent.stopPropagation && e.originalEvent.stopPropagation();
+        handleSelectWaypoint(wp.id);
+      });
+      // ensure marker element receives pointer events
+      marker.on('add', function () {
+        const element = this.getElement();
+        if (element) {
+          element.style.zIndex = '999';
+          element.style.pointerEvents = 'auto';
+        }
+      });
+      markersRef.current[wp.id] = marker;
+      return marker;
+    } catch (e) {
+      console.error('Error creating marker for waypoint', wp, e);
+      return null;
+    }
+  };
+
+  const refreshMapMarkers = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    clearAllMarkers();
+    // Add only project waypoints in project mode, otherwise add all
+    const itemsToAdd = (isProjectMode && activeProject && activeProject.id)
+      ? waypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id))
+      : waypoints;
+    itemsToAdd.forEach(wp => addMarkerForWaypoint(wp));
+    // add live location marker
+    try {
+      if (liveLocationMarkerRef.current) {
+        liveLocationMarkerRef.current.remove();
+        liveLocationMarkerRef.current = null;
+      }
+      if (coordinates && coordinates.lat && coordinates.lng) {
+        liveLocationMarkerRef.current = createLiveLocationMarker([coordinates.lat, coordinates.lng]).addTo(map);
+      }
+    } catch (e) { console.error('Error adding live marker:', e); }
+    // If current selected waypoint is not part of visible markers, clear selection
+    if (selectedWaypointId) {
+      const stillVisible = Object.keys(markersRef.current).includes(selectedWaypointId);
+      if (!stillVisible) {
+        setSelectedWaypointId(null);
+        setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+      }
+    }
+    // ensure selected overlay is updated
+    updateSelectedMarkerOverlay(selectedWaypointId);
+  };
   
   // Detect if device has cursor (mouse) or is touch-only
   // Check for touch support - if device supports touch, assume no cursor
@@ -156,18 +231,25 @@ function App() {
     }
     setActiveProject({ id: project.id, name: project.name });
     setIsProjectMode(true);
+    setWaypointDetailsOpen(true);
     setSinglePointCaptureActive(true);
     setProjectRecording(true); // still start recording automatically for new project
     setStartSurveyDialogOpen(false);
     showSnackbar(`Started project: ${project.name}`, 'success');
-    // Persist state: set project status to playing (do NOT auto-add a Start Point)
+    // Persist state: set project status to playing and auto-save Start Point
     (async () => {
       try {
         await projectsAPI.setStatus(project.id, 'playing');
+        // Auto-save Start Point for newly created project
+        await createProjectWaypoint('Start Point');
       } catch (err) {
-        console.error('Error setting project to playing:', err);
+        console.error('Error setting project to playing or saving Start Point:', err);
       }
     })();
+    // Clear selection so details default to current location
+    setSelectedWaypointId(null);
+    // Ensure markers are filtered for project mode
+    setTimeout(() => refreshMapMarkers(), 50);
   };
 
   const handleStartSurveyContinue = (project) => {
@@ -178,6 +260,7 @@ function App() {
     }
     setActiveProject({ id: project.id, name: project.name });
     setIsProjectMode(true);
+    setWaypointDetailsOpen(true);
     setSinglePointCaptureActive(true);
     setProjectRecording(true);
     setStartSurveyDialogOpen(false);
@@ -189,51 +272,20 @@ function App() {
         if (!detail || !detail.waypoints) return;
         // Populate waypoints to map and state
         loadProjectWaypointsToMap(detail, project);
-
-        detail.waypoints.forEach((wp, idx) => {
-          const localId = `project-${project.id}-${wp.id}`;
-          newWaypoints.push({
-            id: localId,
-            lat: parseFloat(wp.latitude),
-            lng: parseFloat(wp.longitude),
-            name: wp.name || `Point ${idx + 1}`,
-            notes: wp.notes || '',
-            image: wp.image_url || null,
-            project_id: wp.project_id || project.id,
-            project_name: wp.project_name || project.name,
-          });
-          newDbMapping[localId] = wp.id;
-          if (map) {
-            const marker = L.marker([parseFloat(wp.latitude), parseFloat(wp.longitude)]).addTo(map);
-            marker.on('click', function() { handleSelectWaypoint(localId); });
-            newMarkers[localId] = marker;
-          }
-        });
-
-        // Merge into current state
-        setWaypoints(prev => {
-          // Avoid adding duplicates by filtering existing DB mappings
-          const existingDbIds = new Set(Object.values(dbWaypointIds));
-          const filtered = newWaypoints.filter(wp => !existingDbIds.has(newDbMapping[wp.id]));
-          return [...prev, ...filtered];
-        });
-        setDbWaypointIds(prev => ({ ...prev, ...newDbMapping }));
-        Object.assign(markersRef.current, newMarkers);
-        // Fit map to loaded project waypoints
-        if (map && newWaypoints.length > 0) {
-          const bounds = L.latLngBounds(newWaypoints.map(w => [w.lat, w.lng]));
-          try { map.fitBounds(bounds, { padding: [50, 50] }); } catch (e) { /* ignore */ }
-        }
         // Persist to backend that project is playing
         try {
           await projectsAPI.setStatus(project.id, 'playing');
           // start timer
           startTimerFromProject(detail.project);
         } catch (err) { console.error('Error setting project to playing:', err); }
+        // Clear any previous selection so waypoint details show current location by default
+        setSelectedWaypointId(null);
       } catch (err) {
         console.error('Error loading project waypoints:', err);
       }
     })();
+    // After loading, ensure markers are filtered to project
+    setTimeout(() => refreshMapMarkers(), 100);
   };
 
   const handleStopProject = async () => {
@@ -288,6 +340,10 @@ function App() {
       })
       .catch(err => console.error('setStatus playing err', err));
     showSnackbar('Recording started', 'info');
+    // immediate heartbeat to ensure server touches last_activity and checkpoints
+    if (activeProject && activeProject.id) {
+      projectsAPI.heartbeat(activeProject.id).catch(() => {});
+    }
   };
 
   // Helper used by continue and mount to load project's waypoints into state/map
@@ -352,6 +408,26 @@ function App() {
     showSnackbar('Recording paused', 'info');
   };
 
+  // Exit survey mode locally (keep project paused/ended on server as-is)
+  const exitSurveyMode = () => {
+    setIsProjectMode(false);
+    setActiveProject(null);
+    setProjectRecording(false);
+    stopTimer();
+    // stop heartbeat
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    // hide waypoint details and clear selection
+    setWaypointDetailsOpen(false);
+    setSelectedWaypointId(null);
+    updateSelectedMarkerOverlay(null);
+    // refresh markers so saved points remain visible and live marker stays
+    setTimeout(() => refreshMapMarkers(), 10);
+    showSnackbar('Exited survey mode', 'info');
+  };
+
   const handlePinPointToProject = async () => {
     // Capture current coordinates and save as a waypoint under the active project
     if (!isAuthenticated) {
@@ -362,9 +438,13 @@ function App() {
       showSnackbar('No active project to add point to', 'error');
       return;
     }
-    const map = mapRef.current;
-    if (!map) return;
-    const center = map.getCenter();
+    // Use current GPS coordinates for pinning, not the map center
+    if (!coordinates || !coordinates.lat || !coordinates.lng) {
+      showSnackbar('Unable to determine current location', 'error');
+      return;
+    }
+    const lat = parseFloat(coordinates.lat);
+    const lng = parseFloat(coordinates.lng);
     // Compute next Point number in project
     let nextPointName = `Point 1`;
     try {
@@ -382,8 +462,8 @@ function App() {
     }
     const newWp = {
       name: nextPointName,
-      lat: center.lat.toFixed(6),
-      lng: center.lng.toFixed(6),
+      lat: lat.toFixed(6),
+      lng: lng.toFixed(6),
       notes: `Captured live at ${new Date().toLocaleString()}`,
       image: null,
       project_id: activeProject.id,
@@ -418,10 +498,11 @@ function App() {
       return null;
     }
     const map = mapRef.current;
-    let lat = coordinates.lat;
-    let lng = coordinates.lng;
+    // Prefer live device coordinates if available, otherwise fall back to map center
+    let lat = coordinates?.lat;
+    let lng = coordinates?.lng;
     try {
-      if (map) {
+      if ((!lat || !lng) && map) {
         const center = map.getCenter();
         lat = center.lat;
         lng = center.lng;
@@ -512,6 +593,37 @@ function App() {
     }
     return () => { /* cleanup kept by stopTimer */ };
   }, [projectRecording, isProjectMode, activeProject]);
+
+  // Heartbeat: persist playing segments periodically
+  useEffect(() => {
+    if (projectRecording && isProjectMode && activeProject && activeProject.id) {
+      // start heartbeat interval (checkpoint every 60s)
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(async () => {
+        try {
+          const updated = await projectsAPI.heartbeat(activeProject.id);
+          if (updated && typeof updated.elapsed_seconds === 'number') {
+            // update timer base to persisted elapsed and continue counting
+            setTimerSeconds(updated.elapsed_seconds || 0);
+          }
+        } catch (e) {
+          console.error('Heartbeat failed', e);
+        }
+      }, 60000);
+    } else {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+    }
+    return () => {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectRecording, isProjectMode, activeProject?.id]);
 
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
@@ -612,9 +724,28 @@ function App() {
       const waypoint = waypoints.find(wp => wp.id === selectedWaypointId);
       if (!waypoint) return;
 
+      // In project mode, restrict saving to only project waypoints or current location.
+      if (isProjectMode && activeProject) {
+        const wpIsProjectPoint = waypoint.project_id && String(waypoint.project_id) === String(activeProject.id);
+        const wpIsCurrentLocation = selectedWaypointId === currentLocationWaypointId;
+        if (!wpIsProjectPoint && !wpIsCurrentLocation) {
+          showSnackbar('Only current location or project points can be saved during survey', 'error');
+          return;
+        }
+      }
+
       // Check if this is "Default Location" - if so, ensure name stays as "Default Location"
       const isDefaultLocation = waypoint.name && waypoint.name.trim().toLowerCase() === 'default location';
-      const finalName = isDefaultLocation ? 'Default Location' : (waypointData.name || `Point ${waypoints.findIndex(wp => wp.id === selectedWaypointId) + 1}`);
+      // Determine default "Point N" name when in project mode
+      let defaultPointName = `Point ${waypoints.findIndex(wp => wp.id === selectedWaypointId) + 1}`;
+      if (isProjectMode && activeProject && activeProject.id) {
+        const projectCount = waypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id)).length;
+        defaultPointName = `Point ${projectCount + (dbWaypointIds[selectedWaypointId] ? 0 : 1)}`; // if editing existing, don't increment
+      }
+      // If in project mode and the name is the placeholder 'My Current Location', prefer default Point name
+      const nameCandidates = (waypointData.name || '').trim();
+      const isMyCurrentLocation = nameCandidates.toLowerCase() === 'my current location';
+      const finalName = isDefaultLocation ? 'Default Location' : ((isProjectMode && (!nameCandidates || isMyCurrentLocation)) ? defaultPointName : (waypointData.name || `Point ${waypoints.findIndex(wp => wp.id === selectedWaypointId) + 1}`));
 
       const waypointPayload = {
         name: finalName,
@@ -643,12 +774,19 @@ function App() {
       // Update local state
       const updatedWaypoints = waypoints.map((wp, index) => 
         wp.id === selectedWaypointId 
-          ? { ...wp, ...waypointData, lat: parseFloat(waypointData.lat), lng: parseFloat(waypointData.lng), name: finalName }
+          ? { ...wp, ...waypointData, lat: parseFloat(waypointData.lat), lng: parseFloat(waypointData.lng), name: finalName, project_id: waypointPayload.project_id || null, project_name: waypointPayload.project_name || null }
           : { ...wp, name: `Point ${index + 1}` }
       );
       setWaypoints(updatedWaypoints);
       
-      // Update waypointData to ensure name is correct
+      // After saving current location as a project point, advance default name for the next unsaved save
+      if (isProjectMode && selectedWaypointId === currentLocationWaypointId) {
+        const projectCountNow = updatedWaypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject?.id)).length;
+        const nextName = `Point ${projectCountNow + 1}`;
+        setWaypointData(prev => ({ ...prev, name: nextName }));
+      }
+
+      // Update waypointData to ensure name is correct for default location
       if (isDefaultLocation) {
         setWaypointData(prev => ({ ...prev, name: 'Default Location' }));
         // Reload default location from database after saving
@@ -1036,7 +1174,8 @@ function App() {
         if (marker && mapRef.current) {
           const latlng = marker.getLatLng();
           // Only add overlay for survey waypoints (not navigation or current location)
-          const isSurveyWaypoint = waypoints.some(wp => wp.id === waypointId && wp.id !== currentLocationWaypointId);
+          const wp = waypoints.find(wp => wp.id === waypointId);
+          const isSurveyWaypoint = wp && wp.id !== currentLocationWaypointId && (!isProjectMode || (activeProject && String(wp.project_id) === String(activeProject.id)));
           if (isSurveyWaypoint) {
             const redOverlay = createSurveyMarker(latlng).addTo(mapRef.current);
             selectedMarkerOverlayRef.current = redOverlay;
@@ -1059,20 +1198,86 @@ function App() {
 
     // Set selected waypoint
     setSelectedWaypointId(waypointId);
-    
-    // Update red circleMarker overlay for selected waypoint (use setTimeout to ensure state is updated)
+    setWaypointDetailsOpen(true);
+
+    // Update red circleMarker overlay for selected waypoint
     setTimeout(() => {
       updateSelectedMarkerOverlay(waypointId);
     }, 0);
-    
-    // Use the actual name from the waypoint object, not recalculated
+
+    // Ensure waypoint details show DB values
     setWaypointData({
-      name: waypoint.name, // Use the actual name from waypoint object
-      lat: waypoint.lat.toFixed(6),
-      lng: waypoint.lng.toFixed(6),
+      name: waypoint.name,
+      lat: (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat),
+      lng: (typeof waypoint.lng === 'number' ? waypoint.lng.toFixed(6) : waypoint.lng),
       notes: waypoint.notes || '',
-      image: waypoint.image || null
+      image: waypoint.image || null,
+      project_id: waypoint.project_id || null,
+      project_name: waypoint.project_name || null,
     });
+    // Center map on selection
+    try {
+      const map = mapRef.current;
+      const marker = markersRef.current[waypointId];
+      if (marker && map) {
+        map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
+      }
+    } catch (e) {}
+  };
+
+  // Save current live coordinates as the next project point
+  const saveCurrentLocationAsProjectPoint = async () => {
+    if (!isProjectMode || !activeProject) {
+      showSnackbar('No active project to save to', 'error');
+      return;
+    }
+    if (!coordinates || !coordinates.lat || !coordinates.lng) {
+      showSnackbar('Unable to determine current location', 'error');
+      return;
+    }
+    // Use createProjectWaypoint which uses current map center by default; override to use live coords
+    const lat = parseFloat(coordinates.lat);
+    const lng = parseFloat(coordinates.lng);
+    // Compute default Point name
+    let nextPointName = `Point 1`;
+    try {
+      const projectDetail = await projectsAPI.getById(activeProject.id);
+      const items = projectDetail?.waypoints || [];
+      const nums = items.map(it => {
+        const match = (it.name || '').match(/Point\s*(\d+)/i);
+        return match ? parseInt(match[1], 10) : null;
+      }).filter(Boolean);
+      const maxNum = nums.length ? Math.max(...nums) : 0;
+      nextPointName = `Point ${maxNum + 1}`;
+    } catch (err) {}
+
+    try {
+      const saved = await waypointsAPI.create({
+        name: nextPointName,
+        lat: lat.toFixed(6),
+        lng: lng.toFixed(6),
+        notes: `Captured live at ${new Date().toLocaleString()}`,
+        project_id: activeProject.id,
+        project_name: activeProject.name,
+      });
+      // Add to local waypoints and refresh markers; select new point
+      const waypointId = `waypoint-${Date.now()}`;
+      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, image: saved.image_url, project_id: saved.project_id, project_name: saved.project_name };
+      setWaypoints(prev => [...prev, waypoint]);
+      setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
+      // Select the newly added waypoint and open details
+      setSelectedWaypointId(waypointId);
+      setWaypointData({ name: saved.name, lat: parseFloat(saved.latitude).toFixed(6), lng: parseFloat(saved.longitude).toFixed(6), notes: saved.notes || '', image: saved.image_url || null, project_id: saved.project_id, project_name: saved.project_name });
+      setWaypointDetailsOpen(true);
+      // Refresh markers to include new project point
+      setTimeout(() => refreshMapMarkers(), 10);
+      showSnackbar('Current location saved to project', 'success');
+      // heartbeat to update last_activity on server
+      try { await projectsAPI.heartbeat(activeProject.id); } catch (e) {}
+    } catch (err) {
+      console.error('Error saving current location to project:', err);
+      showSnackbar(err.message || 'Failed to save current location', 'error');
+    }
   };
 
   // Handler for "Set Default Location" button
@@ -1573,6 +1778,14 @@ function App() {
     fetchDefaultLocation();
   }, []);
 
+  // Keep markers in sync with project mode, active project, waypoints and live coordinates
+  useEffect(() => {
+    try {
+      refreshMapMarkers();
+    } catch (e) { console.error('Error refreshing markers in effect:', e); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProjectMode, activeProject?.id, waypoints.length, coordinates.lat, coordinates.lng]);
+
   // On login or mount, fetch any active project for this user
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -1611,6 +1824,47 @@ function App() {
     return () => { cancelled = true; };
   }, [isAuthenticated]);
 
+  // When entering or updating project (survey) mode, ensure only project markers (or current location for new projects)
+  // are visible. Also initialize default name for new project current location.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (isProjectMode) {
+      if (activeProject && activeProject.id) {
+        // Remove markers not belonging to this project
+        Object.keys(markersRef.current).forEach((id) => {
+          const wp = waypoints.find(w => w.id === id);
+          if (!wp || !wp.project_id || String(wp.project_id) !== String(activeProject.id)) {
+            try { markersRef.current[id].remove(); } catch (e) {}
+            delete markersRef.current[id];
+          }
+        });
+        // Keep only project waypoints in state
+        setWaypoints(prev => prev.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id)));
+        setSelectedWaypointId(null);
+      } else {
+        // New project: remove everything except current location marker
+        Object.keys(markersRef.current).forEach((id) => {
+          if (id !== currentLocationWaypointId) {
+            try { markersRef.current[id].remove(); } catch (e) {}
+            delete markersRef.current[id];
+          }
+        });
+        if (currentLocationWaypointId) {
+          setWaypoints(prev => prev.filter(wp => wp.id === currentLocationWaypointId));
+          setSelectedWaypointId(currentLocationWaypointId);
+          // Set default point name to Point 1 for the unsaved current location
+          setWaypointData(prev => ({ ...prev, name: 'Point 1' }));
+        } else {
+          setWaypoints([]);
+          setSelectedWaypointId(null);
+        }
+      }
+      // Disable location selection when in project mode
+      setLocationSelectionActive(false);
+    }
+  }, [isProjectMode, activeProject, currentLocationWaypointId, waypoints]);
+
   // Load saved waypoints for navigation dropdown
   useEffect(() => {
     const loadSavedWaypoints = async () => {
@@ -1641,34 +1895,13 @@ function App() {
   }, [savedPointsOpen, selectedWaypointId, isAuthenticated]); // Reload when saved points dialog opens/closes or waypoint is selected or auth changes
 
   // Auto-recording interval: if recording is enabled, periodically pin points to active project
+  // Previously auto-recorded points while recording; this behavior was removed
+  // to only save Start/End automatically and save other points only when the
+  // user explicitly pins/saves them. Ensure any running interval is cleared.
   useEffect(() => {
-    // If recording is active and we are in project mode with an active project
-    if (projectRecording && isProjectMode && activeProject) {
-      const intervalMs = 10000; // default 10s interval
-      recordStart();
-      function recordStart() {
-        // Safety: clear existing
-        if (recordingIntervalRef.current) {
-          clearInterval(recordingIntervalRef.current);
-          recordingIntervalRef.current = null;
-        }
-        recordingIntervalRef.current = setInterval(() => {
-          // Pin current live location to project
-          handlePinPointToProject();
-        }, intervalMs);
-      }
-      return () => {
-        if (recordingIntervalRef.current) {
-          clearInterval(recordingIntervalRef.current);
-          recordingIntervalRef.current = null;
-        }
-      };
-    } else {
-      // Stop any running interval
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
-      }
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
     }
   }, [projectRecording, isProjectMode, activeProject]);
 
@@ -1836,41 +2069,24 @@ function App() {
           // Create blue circle marker for live location
           const liveMarker = createLiveLocationMarker([latitude, longitude]).addTo(map);
           liveLocationMarkerRef.current = liveMarker;
+          setGpsActive(true);
           
-          // Create a default location marker at current position
-          const waypointId = `current-location-${Date.now()}`;
-          const currentLocationWaypoint = {
-            id: waypointId,
-            lat: latitude,
-            lng: longitude,
-            name: 'My Current Location',
-            notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}`,
-            image: null
-          };
-          
-          // Add to waypoints array
-          setWaypoints([currentLocationWaypoint]);
+          // Keep a persistent live blue location marker (do NOT add a regular saved marker)
+          const waypointId = 'current-location';
           setCurrentLocationWaypointId(waypointId);
-          
-          // Create marker (default L.marker)
-          const marker = L.marker([latitude, longitude]).addTo(map);
-          
-          // Add click handler to select waypoint
-          marker.on('click', function() {
-            handleSelectWaypoint(waypointId);
-          });
-          
-          markersRef.current[waypointId] = marker;
-          
-          // Select this waypoint by default
-          setSelectedWaypointId(waypointId);
-          setWaypointData({
-            name: 'My Current Location',
-            lat: latitude.toFixed(6),
-            lng: longitude.toFixed(6),
-            notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}`,
-            image: null
-          });
+          // Create blue live marker and store separately
+          try {
+            if (liveLocationMarkerRef.current) {
+              liveLocationMarkerRef.current.remove();
+              liveLocationMarkerRef.current = null;
+            }
+            const liveMarker = createLiveLocationMarker([latitude, longitude]).addTo(map);
+            liveLocationMarkerRef.current = liveMarker;
+          } catch (e) {
+            console.error('Error creating live location marker:', e);
+          }
+          // Do not modify `waypoints` array here (keeps saved points visible)
+          // Do not auto-select the current location; WaypointDetails will show live coords when open and no selection
 
           // Start watching position for live updates
           watchPositionIdRef.current = navigator.geolocation.watchPosition(
@@ -1898,14 +2114,13 @@ function App() {
                 liveLocationMarkerRef.current = liveMarker;
               }
               
-              // Update marker position if it exists
-              const currentMarker = markersRef.current[waypointId];
-              if (currentMarker) {
-                currentMarker.setLatLng([newLat, newLng]);
+              // Live marker is managed separately; update it here
+              if (liveLocationMarkerRef.current) {
+                liveLocationMarkerRef.current.setLatLng([newLat, newLng]);
               }
               
-              // Update waypoint data if this is the selected waypoint
-              if (selectedWaypointId === waypointId) {
+              // If WaypointDetails is open and there's no selection, update the details to show live coords
+              if (waypointDetailsOpen && !selectedWaypointId) {
                 setWaypointData(prev => ({
                   ...prev,
                   lat: newLat.toFixed(6),
@@ -1923,6 +2138,7 @@ function App() {
             },
             (error) => {
               console.log('Watch position error:', error);
+              setGpsActive(false);
               // Remove live location marker if GPS is lost
               if (liveLocationMarkerRef.current) {
                 liveLocationMarkerRef.current.remove();
@@ -1937,10 +2153,11 @@ function App() {
           );
         },
         (error) => {
-          // If geolocation fails, show GPS warning dialog
+          // If geolocation fails, show GPS warning dialog and notify user
           console.log('Geolocation error:', error);
+          setGpsActive(false);
+          showSnackbar('Unable to access device location. Please allow GPS access and try again.', 'error');
           // Keep map on India center, don't navigate anywhere
-          // The map is already set to India center, so we just show the warning
           setGpsWarningOpen(true);
         },
         {
@@ -2218,6 +2435,7 @@ function App() {
       if (watchPositionIdRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchPositionIdRef.current);
         watchPositionIdRef.current = null;
+        setGpsActive(false);
       }
       // Remove live location marker
       if (liveLocationMarkerRef.current) {
@@ -2313,6 +2531,8 @@ function App() {
 
       // Add click event listener to place marker
       const handleMapClick = (e) => {
+        // When in project (survey) mode, disable creating arbitrary markers
+        if (isProjectMode) return;
         // Don't handle clicks if location selection mode is active (it's handled separately)
         if (locationSelectionActive && selectedWaypointId) {
           return;
@@ -2426,27 +2646,18 @@ function App() {
         map.off('dragend', handleDragEnd);
         mapContainer.style.cursor = '';
       };
-    } else {
+      } else {
       mapContainer.style.cursor = '';
-      // Clear markers when survey is deactivated, but keep current location marker
-      Object.keys(markersRef.current).forEach(id => {
-        if (id !== currentLocationWaypointId) {
-          markersRef.current[id].remove();
-          delete markersRef.current[id];
-        }
-      });
-      // Remove red overlay when survey is deactivated
+      // When survey/deactivated, do not remove saved waypoints — keep them visible.
+      // Only remove the red selection overlay and clear selection if not re-used.
       if (selectedMarkerOverlayRef.current) {
         selectedMarkerOverlayRef.current.remove();
         selectedMarkerOverlayRef.current = null;
       }
-      // Remove waypoints except current location
-      setWaypoints(prev => prev.filter(wp => wp.id === currentLocationWaypointId));
-      // Don't clear selection if it's the current location
-      if (selectedWaypointId !== currentLocationWaypointId) {
-        setSelectedWaypointId(null);
-        updateSelectedMarkerOverlay(null);
-      }
+      setSelectedWaypointId(null);
+      updateSelectedMarkerOverlay(null);
+      // Refresh markers to ensure live marker and saved markers are correct
+      setTimeout(() => refreshMapMarkers(), 10);
     }
   }, [singlePointCaptureActive]);
 
@@ -2507,6 +2718,11 @@ function App() {
 
       // Add click event listener to set location and deactivate
       const handleMapClick = (e) => {
+        // Disable manual placement while in project (survey) mode
+        if (isProjectMode) {
+          setLocationSelectionActive(false);
+          return;
+        }
         const latlng = e.latlng;
         
         // Update the selected waypoint's coordinates to the clicked location
@@ -2581,7 +2797,7 @@ function App() {
 
     const updateCenterCoordinates = () => {
       const center = map.getCenter();
-      setCoordinates({
+      setCursorCoordinates({
         lat: center.lat.toFixed(6),
         lng: center.lng.toFixed(6),
         accuracy: null
@@ -2589,10 +2805,10 @@ function App() {
     };
 
     if (hasCursor) {
-      // Desktop: Update coordinates on mouse move
+      // Desktop: Update cursor coordinates on mouse move
       const handleMouseMove = (e) => {
         const latlng = map.mouseEventToLatLng(e.originalEvent);
-        setCoordinates({
+        setCursorCoordinates({
           lat: latlng.lat.toFixed(6),
           lng: latlng.lng.toFixed(6),
           accuracy: null
@@ -2605,7 +2821,7 @@ function App() {
         map.off('mousemove', handleMouseMove);
       };
     } else {
-      // Touch device: Update coordinates based on map center
+      // Touch device: Update cursor coordinates based on map center
       updateCenterCoordinates();
       
       // Update on map move/zoom (use move event for real-time updates during drag)
@@ -2619,7 +2835,7 @@ function App() {
         map.off('zoomend', updateCenterCoordinates);
       };
     }
-  }, [hasCursor]); // Re-run when hasCursor changes
+  }, [hasCursor, gpsActive]); // Re-run when hasCursor or gpsActive changes
 
   // Update red overlay when selected waypoint changes
   useEffect(() => {
@@ -2742,7 +2958,7 @@ function App() {
         </Box>
         
         {/* Live Coordinates card - always visible */}
-        <LiveCoordinates coordinates={coordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
+        <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
 
         {(singlePointCaptureActive || isProjectMode) && (
           <>
@@ -2753,19 +2969,23 @@ function App() {
               onSelectWaypoint={handleSelectWaypoint}
             />
 
-            {/* Expanded waypoint card - only visible when a point is clicked */}
-            {selectedWaypointId && (
-            <WaypointDetails
+            {/* Waypoint Details - always visible during project mode; otherwise visible when a point is selected */}
+            {(
+              (isProjectMode || selectedWaypointId) && waypointDetailsOpen
+            ) && (
+              <WaypointDetails
                 selectedWaypointId={selectedWaypointId}
                 waypointData={waypointData}
                 setWaypointData={setWaypointData}
                 onClose={() => {
+                  // Close details and clear selection
+                  setWaypointDetailsOpen(false);
                   setSelectedWaypointId(null);
                   setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
                   setLocationSelectionActive(false); // Deactivate location selection when closing
-                  // Remove route when closing waypoint details
+                  updateSelectedMarkerOverlay(null);
                 }}
-                onSave={handleSaveWaypoint}
+                onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
                 locationSelectionActive={locationSelectionActive}
                 onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
                 onDelete={handleDeleteWaypoint}
@@ -2775,6 +2995,18 @@ function App() {
                 onNavigate={handleNavigate}
                 sidebarOpen={sidebarOpen}
                 isProjectMode={isProjectMode}
+                activeProjectId={activeProject?.id}
+                currentLocationId={currentLocationWaypointId}
+                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
+                canSaveDuringProject={(function() {
+                  if (!isProjectMode) return true;
+                  if (!selectedWaypointId) return true; // allow saving current location
+                  const wp = waypoints.find(w => w.id === selectedWaypointId);
+                  if (!wp) return false;
+                  const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
+                  const isCurrent = selectedWaypointId === currentLocationWaypointId;
+                  return !!(isProjectPoint || isCurrent);
+                })()}
                 ref={waypointDetailsRef}
               />
             )}
@@ -2782,12 +3014,13 @@ function App() {
         )}
         
         {/* Desktop waypoint details - fixed position */}
-        {selectedWaypointId && !isMobile && (
+        {(isProjectMode || selectedWaypointId) && waypointDetailsOpen && !isMobile && (
           <WaypointDetails
             selectedWaypointId={selectedWaypointId}
             waypointData={waypointData}
             setWaypointData={setWaypointData}
             onClose={() => {
+              setWaypointDetailsOpen(false);
               setSelectedWaypointId(null);
               setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
               setLocationSelectionActive(false); // Deactivate location selection when closing
@@ -2803,7 +3036,7 @@ function App() {
                     navigationStartMarkerRef.current = null;
                   }
                 }}
-                onSave={handleSaveWaypoint}
+                onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
             locationSelectionActive={locationSelectionActive}
             onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
                 onDelete={handleDeleteWaypoint}
@@ -3001,12 +3234,60 @@ function App() {
         }}>
           <Typography sx={{ mr: 1, fontWeight: 600 }}>{activeProject ? activeProject.name : 'Project'}</Typography>
           <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary }}>{formatTime(timerSeconds)}</Typography>
+          {/* Add new unsaved point (opens details with live coords) */}
+          <IconButton aria-label="add-current" title="Add point (live coords)" onClick={() => {
+            const map = mapRef.current;
+            // Use device GPS coordinates for the seeded point
+            if (!coordinates || !coordinates.lat || !coordinates.lng) {
+              showSnackbar('Unable to determine current live location (GPS).', 'error');
+              return;
+            }
+            const waypointId = `waypoint-${Date.now()}`;
+            const latNum = parseFloat(coordinates.lat);
+            const lngNum = parseFloat(coordinates.lng);
+
+            const newWp = {
+              id: waypointId,
+              lat: latNum,
+              lng: lngNum,
+              name: `Point ${ (waypoints.filter(w=> w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1 }`,
+              notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
+              image: null,
+              project_id: activeProject?.id || null,
+              project_name: activeProject?.name || null,
+            };
+
+            // Add to waypoints and map as a fixed marker at current GPS location
+            setWaypoints(prev => [...prev, newWp]);
+            if (map) {
+              const marker = L.marker([latNum, lngNum]).addTo(map);
+              marker.on('click', function() { handleSelectWaypoint(waypointId); });
+              markersRef.current[waypointId] = marker;
+            }
+
+            // Open details but do NOT select the fixed marker — details will show live GPS coords
+            setSelectedWaypointId(null);
+            setWaypointDetailsOpen(true);
+            setWaypointData(prev => ({
+              ...prev,
+              name: newWp.name,
+              notes: newWp.notes
+            }));
+          }}>
+            <AddLocation />
+          </IconButton>
           <IconButton aria-label="start" title="Start" onClick={handleStartRecording} disabled={projectRecording} sx={{ bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white' }}>
             <PlayArrowOutlinedIcon />
           </IconButton>
           <IconButton aria-label="pause" title="Pause" onClick={handlePauseRecording} disabled={!projectRecording}>
             <PauseOutlinedIcon />
           </IconButton>
+          {/* When paused, show an animated close button to exit survey mode */}
+          {!projectRecording && (
+            <IconButton aria-label="exit" title="Exit survey" onClick={exitSurveyMode} sx={{ ml: 1, animation: 'pulse 1.2s infinite' }}>
+              <CloseIcon />
+            </IconButton>
+          )}
           <IconButton aria-label="pin" title="Pin point" onClick={handlePinPointToProject}>
             <LocationOnOutlinedIcon />
           </IconButton>

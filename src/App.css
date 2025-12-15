@@ -77,3 +77,10 @@
   align-items: flex-end;
 }
 
+/* Pulse animation used for paused-exit button */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+

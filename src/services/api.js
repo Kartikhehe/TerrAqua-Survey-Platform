@@ -330,5 +330,19 @@ export const projectsAPI = {
     }
     return response.json();
   }
+  ,
+  heartbeat: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}/heartbeat`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to heartbeat project');
+    }
+    return response.json();
+  }
 };
 

@@ -6,6 +6,10 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
+  const truncate = (s, n = 14) => {
+    if (!s) return '';
+    return s.length > n ? `${s.slice(0, n - 3)}...` : s;
+  };
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [dropdownAnchor, setDropdownAnchor] = useState(null);
@@ -62,6 +66,11 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
     const selectedWaypoint = waypoints.find(wp => wp.id === selectedWaypointId);
     const selectedIndex = waypoints.findIndex(wp => wp.id === selectedWaypointId);
 
+    const truncate = (s, n = 14) => {
+      if (!s) return '';
+      return s.length > n ? `${s.slice(0, n - 3)}...` : s;
+    };
+
     return (
       <Box>
         <Paper
@@ -96,7 +105,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
               flex: 1,
             }}
           >
-            {selectedWaypoint ? `Point ${selectedIndex + 1}` : 'Select Point'}
+            {selectedWaypoint ? truncate(selectedWaypoint.name || `Point ${selectedIndex + 1}`) : 'Select Point'}
           </Typography>
           <ExpandMore sx={{ fontSize: '1.25rem', color: theme.palette.text.secondary }} />
         </Paper>
@@ -139,7 +148,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
                 }}
               >
                 <ListItemText
-                  primary={`Point ${index + 1}`}
+                  primary={waypoint.name || `Point ${index + 1}`}
                   primaryTypographyProps={{
                     fontSize: '0.85rem',
                     fontWeight: isSelected ? 600 : 400,
@@ -230,14 +239,14 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
                 },
               }}
             >
-              <Typography
+                <Typography
                 sx={{
                   fontSize: { sm: '0.74375rem', md: '0.7875rem' },
                   fontWeight: isSelected ? 600 : 400,
                   color: theme.palette.text.primary,
                 }}
               >
-                {`Point ${index + 1}`}
+                {truncate(waypoint.name || `Point ${index + 1}`)}
               </Typography>
             </Box>
           );
