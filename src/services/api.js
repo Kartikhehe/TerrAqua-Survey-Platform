@@ -205,7 +205,7 @@ export const authAPI = {
       credentials: 'include',
       body: JSON.stringify({ email, password, full_name: fullName }),
     });
-    
+
     // If signup successful, store token from response
     if (response.ok) {
       const data = await response.json();
@@ -219,7 +219,7 @@ export const authAPI = {
         status: response.status,
       };
     }
-    
+
     return response;
   },
 
@@ -232,7 +232,7 @@ export const authAPI = {
       credentials: 'include',
       body: JSON.stringify({ email, password }),
     });
-    
+
     // If login successful, store token from response
     if (response.ok) {
       const data = await response.json();
@@ -246,7 +246,7 @@ export const authAPI = {
         status: response.status,
       };
     }
-    
+
     return response;
   },
 
@@ -341,6 +341,20 @@ export const projectsAPI = {
       if (response.status === 401) throw new Error('Authentication required');
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Failed to heartbeat project');
+    }
+    return response.json();
+  },
+
+  delete: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to delete project');
     }
     return response.json();
   }

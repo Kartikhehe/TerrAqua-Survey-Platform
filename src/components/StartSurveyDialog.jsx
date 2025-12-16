@@ -31,8 +31,9 @@ function StartSurveyDialog({ open, onClose, onStartNew, onContinue, onShowSnackb
         setProjectsLoading(false);
       }
     };
-    if (mode === 'resume' && open) loadProjects();
-  }, [mode, open]);
+    // Load projects whenever dialog opens (needed for duplicate name checking in both modes)
+    if (open) loadProjects();
+  }, [open]);
 
   // Filter and Sort Projects
   const processedProjects = React.useMemo(() => {
