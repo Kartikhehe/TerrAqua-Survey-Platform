@@ -32,7 +32,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
   const userName = isAuthenticated ? (user?.full_name || 'User') : 'Guest User';
   const userFirstName = userName && userName.split(' ')[0];
   const userEmail = isAuthenticated ? (user?.email || '') : 'Not Logged in';
-  
+
   // Generate avatar initials from full name
   const getAvatarInitials = (name) => {
     if (!name) return 'U';
@@ -79,8 +79,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
       sx={(theme) => ({
         backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
         color: theme.palette.text.primary,
-        boxShadow: theme.palette.mode === 'dark' 
-          ? '0 2px 8px rgba(0,0,0,0.3)' 
+        boxShadow: theme.palette.mode === 'dark'
+          ? '0 2px 8px rgba(0,0,0,0.3)'
           : '0 2px 8px rgba(0,0,0,0.08)',
         borderRadius: '0 0 0 0',
         zIndex: theme.zIndex.drawer + 1,
@@ -88,15 +88,15 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
         marginLeft: 0,
       })}
     >
-      <Toolbar sx={{ 
-        px: { xs: '0.875rem', sm: '1.3125rem', md: '1.75rem' }, 
-        minHeight: { xs: '3.0625rem', sm: '3.5rem' } 
+      <Toolbar sx={{
+        px: { xs: '0.875rem', sm: '1.3125rem', md: '1.75rem' },
+        minHeight: { xs: '3.5rem', sm: '3.5rem' }
       }}>
-        <NearMeOutlinedIcon sx={{ 
-          fontSize: { xs: '1.3125rem', sm: '1.53125rem', md: '1.75rem' }, 
-          color: '#4CAF50', 
-          mr: { xs: 0.875, sm: 1.3125 }, 
-          transform: 'scaleX(-1)' 
+        <NearMeOutlinedIcon sx={{
+          fontSize: { xs: '1.3125rem', sm: '1.53125rem', md: '1.75rem' },
+          color: '#4CAF50',
+          mr: { xs: 0.875, sm: 1.3125 },
+          transform: 'scaleX(-1)'
         }} />
         <Typography
           variant="h5"
@@ -114,12 +114,12 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
         <IconButton
           onClick={handleClick}
           size="small"
-          sx={{ 
+          sx={{
             ml: { xs: 0.875, sm: 1.75 },
             backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
             borderRadius: '50%',
-            width: { xs: '1.75rem', sm: '2.1875rem' },
-            height: { xs: '1.75rem', sm: '2.1875rem' },
+            width: { xs: '2.5rem', sm: '2.1875rem' },
+            height: { xs: '2.5rem', sm: '2.1875rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
@@ -128,9 +128,9 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           aria-haspopup="true"
           aria-expanded={open ? 'true' : undefined}
         >
-          <Avatar 
+          <Avatar
             src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
-            sx={{ 
+            sx={{
               width: 32,
               height: 32,
               bgcolor: theme.palette.primary.main,
@@ -186,9 +186,9 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
         >
           <MenuItem onClick={handleClose}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-              <Avatar 
+              <Avatar
                 src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
-                sx={{ 
+                sx={{
                   width: 32,
                   height: 32,
                   bgcolor: theme.palette.primary.main,
@@ -199,8 +199,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 {getAvatarInitials(userName)}
               </Avatar>
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600, 
+                <Typography variant="body2" sx={{
+                  fontWeight: 600,
                   color: 'text.primary',
                   fontSize: { xs: '0.8rem', sm: '0.8rem' },
                   overflow: 'hidden',
@@ -210,8 +210,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 }}>
                   {userName}
                 </Typography>
-                <Typography variant="caption" sx={{ 
-                  color: 'text.secondary', 
+                <Typography variant="caption" sx={{
+                  color: 'text.secondary',
                   fontSize: { xs: '0.7rem', sm: '0.7rem' },
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -232,9 +232,9 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
                 ) : (
                   <LightMode sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
                 )}
-                <Typography sx={{ 
-                  color: 'text.primary', 
-                  fontSize: { xs: '0.85rem', sm: '0.85rem' } 
+                <Typography sx={{
+                  color: 'text.primary',
+                  fontSize: { xs: '0.85rem', sm: '0.85rem' }
                 }}>
                   {isDark ? 'Dark Mode' : 'Light Mode'}
                 </Typography>
@@ -254,7 +254,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
             </Box>
           </MenuItem>
           <Divider />
-          <MenuItem 
+          <MenuItem
             onClick={() => {
               if (onSetDefaultLocation) {
                 onSetDefaultLocation();
@@ -265,16 +265,16 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
               <LocationOnIcon sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
-              <Typography sx={{ 
-                color: 'text.primary', 
-                fontSize: { xs: '0.85rem', sm: '0.85rem' } 
+              <Typography sx={{
+                color: 'text.primary',
+                fontSize: { xs: '0.85rem', sm: '0.85rem' }
               }}>
                 Set Default Location
               </Typography>
             </Box>
           </MenuItem>
           <Divider />
-          <MenuItem 
+          <MenuItem
             onClick={() => {
               if (onToggleSatelliteHybrid) {
                 onToggleSatelliteHybrid();
@@ -285,9 +285,9 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
               <SatelliteAltIcon sx={{ fontSize: { xs: '0.9625rem', sm: '1.09375rem' }, color: 'text.secondary' }} />
-              <Typography sx={{ 
-                color: 'text.primary', 
-                fontSize: { xs: '0.85rem', sm: '0.85rem' } 
+              <Typography sx={{
+                color: 'text.primary',
+                fontSize: { xs: '0.85rem', sm: '0.85rem' }
               }}>
                 {satelliteHybridMode ? 'Switch to Map View' : 'Switch to Satellite Hybrid'}
               </Typography>
@@ -295,17 +295,17 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           </MenuItem>
           <Divider />
           {isAuthenticated ? (
-            <MenuItem 
-              onClick={handleLogout} 
+            <MenuItem
+              onClick={handleLogout}
               sx={{ color: '#d32f2f', py: { xs: 0.85, sm: 1.1 } }}
             >
               Logout
             </MenuItem>
           ) : (
             <MenuItem onClick={handleLogin} sx={{ py: { xs: 0.85, sm: 1.1 } }}>
-              <Typography sx={{ 
-                color: 'text.primary', 
-                fontSize: { xs: '0.85rem', sm: '0.85rem' } 
+              <Typography sx={{
+                color: 'text.primary',
+                fontSize: { xs: '0.85rem', sm: '0.85rem' }
               }}>
                 Login
               </Typography>

@@ -2474,7 +2474,8 @@ function App() {
     const MapControlsContainer = L.Control.extend({
       onAdd: function (map) {
         const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control map-controls-container');
-        container.style.marginTop = '80px'; // Just below navbar (64px) + some spacing
+        const isSmallScreen = window.innerWidth < 600;
+        container.style.marginTop = isSmallScreen ? '60px' : '72px'; // Just below navbar (56px mobile / 64px desktop) + spacing
         container.style.marginRight = '10px';
         container.style.borderRadius = '12px';
         container.style.overflow = 'hidden';
@@ -2489,8 +2490,8 @@ function App() {
         const searchButton = L.DomUtil.create('a', 'leaflet-control-search', container);
         searchButton.href = '#';
         searchButton.title = 'Search Location';
-        const buttonSize = window.innerWidth < 600 ? '2rem' : '2.125rem';
-        const iconSize = window.innerWidth < 600 ? '1rem' : '1.125rem';
+        const buttonSize = isSmallScreen ? '2.5rem' : '2.125rem';
+        const iconSize = isSmallScreen ? '1.25rem' : '1.125rem';
         searchButton.style.cssText = `
           width: ${buttonSize};
           height: ${buttonSize};
@@ -2506,7 +2507,7 @@ function App() {
 
         // Add Search icon as SVG
         const searchIcon = `
-          <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${window.innerWidth < 600 ? '0.375rem' : '0.5rem'};">
+          <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${isSmallScreen ? '0.75rem' : '0.5rem'};">
             <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="#4CAF50"/>
           </svg>
         `;
@@ -2559,9 +2560,9 @@ function App() {
         `;
 
         // Add Material-UI MyLocation icon as SVG
-        const locateIconSize = window.innerWidth < 600 ? '0.984375rem' : '1.09375rem';
+        const locateIconSize = isSmallScreen ? '1.5rem' : '1.09375rem';
         const locateIcon = `
-          <svg width="${locateIconSize}" height="${locateIconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${window.innerWidth < 600 ? '0.375rem' : '0.4375rem'};">
+          <svg width="${locateIconSize}" height="${locateIconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${isSmallScreen ? '0.75rem' : '0.4375rem'};">
             <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" fill="#4CAF50"/>
           </svg>
         `;
@@ -3245,8 +3246,10 @@ function App() {
             onClick={handleSidebarToggle}
             sx={{
               position: 'fixed',
-              top: '3.5rem',
+              top: '4.25rem',
               left: '0.75rem',
+              width: '3.5rem',
+              height: '3.5rem',
               zIndex: theme.zIndex.drawer + 15,
               backgroundColor: theme.palette.background.paper,
               border: `1px solid ${theme.palette.divider}`,
@@ -3255,9 +3258,12 @@ function App() {
                 : '0 2px 8px rgba(0,0,0,0.15)',
               '&:hover': {
                 backgroundColor: theme.palette.action.hover,
-              }
+              },
+              '& .MuiSvgIcon-root': {
+                fontSize: '1.75rem',
+              },
             }}
-            size="small"
+            size="medium"
           >
             <MenuIcon />
           </IconButton>
@@ -3269,7 +3275,7 @@ function App() {
             p: 0,
             height: '100vh',
             overflow: 'hidden',
-            marginTop: { xs: '3.0625rem', sm: '3.5rem' },
+            marginTop: { xs: '3.5rem', sm: '3.5rem' },
             width: '100%',
             position: 'relative',
           }}
