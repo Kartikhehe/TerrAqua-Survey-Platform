@@ -6,18 +6,22 @@ import 'leaflet-rotate/dist/leaflet-rotate.js';
 import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
-import { 
-  Box, 
-  useTheme, 
-  useMediaQuery, 
-  Paper, 
-  Typography, 
-  TextField, 
-  Button, 
+import {
+  Box,
+  useTheme,
+  useMediaQuery,
+  Paper,
+  Typography,
+  TextField,
+  Button,
   Collapse,
   IconButton,
   ThemeProvider,
-  CssBaseline
+  CssBaseline,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { AddLocation, MyLocation, Menu as MenuIcon, Close as CloseIcon } from '@mui/icons-material';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
@@ -102,6 +106,7 @@ function App() {
   const [projectBarWidth, setProjectBarWidth] = useState(null);
   const [autoPausedPromptShown, setAutoPausedPromptShown] = useState(false);
   const [isProjectMode, setIsProjectMode] = useState(false);
+  const [endProjectDialogOpen, setEndProjectDialogOpen] = useState(false); // Confirmation dialog for ending project
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
   const watchPositionIdRef = useRef(null); // Reference to watchPosition ID for cleanup
   const routePolylineRef = useRef(null); // Reference to route polyline on map
@@ -153,13 +158,13 @@ function App() {
   const clearAllMarkers = () => {
     try {
       Object.keys(markersRef.current).forEach(id => {
-        try { markersRef.current[id].remove(); } catch (e) {}
+        try { markersRef.current[id].remove(); } catch (e) { }
         delete markersRef.current[id];
       });
     } catch (e) { console.error('Error clearing markers:', e); }
     // clear selected overlay too
     if (selectedMarkerOverlayRef.current) {
-      try { selectedMarkerOverlayRef.current.remove(); } catch (e) {}
+      try { selectedMarkerOverlayRef.current.remove(); } catch (e) { }
       selectedMarkerOverlayRef.current = null;
     }
   };
@@ -219,7 +224,7 @@ function App() {
     // ensure selected overlay is updated
     updateSelectedMarkerOverlay(selectedWaypointId);
   };
-  
+
   // Detect if device has cursor (mouse) or is touch-only
   // Check for touch support - if device supports touch, assume no cursor
   const [hasCursor, setHasCursor] = useState(() => {
@@ -246,7 +251,7 @@ function App() {
     const newMode = !darkMode;
     setDarkMode(newMode);
     localStorage.setItem('themeMode', newMode ? 'dark' : 'light');
-    
+
     // Reload the page to apply theme changes
     window.location.reload();
   };
@@ -256,7 +261,7 @@ function App() {
   };
 
   // Start Survey handlers
-  const handleStartSurveyNew = (project) => {
+  const handleStartSurveyNew = async (project) => {
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
       setStartSurveyDialogOpen(false);
@@ -268,19 +273,46 @@ function App() {
     removePinCapturedPoints();
     setWaypointDetailsOpen(true);
     setSinglePointCaptureActive(true);
-    setProjectRecording(true); // still start recording automatically for new project
+    setProjectRecording(true);
     setStartSurveyDialogOpen(false);
     showSnackbar(`Started project: ${project.name}`, 'success');
-    // Persist state: set project status to playing and auto-save Start Point
-    (async () => {
-      try {
-        await projectsAPI.setStatus(project.id, 'playing');
-        // Auto-save Start Point for newly created project
-        await createProjectWaypoint('Start Point');
-      } catch (err) {
-        console.error('Error setting project to playing or saving Start Point:', err);
+
+    // Persist state and save Start Point
+    try {
+      // Set project status to playing
+      await projectsAPI.setStatus(project.id, 'playing');
+
+      console.log('Waiting for GPS coordinates...', coordinates);
+
+      // Wait for GPS coordinates to be available
+      let attempts = 0;
+      const maxAttempts = 15; // Increased to 3 seconds
+      while ((!coordinates?.lat || !coordinates?.lng) && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
+        console.log(`Attempt ${attempts}: coordinates =`, coordinates);
       }
-    })();
+
+      console.log('Final coordinates check:', coordinates);
+
+      // Auto-save Start Point with current GPS location
+      if (coordinates?.lat && coordinates?.lng) {
+        console.log('Saving Start Point with coordinates:', coordinates);
+        const result = await createProjectWaypoint('Start Point');
+        if (result) {
+          console.log('Start Point saved successfully');
+        } else {
+          console.log('Start Point save returned null');
+        }
+      } else {
+        console.log('GPS not available after waiting');
+        showSnackbar('GPS not available, Start Point not saved', 'warning');
+      }
+    } catch (err) {
+      console.error('Error setting project to playing or saving Start Point:', err);
+      showSnackbar('Error saving Start Point: ' + err.message, 'error');
+    }
+
     // Clear selection so details default to current location
     setSelectedWaypointId(null);
     // Ensure markers are filtered for project mode
@@ -304,7 +336,7 @@ function App() {
     setProjectRecording(true);
     setStartSurveyDialogOpen(false);
     showSnackbar(`Loaded project: ${project.name}`, 'info');
-    // Load project waypoints onto map (no automatic Start Point)
+    // Load project waypoints onto map (no Start Point for resumed projects)
     (async () => {
       try {
         const detail = await projectsAPI.getById(project.id);
@@ -329,13 +361,28 @@ function App() {
     setProjectBarExpanded(isMobile ? false : true);
   };
 
-  const handleStopProject = async () => {
-    // Save end point for project
-    try {
-      await createProjectWaypoint('End Point');
-    } catch (err) {
-      console.error('Error saving end point:', err);
+  const handleStopProject = () => {
+    // Show themed confirmation dialog
+    setEndProjectDialogOpen(true);
+  };
+
+  const confirmEndProject = async () => {
+    setEndProjectDialogOpen(false);
+
+    // Check if End Point already exists
+    const hasEndPoint = waypoints.some(
+      wp => wp.project_id === activeProject?.id && wp.name === 'End Point'
+    );
+
+    // Save end point for project only if it doesn't exist
+    if (!hasEndPoint) {
+      try {
+        await createProjectWaypoint('End Point');
+      } catch (err) {
+        console.error('Error saving end point:', err);
+      }
     }
+
     // Update backend status
     try {
       if (activeProject && activeProject.id) {
@@ -387,7 +434,7 @@ function App() {
     showSnackbar('Recording started', 'info');
     // immediate heartbeat to ensure server touches last_activity and checkpoints
     if (activeProject && activeProject.id) {
-      projectsAPI.heartbeat(activeProject.id).catch(() => {});
+      projectsAPI.heartbeat(activeProject.id).catch(() => { });
     }
   };
 
@@ -404,7 +451,7 @@ function App() {
           markersRef.current[id].remove();
           delete markersRef.current[id];
         }
-      } catch (e) {}
+      } catch (e) { }
     });
 
     // Remove from DB id map
@@ -544,7 +591,7 @@ function App() {
         }).filter(Boolean);
         const maxNum = nums.length ? Math.max(...nums) : 0;
         nextPointName = `Point ${maxNum + 1}`;
-      } catch (err) {}
+      } catch (err) { }
 
       try {
         const saved = await waypointsAPI.create({
@@ -613,7 +660,7 @@ function App() {
       setWaypoints(prev => [...prev, waypoint]);
       // create marker
       const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-      marker.on('click', function() { handleSelectWaypoint(waypointId); });
+      marker.on('click', function () { handleSelectWaypoint(waypointId); });
       markersRef.current[waypointId] = marker;
       setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
       showSnackbar('Project point added', 'success');
@@ -643,17 +690,28 @@ function App() {
         lat = center.lat;
         lng = center.lng;
       }
-    } catch (e) {}
+    } catch (e) { }
     if (!lat || !lng) {
       showSnackbar('Unable to determine current location', 'error');
       return null;
     }
 
+    // For regular points (not Start/End Point), check for duplicate names
+    let finalName = name;
+    if (name !== 'Start Point' && name !== 'End Point') {
+      const projectWaypoints = waypoints.filter(wp => wp.project_id === activeProject.id);
+      let counter = 2;
+      while (projectWaypoints.some(wp => wp.name === finalName)) {
+        finalName = `${name} ${counter}`;
+        counter++;
+      }
+    }
+
     const newWp = {
-      name: name,
+      name: finalName,
       lat: parseFloat(lat).toFixed(6),
       lng: parseFloat(lng).toFixed(6),
-      notes: `${name} for project ${activeProject.name}`,
+      notes: `${finalName} for project ${activeProject.name}`,
       image: null,
       project_id: activeProject.id,
       project_name: activeProject.name,
@@ -668,15 +726,15 @@ function App() {
       // create marker
       if (map) {
         const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-        marker.on('click', function() { handleSelectWaypoint(waypointId); });
+        marker.on('click', function () { handleSelectWaypoint(waypointId); });
         markersRef.current[waypointId] = marker;
       }
       setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
-      showSnackbar(`${name} saved`, 'success');
+      showSnackbar(`${finalName} saved`, 'success');
       return saved;
     } catch (err) {
-      console.error(`Error adding ${name} to project:`, err);
-      showSnackbar(err.message || `Failed to add ${name}`, 'error');
+      console.error(`Error adding ${finalName} to project:`, err);
+      showSnackbar(err.message || `Failed to add ${finalName}`, 'error');
       return null;
     }
   };
@@ -684,13 +742,20 @@ function App() {
   // Timer helpers
   const startTimerFromProject = (project) => {
     if (!project) return;
+
+    // Initialize to 0 to prevent showing old timer value
+    setTimerSeconds(0);
+
     // Compute base seconds
     let base = project.elapsed_seconds || 0;
     if (project.started_at && project.status === 'playing') {
       const startedAt = new Date(project.started_at).getTime();
       base += Math.floor((Date.now() - startedAt) / 1000);
     }
-    setTimerSeconds(base);
+
+    // Set the actual timer value after a brief moment
+    setTimeout(() => setTimerSeconds(base), 50);
+
     // Start timer interval
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
@@ -713,7 +778,7 @@ function App() {
     const h = Math.floor(secs / 3600);
     const m = Math.floor((secs % 3600) / 60);
     const s = secs % 60;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   // When projectRecording toggles, start/stop timer accordingly
@@ -738,9 +803,15 @@ function App() {
       heartbeatRef.current = setInterval(async () => {
         try {
           const updated = await projectsAPI.heartbeat(activeProject.id);
-          if (updated && typeof updated.elapsed_seconds === 'number') {
-            // update timer base to persisted elapsed and continue counting
-            setTimerSeconds(updated.elapsed_seconds || 0);
+          if (updated) {
+            let base = updated.elapsed_seconds || 0;
+            if (updated.started_at && updated.status === 'playing') {
+              const startedAt = new Date(updated.started_at).getTime();
+              // Calculate additional time since start
+              base += Math.floor((Date.now() - startedAt) / 1000);
+            }
+            // update timer to current correct total
+            setTimerSeconds(base);
           }
         } catch (e) {
           console.error('Heartbeat failed', e);
@@ -798,7 +869,7 @@ function App() {
         fileInputRef.current.click();
       }
     } else {
-    console.log(`${item} clicked`);
+      console.log(`${item} clicked`);
     }
     // Close sidebar on mobile after any action
     if (isMobile) {
@@ -813,9 +884,9 @@ function App() {
 
     // Validate file type
     const fileName = file.name.toLowerCase();
-    const isValidFile = fileName.endsWith('.geojson') || 
-                        fileName.endsWith('.json') || 
-                        fileName.endsWith('.kml');
+    const isValidFile = fileName.endsWith('.geojson') ||
+      fileName.endsWith('.json') ||
+      fileName.endsWith('.kml');
 
     if (!isValidFile) {
       showSnackbar('Invalid file type. Please select KML or GeoJSON files', 'error');
@@ -837,12 +908,12 @@ function App() {
 
   const handleSaveWaypoint = async () => {
     if (!selectedWaypointId) return;
-    
+
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
       return;
     }
-    
+
     try {
       // Validate image if a file object was provided in waypointData.image (skip if it's already a URL)
       const imageCandidate = waypointData.image;
@@ -895,7 +966,7 @@ function App() {
       };
 
       const dbId = dbWaypointIds[selectedWaypointId];
-      
+
       let savedWaypoint;
       if (dbId) {
         // Update existing waypoint
@@ -909,13 +980,13 @@ function App() {
       }
 
       // Update local state
-      const updatedWaypoints = waypoints.map((wp, index) => 
-        wp.id === selectedWaypointId 
+      const updatedWaypoints = waypoints.map((wp, index) =>
+        wp.id === selectedWaypointId
           ? { ...wp, ...waypointData, lat: parseFloat(waypointData.lat), lng: parseFloat(waypointData.lng), name: finalName, project_id: waypointPayload.project_id || null, project_name: waypointPayload.project_name || null }
           : { ...wp, name: `Point ${index + 1}` }
       );
       setWaypoints(updatedWaypoints);
-      
+
       // After saving current location as a project point, advance default name for the next unsaved save
       if (isProjectMode && selectedWaypointId === currentLocationWaypointId) {
         const projectCountNow = updatedWaypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject?.id)).length;
@@ -937,7 +1008,7 @@ function App() {
           console.error('Error reloading default location:', error);
         }
       }
-      
+
     } catch (error) {
       console.error('Error saving waypoint:', error);
       if (error.message === 'Authentication required') {
@@ -961,22 +1032,22 @@ function App() {
 
   const handleDeleteWaypoint = async () => {
     if (!selectedWaypointId) return;
-    
+
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
       return;
     }
-    
+
     // Prevent deletion of "Default Location"
     const waypoint = waypoints.find(wp => wp.id === selectedWaypointId);
     if (waypoint && waypoint.name && waypoint.name.trim().toLowerCase() === 'default location') {
       showSnackbar('Cannot delete "Default Location"', 'error');
       return;
     }
-    
+
     try {
       const dbId = dbWaypointIds[selectedWaypointId];
-      
+
       // Delete from database if it exists
       if (dbId) {
         await waypointsAPI.delete(dbId);
@@ -989,13 +1060,13 @@ function App() {
       } else {
         showSnackbar('Waypoint removed!', 'success');
       }
-      
+
       // Remove marker from map
       if (markersRef.current[selectedWaypointId]) {
         markersRef.current[selectedWaypointId].remove();
         delete markersRef.current[selectedWaypointId];
       }
-      
+
       // Remove from waypoints array
       const updatedWaypoints = waypoints.filter(wp => wp.id !== selectedWaypointId);
       // Rename remaining waypoints sequentially
@@ -1004,7 +1075,7 @@ function App() {
         name: `Point ${index + 1}`
       }));
       setWaypoints(renamedWaypoints);
-      
+
       // Clear selection
       setSelectedWaypointId(null);
       setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
@@ -1024,7 +1095,7 @@ function App() {
     // Responsive marker sizes
     const isMobile = window.innerWidth < 600;
     const radius = isMobile ? 8 : 10;
-    
+
     const marker = L.circleMarker(latlng, {
       radius: radius,
       fillColor: '#f44336', // Red for new survey points
@@ -1035,9 +1106,9 @@ function App() {
       interactive: false, // Make it non-interactive so clicks pass through to the marker below
       bubblingMouseEvents: false // Prevent event bubbling
     });
-    
+
     // Set pointer-events to none on the element to ensure clicks pass through
-    marker.on('add', function() {
+    marker.on('add', function () {
       const element = this.getElement();
       if (element) {
         element.style.zIndex = '1000';
@@ -1059,7 +1130,7 @@ function App() {
         });
       }
     });
-    
+
     return marker;
   };
 
@@ -1068,7 +1139,7 @@ function App() {
     // Responsive marker sizes
     const isMobile = window.innerWidth < 600;
     const radius = isMobile ? 8 : 10;
-    
+
     const marker = L.circleMarker(latlng, {
       radius: radius,
       fillColor: '#2196F3', // Blue for live location
@@ -1079,9 +1150,9 @@ function App() {
       interactive: false, // Make it non-interactive
       bubblingMouseEvents: false // Prevent event bubbling
     });
-    
+
     // Set pointer-events to none on the element
-    marker.on('add', function() {
+    marker.on('add', function () {
       const element = this.getElement();
       if (element) {
         element.style.zIndex = '999';
@@ -1103,7 +1174,7 @@ function App() {
         });
       }
     });
-    
+
     return marker;
   };
 
@@ -1138,32 +1209,32 @@ function App() {
     try {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(text, 'text/xml');
-      
+
       // Check for parsing errors
       const parserError = xmlDoc.querySelector('parsererror');
       if (parserError) {
         throw new Error('Invalid KML file format');
       }
-      
+
       const placemarks = xmlDoc.querySelectorAll('Placemark');
       const waypoints = [];
-      
+
       placemarks.forEach(placemark => {
         const nameElement = placemark.querySelector('name');
         const descriptionElement = placemark.querySelector('description');
         const pointElement = placemark.querySelector('Point');
-        
+
         if (pointElement) {
           const coordinatesElement = pointElement.querySelector('coordinates');
           if (coordinatesElement) {
             const coords = coordinatesElement.textContent.trim().split(',');
             const lng = parseFloat(coords[0]);
             const lat = parseFloat(coords[1]);
-            
+
             if (!isNaN(lat) && !isNaN(lng)) {
               const name = nameElement ? nameElement.textContent.trim() : 'Imported Point';
               const notes = descriptionElement ? descriptionElement.textContent.trim() : '';
-              
+
               waypoints.push({
                 lat,
                 lng,
@@ -1175,7 +1246,7 @@ function App() {
           }
         }
       });
-      
+
       return waypoints;
     } catch (error) {
       console.error('Error parsing KML:', error);
@@ -1188,7 +1259,7 @@ function App() {
     try {
       const text = await file.text();
       let waypoints = [];
-      
+
       if (file.name.endsWith('.geojson') || file.name.endsWith('.json')) {
         waypoints = parseGeoJSON(text);
       } else if (file.name.endsWith('.kml')) {
@@ -1196,30 +1267,30 @@ function App() {
       } else {
         throw new Error('Unsupported file format. Please use GeoJSON or KML files.');
       }
-      
+
       if (waypoints.length === 0) {
         showSnackbar('No valid waypoints found in the file', 'warning');
         return;
       }
-      
+
       // Activate survey mode if not already active
       if (!singlePointCaptureActive) {
         setSinglePointCaptureActive(true);
       }
-      
+
       // Add waypoints to the map
       const map = mapRef.current;
       if (!map) {
         showSnackbar('Map not initialized', 'error');
         return;
       }
-      
+
       const newWaypoints = [];
       const newMarkers = {};
-      
+
       waypoints.forEach((wp, index) => {
         const waypointId = `imported-${Date.now()}-${index}`;
-        
+
         // Create waypoint object
         const waypoint = {
           id: waypointId,
@@ -1229,30 +1300,30 @@ function App() {
           notes: wp.notes || '',
           image: wp.image || null
         };
-        
+
         newWaypoints.push(waypoint);
-        
+
         // Create marker
         const marker = L.marker([wp.lat, wp.lng]).addTo(map);
-        
+
         // Ensure marker can receive clicks
-        marker.on('add', function() {
+        marker.on('add', function () {
           const element = this.getElement();
           if (element) {
             element.style.zIndex = '999';
             element.style.pointerEvents = 'auto';
           }
         });
-        
+
         // Add click handler
-        marker.on('click', function(e) {
+        marker.on('click', function (e) {
           e.originalEvent.stopPropagation();
           handleSelectWaypoint(waypointId);
         });
-        
+
         newMarkers[waypointId] = marker;
       });
-      
+
       // Update waypoints array with sequential naming
       setWaypoints(prev => {
         const allWaypoints = [...prev, ...newWaypoints];
@@ -1267,10 +1338,10 @@ function App() {
           };
         });
       });
-      
+
       // Add markers to markersRef
       Object.assign(markersRef.current, newMarkers);
-      
+
       // Select the first imported waypoint and center map
       if (newWaypoints.length > 0) {
         const firstWaypointId = newWaypoints[0].id;
@@ -1285,7 +1356,7 @@ function App() {
           }
         }, 100);
       }
-      
+
       showSnackbar(`Imported ${waypoints.length} waypoint${waypoints.length !== 1 ? 's' : ''} from ${file.name}`, 'success');
     } catch (error) {
       console.error('Error importing file:', error);
@@ -1296,13 +1367,13 @@ function App() {
   // Helper function to update selected marker overlay
   const updateSelectedMarkerOverlay = (waypointId) => {
     if (!mapRef.current) return;
-    
+
     // Remove previous red circleMarker overlay if it exists
     if (selectedMarkerOverlayRef.current) {
       selectedMarkerOverlayRef.current.remove();
       selectedMarkerOverlayRef.current = null;
     }
-    
+
     // If a waypoint is selected, add red circleMarker overlay on top of its default marker
     if (waypointId) {
       // Use setTimeout to ensure state is updated
@@ -1316,7 +1387,7 @@ function App() {
           if (isSurveyWaypoint) {
             const redOverlay = createSurveyMarker(latlng).addTo(mapRef.current);
             selectedMarkerOverlayRef.current = redOverlay;
-            
+
             // Ensure the underlying marker can still receive clicks
             const markerElement = marker.getElement();
             if (markerElement) {
@@ -1360,7 +1431,7 @@ function App() {
       if (marker && map) {
         map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Save current live coordinates as the next project point
@@ -1387,7 +1458,7 @@ function App() {
       }).filter(Boolean);
       const maxNum = nums.length ? Math.max(...nums) : 0;
       nextPointName = `Point ${maxNum + 1}`;
-    } catch (err) {}
+    } catch (err) { }
 
     try {
       const saved = await waypointsAPI.create({
@@ -1411,7 +1482,7 @@ function App() {
       setTimeout(() => refreshMapMarkers(), 10);
       showSnackbar('Current location saved to project', 'success');
       // heartbeat to update last_activity on server
-      try { await projectsAPI.heartbeat(activeProject.id); } catch (e) {}
+      try { await projectsAPI.heartbeat(activeProject.id); } catch (e) { }
     } catch (err) {
       console.error('Error saving current location to project:', err);
       showSnackbar(err.message || 'Failed to save current location', 'error');
@@ -1425,12 +1496,12 @@ function App() {
       setLoginPromptOpen(true);
       return;
     }
-    
+
     try {
       // Fetch "Default Location" from database
       const existingWaypoints = await waypointsAPI.getAll();
       let defaultWaypoint = existingWaypoints.find(wp => wp.name && wp.name.trim().toLowerCase() === 'default location');
-      
+
       // If "Default Location" doesn't exist, create it at current map center
       if (!defaultWaypoint && mapRef.current) {
         const mapCenter = mapRef.current.getCenter();
@@ -1441,16 +1512,16 @@ function App() {
           notes: 'User-defined default location',
           image: null
         };
-        
+
         const savedWaypoint = await waypointsAPI.create(newDefaultWaypoint);
         defaultWaypoint = savedWaypoint;
       }
-      
+
       if (!defaultWaypoint) {
         showSnackbar('Failed to load or create default location', 'error');
         return;
       }
-      
+
       // Convert database format to waypoint format (same as saved waypoints)
       const waypoint = {
         id: defaultWaypoint.id,
@@ -1460,34 +1531,34 @@ function App() {
         notes: defaultWaypoint.notes || '',
         image: defaultWaypoint.image_url || null
       };
-      
+
       // Now use the EXACT same code as onSelectWaypoint from saved waypoints
       if (!mapRef.current) return;
-      
+
       const map = mapRef.current;
       const mapContainer = map.getContainer();
-      
+
       // Check if waypoint already exists (by database ID)
       const existingEntry = Object.entries(dbWaypointIds).find(
         ([localId, dbId]) => dbId === waypoint.id
       );
-      
+
       let waypointId;
-      
+
       if (existingEntry) {
         // Waypoint already exists, use existing local ID
         waypointId = existingEntry[0];
-        
+
         // Update waypoint data in case it changed in database
-        setWaypoints(prev => prev.map(wp => 
-          wp.id === waypointId 
+        setWaypoints(prev => prev.map(wp =>
+          wp.id === waypointId
             ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', image: waypoint.image || null }
             : wp
         ));
       } else {
         // Create new waypoint ID
         waypointId = `waypoint-${Date.now()}`;
-        
+
         // Add to waypoints array
         setWaypoints(prev => [...prev, {
           id: waypointId,
@@ -1497,46 +1568,46 @@ function App() {
           notes: waypoint.notes || '',
           image: waypoint.image || null
         }]);
-        
+
         // Create marker (default L.marker)
         const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-        
+
         // Add click handler
-        marker.on('click', function() {
+        marker.on('click', function () {
           handleSelectWaypoint(waypointId);
         });
-        
+
         markersRef.current[waypointId] = marker;
-        
+
         // Store database ID mapping (waypoint.id is the database ID)
         setDbWaypointIds(prev => ({ ...prev, [waypointId]: waypoint.id }));
       }
-      
+
       // Activate survey mode if not already active
       if (!singlePointCaptureActive) {
         setSinglePointCaptureActive(true);
       }
-      
+
       // Update coordinates to show the waypoint location
       setCoordinates({
         lat: waypoint.lat.toFixed(6),
         lng: waypoint.lng.toFixed(6)
       });
-      
+
       // Select the waypoint and open details
       // Use setTimeout to ensure survey mode is activated and state is updated first
       setTimeout(() => {
         // Center map on waypoint
         map.setView([waypoint.lat, waypoint.lng], 13);
-        
+
         // Get current waypoints to ensure we have the latest state
         setWaypoints(currentWaypoints => {
           return currentWaypoints;
         });
-        
+
         // Set selected waypoint
         setSelectedWaypointId(waypointId);
-        
+
         // Set waypoint data for editing with all database information
         setWaypointData({
           name: waypoint.name,
@@ -1555,13 +1626,13 @@ function App() {
   // Toggle satellite hybrid view
   const handleToggleSatelliteHybrid = () => {
     if (!mapRef.current) return;
-    
+
     const map = mapRef.current;
     const newMode = !satelliteHybridMode;
-    
+
     // Show loading state
     showSnackbar(newMode ? 'Switching to satellite view...' : 'Switching to map view...', 'info');
-    
+
     // Remove existing layers with proper cleanup
     if (tileLayerRef.current) {
       try {
@@ -1579,13 +1650,13 @@ function App() {
         console.warn('Error removing label layer:', e);
       }
     }
-    
+
     // Small delay to ensure cleanup completes
     setTimeout(() => {
       if (!mapRef.current) return;
-      
+
       setSatelliteHybridMode(newMode);
-      
+
       if (newMode) {
         // Satellite hybrid mode: Use Esri World Imagery with labels
         // Using a more reliable tile server configuration
@@ -1598,15 +1669,15 @@ function App() {
           errorTileUrl: '', // Prevent error tiles from showing
           crossOrigin: true
         });
-        
+
         // Add satellite layer first
         satelliteLayer.addTo(map);
         tileLayerRef.current = satelliteLayer;
-        
+
         // Add label layer with slight delay to ensure satellite loads first
         setTimeout(() => {
           if (!mapRef.current) return;
-          
+
           const labelLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
             attribution: '',
             maxZoom: 19,
@@ -1617,28 +1688,28 @@ function App() {
             errorTileUrl: '',
             crossOrigin: true
           });
-          
+
           labelLayer.addTo(map);
           labelLayerRef.current = labelLayer;
         }, 100);
-        
+
         showSnackbar('Satellite hybrid view enabled', 'success');
       } else {
         // OSM mode: Use current dark/light mode setting
-        const tileUrl = darkMode 
+        const tileUrl = darkMode
           ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
           : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-        
+
         const tileLayer = L.tileLayer(tileUrl, {
           attribution: '',
           maxZoom: 19,
           errorTileUrl: '',
           crossOrigin: true
         });
-        
+
         tileLayer.addTo(map);
         tileLayerRef.current = tileLayer;
-        
+
         showSnackbar('Map view enabled', 'success');
       }
     }, 50);
@@ -1651,14 +1722,14 @@ function App() {
 
     // Set view to default location
     map.setView([defaultLocation.lat, defaultLocation.lng], 15);
-    
+
     // Update coordinates with default location
     setCoordinates({
       lat: defaultLocation.lat.toFixed(6),
       lng: defaultLocation.lng.toFixed(6),
       accuracy: null
     });
-    
+
     // Create a default location marker
     const waypointId = `default-location-${Date.now()}`;
     const defaultLocationWaypoint = {
@@ -1669,21 +1740,21 @@ function App() {
       notes: 'GPS unavailable - using default location',
       image: null
     };
-    
+
     // Add to waypoints array
     setWaypoints([defaultLocationWaypoint]);
     setCurrentLocationWaypointId(waypointId);
-    
+
     // Create marker (default L.marker)
     const marker = L.marker([defaultLocation.lat, defaultLocation.lng]).addTo(map);
-    
+
     // Add click handler to select waypoint
-    marker.on('click', function() {
+    marker.on('click', function () {
       handleSelectWaypoint(waypointId);
     });
-    
+
     markersRef.current[waypointId] = marker;
-    
+
     // Select this waypoint by default
     setSelectedWaypointId(waypointId);
     setWaypointData({
@@ -1721,7 +1792,7 @@ function App() {
     try {
       // Try to find destination waypoint in waypoints array, otherwise use waypointData
       let toWaypoint = waypoints.find(wp => wp.id === selectedWaypointId);
-      
+
       if (!toWaypoint && waypointData.lat && waypointData.lng) {
         // Use waypointData as fallback
         toWaypoint = {
@@ -1755,7 +1826,7 @@ function App() {
       }
 
       // Check if starting point is in current waypoints (on map)
-      const startWaypointOnMap = waypoints.find(wp => 
+      const startWaypointOnMap = waypoints.find(wp =>
         Math.abs(parseFloat(wp.lat) - startLat) < 0.0001 &&
         Math.abs(parseFloat(wp.lng) - startLng) < 0.0001
       );
@@ -1766,7 +1837,7 @@ function App() {
 
       // Get API key from environment or use a placeholder
       const apiKey = import.meta.env.VITE_OPENROUTESERVICE_API_KEY || 'YOUR_KEY';
-      
+
       if (apiKey === 'YOUR_KEY') {
         showSnackbar('Please configure OpenRouteService API key in .env file', 'error');
         return;
@@ -1800,11 +1871,11 @@ function App() {
 
       if (data.routes && data.routes.length > 0) {
         const route = data.routes[0];
-        
+
         // Decode polyline using Leaflet's polyline decoder
         // OpenRouteService returns geometry as encoded polyline
         let routeCoordinates = [];
-        
+
         if (route.geometry) {
           // Use Leaflet's polyline decoder if available, or decode manually
           // For now, we'll use a simple approach: decode the polyline
@@ -1851,7 +1922,7 @@ function App() {
 
         const distance = route.summary?.distance ? (route.summary.distance / 1000).toFixed(2) : 'N/A';
         const duration = route.summary?.duration ? Math.round(route.summary.duration / 60) : 'N/A';
-        
+
         showSnackbar(`Route found! Distance: ${distance} km, Duration: ${duration} min`, 'success');
       } else {
         showSnackbar('No route found', 'error');
@@ -1980,7 +2051,7 @@ function App() {
         Object.keys(markersRef.current).forEach((id) => {
           const wp = waypoints.find(w => w.id === id);
           if (!wp || !wp.project_id || String(wp.project_id) !== String(activeProject.id)) {
-            try { markersRef.current[id].remove(); } catch (e) {}
+            try { markersRef.current[id].remove(); } catch (e) { }
             delete markersRef.current[id];
           }
         });
@@ -1991,7 +2062,7 @@ function App() {
         // New project: remove everything except current location marker
         Object.keys(markersRef.current).forEach((id) => {
           if (id !== currentLocationWaypointId) {
-            try { markersRef.current[id].remove(); } catch (e) {}
+            try { markersRef.current[id].remove(); } catch (e) { }
             delete markersRef.current[id];
           }
         });
@@ -2008,7 +2079,7 @@ function App() {
       // Disable location selection when in project mode
       setLocationSelectionActive(false);
     }
-  }, [isProjectMode, activeProject, currentLocationWaypointId, waypoints]);
+  }, [isProjectMode, activeProject, currentLocationWaypointId]);
 
   // Load saved waypoints for navigation dropdown
   useEffect(() => {
@@ -2018,16 +2089,16 @@ function App() {
         setSavedWaypointsList([]);
         return;
       }
-      
+
       try {
         const data = await waypointsAPI.getAll();
         const filtered = user?.id
           ? data.filter(
-              (wp) =>
-                wp.user_id === user.id ||
-                wp.userId === user.id ||
-                wp.user?.id === user.id
-            )
+            (wp) =>
+              wp.user_id === user.id ||
+              wp.userId === user.id ||
+              wp.user?.id === user.id
+          )
           : data;
         setSavedWaypointsList(filtered);
       } catch (error) {
@@ -2097,7 +2168,7 @@ function App() {
           await new Promise((res) => setTimeout(res, 700));
         }
       }
-      
+
       // Update waypoint data with Cloudinary URL
       setWaypointData(prev => ({ ...prev, image: uploadResult.image_url }));
       setSnackbar({ open: true, message: 'Image uploaded successfully', severity: 'success' });
@@ -2148,7 +2219,7 @@ function App() {
           const last = detail.waypoints[detail.waypoints.length - 1];
           const lat = parseFloat(last.latitude);
           const lng = parseFloat(last.longitude);
-          try { mapRef.current && mapRef.current.panTo([lat, lng]); } catch (e) {}
+          try { mapRef.current && mapRef.current.panTo([lat, lng]); } catch (e) { }
           // Select the last project waypoint by its generated local id
           const localId = `project-${activeProject.id}-${last.id}`;
           setTimeout(() => {
@@ -2197,10 +2268,10 @@ function App() {
         errorTileUrl: '',
         crossOrigin: true
       });
-      
+
       satelliteLayer.addTo(map);
       tileLayerRef.current = satelliteLayer;
-      
+
       // Add label layer after a short delay
       setTimeout(() => {
         if (mapRef.current && satelliteHybridMode) {
@@ -2214,24 +2285,24 @@ function App() {
             errorTileUrl: '',
             crossOrigin: true
           });
-          
+
           labelLayer.addTo(mapRef.current);
           labelLayerRef.current = labelLayer;
         }
       }, 200);
     } else {
       // OSM mode: Use dark/light mode setting
-      const tileUrl = darkMode 
+      const tileUrl = darkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-      
+
       const tileLayer = L.tileLayer(tileUrl, {
         attribution: '',
         maxZoom: 19,
         errorTileUrl: '',
         crossOrigin: true
       }).addTo(map);
-      
+
       tileLayerRef.current = tileLayer;
     }
 
@@ -2241,37 +2312,37 @@ function App() {
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
           const hasAccuracy = typeof accuracy === 'number' && !Number.isNaN(accuracy);
-          
+
           // If accuracy is reported but is low, log a warning and show a small snackbar
           // Do NOT block or return — still show the live location even if accuracy is poor.
           if (hasAccuracy && accuracy > 100) {
             console.log('Low GPS accuracy detected. Accuracy (m):', accuracy);
             setSnackbar({ open: true, message: `Low GPS accuracy: ±${Math.round(accuracy)}m — location may be imprecise`, severity: 'warning' });
           }
-          
+
           // Set view to current location with zoomed out view (zoom level 12 for city-level view)
           map.setView([latitude, longitude], 15);
           if (isMobile) {
             updateMobileMapHeight();
             // ensure layout settles then re-center at desired zoom on mobile
             setTimeout(() => {
-              try { map.invalidateSize(); } catch (e) {}
-              try { map.setView([latitude, longitude], 15, { animate: false }); } catch (e) {}
+              try { map.invalidateSize(); } catch (e) { }
+              try { map.setView([latitude, longitude], 15, { animate: false }); } catch (e) { }
             }, 120);
           }
-          
+
           // Update coordinates with accuracy
           setCoordinates({
             lat: latitude.toFixed(6),
             lng: longitude.toFixed(6),
             accuracy: accuracy ? Math.round(accuracy) : null
           });
-          
+
           // Create blue circle marker for live location
           const liveMarker = createLiveLocationMarker([latitude, longitude]).addTo(map);
           liveLocationMarkerRef.current = liveMarker;
           setGpsActive(true);
-          
+
           // Keep a persistent live blue location marker (do NOT add a regular saved marker)
           const waypointId = 'current-location';
           setCurrentLocationWaypointId(waypointId);
@@ -2293,7 +2364,7 @@ function App() {
           watchPositionIdRef.current = navigator.geolocation.watchPosition(
             (position) => {
               const { latitude: newLat, longitude: newLng, accuracy: newAccuracy } = position.coords;
-              
+
               // Update coordinates
               setCoordinates({
                 lat: newLat.toFixed(6),
@@ -2305,7 +2376,7 @@ function App() {
               if (typeof newAccuracy === 'number' && !Number.isNaN(newAccuracy) && newAccuracy > 100) {
                 setSnackbar({ open: true, message: `Low GPS accuracy: ±${Math.round(newAccuracy)}m — location may be imprecise`, severity: 'warning' });
               }
-              
+
               // Update live location marker position
               if (liveLocationMarkerRef.current) {
                 liveLocationMarkerRef.current.setLatLng([newLat, newLng]);
@@ -2317,16 +2388,16 @@ function App() {
               // On first watch update on mobile ensure centering at desired zoom
               if (isMobile && gpsActive) {
                 setTimeout(() => {
-                  try { mapRef.current.invalidateSize(); } catch (e) {}
-                  try { mapRef.current.setView([newLat, newLng], 15, { animate: false }); } catch (e) {}
+                  try { mapRef.current.invalidateSize(); } catch (e) { }
+                  try { mapRef.current.setView([newLat, newLng], 15, { animate: false }); } catch (e) { }
                 }, 120);
               }
-              
+
               // Live marker is managed separately; update it here
               if (liveLocationMarkerRef.current) {
                 liveLocationMarkerRef.current.setLatLng([newLat, newLng]);
               }
-              
+
               // If WaypointDetails is open and there's no selection, update the details to show live coords
               if (waypointDetailsOpen && !selectedWaypointId) {
                 setWaypointData(prev => ({
@@ -2336,7 +2407,7 @@ function App() {
                   notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}`
                 }));
               }
-              
+
               // Update any waypoint that is flagged to follow live GPS (or matches currentLocationWaypointId)
               const liveId = currentLocationWaypointRef.current || 'current-location';
               setWaypoints(prev => prev.map(wp => {
@@ -2352,7 +2423,7 @@ function App() {
                 if (liveWaypointId && markersRef.current[liveWaypointId]) {
                   markersRef.current[liveWaypointId].setLatLng([newLat, newLng]);
                 }
-              } catch (e) {}
+              } catch (e) { }
 
               // If the live-following waypoint is selected, update details live
               if (selectedWaypointId && selectedWaypointId === currentLocationWaypointRef.current) {
@@ -2401,19 +2472,19 @@ function App() {
 
     // Create custom control container for all map controls (search, locate, zoom)
     const MapControlsContainer = L.Control.extend({
-      onAdd: function(map) {
+      onAdd: function (map) {
         const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control map-controls-container');
         container.style.marginTop = '80px'; // Just below navbar (64px) + some spacing
         container.style.marginRight = '10px';
         container.style.borderRadius = '12px';
         container.style.overflow = 'hidden';
-        container.style.boxShadow = darkMode 
-          ? '0 2px 8px rgba(0, 0, 0, 0.5)' 
+        container.style.boxShadow = darkMode
+          ? '0 2px 8px rgba(0, 0, 0, 0.5)'
           : '0 2px 8px rgba(0, 0, 0, 0.15)';
         container.style.display = 'flex';
         container.style.flexDirection = 'column';
         container.style.gap = '0';
-        
+
         // Search button
         const searchButton = L.DomUtil.create('a', 'leaflet-control-search', container);
         searchButton.href = '#';
@@ -2432,7 +2503,7 @@ function App() {
           border: none;
           border-bottom: 1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : '#e0e0e0'};
         `;
-        
+
         // Add Search icon as SVG
         const searchIcon = `
           <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${window.innerWidth < 600 ? '0.375rem' : '0.5rem'};">
@@ -2440,7 +2511,7 @@ function App() {
           </svg>
         `;
         searchButton.innerHTML = searchIcon;
-        
+
         L.DomEvent.disableClickPropagation(searchButton);
         L.DomEvent.on(searchButton, 'click', L.DomEvent.stop);
         L.DomEvent.on(searchButton, 'click', () => {
@@ -2470,7 +2541,7 @@ function App() {
               });
           }
         });
-        
+
         // Locate button
         const locateButton = L.DomUtil.create('a', 'leaflet-control-locate', container);
         locateButton.href = '#';
@@ -2486,7 +2557,7 @@ function App() {
           text-decoration: none;
           border: none;
         `;
-        
+
         // Add Material-UI MyLocation icon as SVG
         const locateIconSize = window.innerWidth < 600 ? '0.984375rem' : '1.09375rem';
         const locateIcon = `
@@ -2495,10 +2566,10 @@ function App() {
           </svg>
         `;
         locateButton.innerHTML = locateIcon;
-        
+
         L.DomEvent.disableClickPropagation(locateButton);
         L.DomEvent.on(locateButton, 'click', L.DomEvent.stop);
-        
+
         // Store the locate handler in a ref so it can access latest state
         locateHandlerRef.current = () => {
           if (navigator.geolocation) {
@@ -2507,11 +2578,11 @@ function App() {
               (position) => {
                 const { latitude, longitude } = position.coords;
                 const accuracy = position.coords.accuracy || 0;
-                
+
                 // Center map on location
                 map.setView([latitude, longitude], 15);
                 locateButton.style.opacity = '1';
-                
+
                 // Activate survey mode if not already active
                 setSinglePointCaptureActive(prev => {
                   if (!prev) {
@@ -2519,12 +2590,12 @@ function App() {
                   }
                   return prev;
                 });
-                
+
                 // Wait a bit for survey mode to activate, then create waypoint
                 setTimeout(() => {
                   const waypointId = `waypoint-${Date.now()}`;
                   const latlng = [latitude, longitude];
-                  
+
                   // Create waypoint with "My Location" as name
                   const newWaypoint = {
                     id: waypointId,
@@ -2534,29 +2605,29 @@ function App() {
                     notes: '',
                     image: null
                   };
-                  
+
                   // Add to waypoints array
                   setWaypoints(prev => {
                     const updated = [...prev, newWaypoint];
                     return updated;
                   });
-                  
+
                   // Add marker to map (default L.marker)
                   const marker = L.marker(latlng).addTo(map);
-                  
+
                   // Add click handler to select waypoint
-                  marker.on('click', function() {
+                  marker.on('click', function () {
                     handleSelectWaypoint(waypointId);
                   });
-                  
+
                   markersRef.current[waypointId] = marker;
-                  
+
                   // Update coordinates
                   setCoordinates({
                     lat: latitude.toFixed(6),
                     lng: longitude.toFixed(6)
                   });
-                  
+
                   // Select the waypoint and open details
                   setSelectedWaypointId(waypointId);
                   setWaypointData({
@@ -2566,7 +2637,7 @@ function App() {
                     notes: '',
                     image: null
                   });
-                  
+
                   setTimeout(() => {
                     setSnackbar({ open: true, message: `Location found! Accuracy: ${Math.round(accuracy)}m`, severity: 'success' });
                   }, 0);
@@ -2589,12 +2660,12 @@ function App() {
             setGpsWarningOpen(true);
           }
         };
-        
+
         L.DomEvent.on(locateButton, 'click', locateHandlerRef.current);
-        
+
         return container;
       },
-      onRemove: function(map) {
+      onRemove: function (map) {
         // Cleanup if needed
       }
     });
@@ -2605,7 +2676,7 @@ function App() {
 
     // Add drag-and-drop handlers for GeoJSON and KML files
     const mapContainer = map.getContainer();
-    
+
     const handleDragOver = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -2619,36 +2690,36 @@ function App() {
         mapContainer.style.cursor = 'copy';
       }
     };
-    
+
     const handleDragLeave = (e) => {
       e.preventDefault();
       e.stopPropagation();
       mapContainer.style.opacity = '1';
       mapContainer.style.cursor = '';
     };
-    
+
     const handleDrop = async (e) => {
       e.preventDefault();
       e.stopPropagation();
       mapContainer.style.opacity = '1';
       mapContainer.style.cursor = '';
-      
+
       const files = Array.from(e.dataTransfer.files);
-      const geoFiles = files.filter(file => 
-        file.name.endsWith('.geojson') || 
-        file.name.endsWith('.json') || 
+      const geoFiles = files.filter(file =>
+        file.name.endsWith('.geojson') ||
+        file.name.endsWith('.json') ||
         file.name.endsWith('.kml')
       );
-      
+
       if (geoFiles.length === 0) {
         showSnackbar('Please drop a GeoJSON or KML file', 'warning');
         return;
       }
-      
+
       // Process the first file
       await importWaypointsFromFile(geoFiles[0]);
     };
-    
+
     mapContainer.addEventListener('dragover', handleDragOver);
     mapContainer.addEventListener('dragleave', handleDragLeave);
     mapContainer.addEventListener('drop', handleDrop);
@@ -2699,22 +2770,22 @@ function App() {
     window.addEventListener('resize', measure);
     return () => {
       window.removeEventListener('resize', measure);
-      try { ro.disconnect(); } catch (e) {}
+      try { ro.disconnect(); } catch (e) { }
     };
   }, [isMobile, projectBarExpanded, waypoints.length, projectRecording]);
 
   useEffect(() => {
     if (!mapRef.current || satelliteHybridMode) return;
-    
+
     const map = mapRef.current;
-    
+
     // Check if map container exists and is properly initialized
     const mapContainer = map.getContainer();
     if (!mapContainer || !mapContainer.parentNode) {
       console.warn('Map container not ready, skipping tile layer update');
       return;
     }
-    
+
     // Remove existing tile layer with proper cleanup
     if (tileLayerRef.current) {
       try {
@@ -2724,11 +2795,11 @@ function App() {
         console.warn('Error removing tile layer:', e);
       }
     }
-    
+
     // Small delay to ensure cleanup
     setTimeout(() => {
       if (!mapRef.current || satelliteHybridMode) return;
-      
+
       // Double-check map is still valid
       const currentMap = mapRef.current;
       const currentContainer = currentMap.getContainer();
@@ -2736,19 +2807,19 @@ function App() {
         console.warn('Map container not ready after delay, skipping tile layer update');
         return;
       }
-      
+
       // Add new tile layer based on dark mode
-      const tileUrl = darkMode 
+      const tileUrl = darkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-      
+
       const tileLayer = L.tileLayer(tileUrl, {
         attribution: '',
         maxZoom: 19,
         errorTileUrl: '',
         crossOrigin: true
       });
-      
+
       tileLayer.addTo(currentMap);
       tileLayerRef.current = tileLayer;
     }, 50);
@@ -2763,21 +2834,21 @@ function App() {
     if (singlePointCaptureActive) {
       // Use Leaflet's default crosshair cursor
       mapContainer.style.cursor = 'crosshair';
-      
+
       // Store custom cursor for restoration
       customCursorRef.current = 'crosshair';
-      
+
       // Handle map drag events
       const handleDragStart = () => {
         mapContainer.style.cursor = 'grabbing';
       };
-      
+
       const handleDragEnd = () => {
         if (customCursorRef.current) {
           mapContainer.style.cursor = customCursorRef.current;
         }
       };
-      
+
       // Note: Live coordinates are handled by a separate always-on useEffect
       // This handler is only for survey mode click events
 
@@ -2795,7 +2866,7 @@ function App() {
             if (markersRef.current[selectedWaypointId]) {
               markersRef.current[selectedWaypointId].setLatLng([latlng.lat, latlng.lng]);
             }
-          } catch (e) {}
+          } catch (e) { }
           // Update waypointData in the details pane (so user can still edit name/notes)
           setWaypointData(prev => ({ ...prev, lat: latlng.lat.toFixed(6), lng: latlng.lng.toFixed(6) }));
           // Turn off selection modes after assigning coordinates
@@ -2804,7 +2875,7 @@ function App() {
           setSinglePointCaptureActive(false);
           return;
         }
-        
+
         // Check if click is on an existing marker (marker click events are handled separately)
         // This prevents creating duplicate waypoints when clicking existing markers
         if (e.originalEvent && e.originalEvent.target) {
@@ -2814,16 +2885,16 @@ function App() {
             return; // Marker click will be handled by marker's click handler
           }
         }
-        
+
         const latlng = e.latlng;
-        
+
         // Check if there's already a waypoint at this location (within small tolerance)
         const existingWaypoint = waypoints.find(wp => {
           const latDiff = Math.abs(parseFloat(wp.lat) - latlng.lat);
           const lngDiff = Math.abs(parseFloat(wp.lng) - latlng.lng);
           return latDiff < 0.0001 && lngDiff < 0.0001;
         });
-        
+
         if (existingWaypoint) {
           // Select existing waypoint instead of creating new one
           handleSelectWaypoint(existingWaypoint.id);
@@ -2835,16 +2906,16 @@ function App() {
           }
           return;
         }
-        
+
         const waypointId = `waypoint-${Date.now()}`;
-        
+
         // Get current waypoints count for naming
         const currentCount = waypoints.length;
-        
+
         // Determine project association for this click-created point
         const isPinMode = pinModeActive || locationSelectionActive;
         const projectIdForNew = isPinMode ? null : (isProjectMode && activeProject?.id ? activeProject.id : null);
-        
+
         // Create new waypoint
         const newWaypoint = {
           id: waypointId,
@@ -2858,7 +2929,7 @@ function App() {
           createdDuringProject: isProjectMode ? true : false,
           pinCaptured: isPinMode ? true : false
         };
-        
+
         // Add to waypoints array
         setWaypoints(prev => {
           const updated = [...prev, newWaypoint];
@@ -2867,30 +2938,30 @@ function App() {
             ...wp,
             name: `Point ${index + 1}`
           }));
-          
+
           // Find the updated waypoint with correct name
           const updatedWaypoint = renamed.find(wp => wp.id === waypointId);
-          
+
           // Add marker to map (default L.marker initially, will turn red when selected)
           const marker = L.marker(latlng).addTo(map);
-          
+
           // Ensure marker can receive clicks even when overlay is on top
-          marker.on('add', function() {
+          marker.on('add', function () {
             const element = this.getElement();
             if (element) {
               element.style.zIndex = '999'; // Just below overlay but still receives events
               element.style.pointerEvents = 'auto'; // Ensure it can receive clicks
             }
           });
-          
+
           // Add click handler to select waypoint
-          marker.on('click', function(e) {
+          marker.on('click', function (e) {
             e.originalEvent.stopPropagation(); // Prevent map click
             handleSelectWaypoint(waypointId);
           });
-          
+
           markersRef.current[waypointId] = marker;
-          
+
           // If we were in pin/location-selection mode, exit it after creating the point
           if (isPinMode) {
             setPinModeActive(false);
@@ -2912,17 +2983,17 @@ function App() {
               project_name: updatedWaypoint.project_name || null
             });
           }
-          
+
           // Update red circleMarker overlay since it's selected
           setTimeout(() => {
             updateSelectedMarkerOverlay(waypointId);
           }, 0);
-          
+
           // Update red circleMarker overlay since it's selected
           setTimeout(() => {
             updateSelectedMarkerOverlay(waypointId);
           }, 0);
-          
+
           return renamed;
         });
       };
@@ -2937,7 +3008,7 @@ function App() {
         map.off('dragend', handleDragEnd);
         mapContainer.style.cursor = '';
       };
-      } else {
+    } else {
       mapContainer.style.cursor = '';
       // When survey/deactivated, do not remove saved waypoints — keep them visible.
       // Only remove the red selection overlay and clear selection if not re-used.
@@ -2981,7 +3052,7 @@ function App() {
 
     const map = mapRef.current;
     const mapContainer = map.getContainer();
-    
+
     if (locationSelectionActive && selectedWaypointId) {
       // Set cursor for location selection (different from survey mode)
       mapContainer.style.cursor = 'cell';
@@ -3015,7 +3086,7 @@ function App() {
           return;
         }
         const latlng = e.latlng;
-        
+
         // Update the selected waypoint's coordinates to the clicked location
         setWaypointData(prev => ({
           ...prev,
@@ -3024,8 +3095,8 @@ function App() {
         }));
 
         // Update waypoint in array
-        setWaypoints(prev => prev.map(wp => 
-          wp.id === selectedWaypointId 
+        setWaypoints(prev => prev.map(wp =>
+          wp.id === selectedWaypointId
             ? { ...wp, lat: latlng.lat, lng: latlng.lng }
             : wp
         ));
@@ -3038,12 +3109,12 @@ function App() {
 
         // Deactivate location selection mode immediately
         setLocationSelectionActive(false);
-        
+
         // Restore cursor based on survey mode
         if (singlePointCaptureActive) {
           mapContainer.style.cursor = 'crosshair';
           customCursorRef.current = 'crosshair';
-            } else {
+        } else {
           mapContainer.style.cursor = '';
           customCursorRef.current = null;
         }
@@ -3114,7 +3185,7 @@ function App() {
     } else {
       // Touch device: Update cursor coordinates based on map center
       updateCenterCoordinates();
-      
+
       // Update on map move/zoom (use move event for real-time updates during drag)
       map.on('move', updateCenterCoordinates);
       map.on('moveend', updateCenterCoordinates);
@@ -3134,499 +3205,580 @@ function App() {
     const timer = setTimeout(() => {
       updateSelectedMarkerOverlay(selectedWaypointId);
     }, 50);
-    
+
     return () => clearTimeout(timer);
   }, [selectedWaypointId, waypoints]);
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ 
-        display: 'flex', 
-        height: '100vh', 
+      <Box sx={{
+        display: 'flex',
+        height: '100vh',
         overflow: 'hidden',
         backgroundColor: theme.palette.background.default
       }}>
-        <Navbar 
-          sidebarOpen={sidebarOpen} 
-          isMobile={isMobile} 
+        <Navbar
+          sidebarOpen={sidebarOpen}
+          isMobile={isMobile}
           darkMode={darkMode}
           onToggleDarkMode={handleToggleDarkMode}
           onSetDefaultLocation={handleSetDefaultLocation}
           onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
           satelliteHybridMode={satelliteHybridMode}
         />
-      <Sidebar 
-        sidebarOpen={sidebarOpen} 
-        onToggle={handleSidebarToggle}
-        isMobile={isMobile}
-        onMenuItemClick={handleMenuItemClick}
-      />
-      <StartSurveyDialog
-        open={startSurveyDialogOpen}
-        onClose={() => setStartSurveyDialogOpen(false)}
-        onStartNew={handleStartSurveyNew}
-        onContinue={handleStartSurveyContinue}
-      />
-      {isMobile && (
-        <IconButton
-          onClick={handleSidebarToggle}
-          sx={{
-            position: 'fixed',
-            top: '3.5rem',
-            left: '0.75rem',
-            zIndex: theme.zIndex.drawer + 15,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-            boxShadow: theme.palette.mode === 'dark'
-              ? '0 2px 8px rgba(0,0,0,0.45)'
-              : '0 2px 8px rgba(0,0,0,0.15)',
-            '&:hover': {
-              backgroundColor: theme.palette.action.hover,
-            }
-          }}
-          size="small"
-        >
-          <MenuIcon />
-        </IconButton>
-      )}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 0,
-          height: '100vh',
-          overflow: 'hidden',
-          marginTop: { xs: '3.0625rem', sm: '3.5rem' },
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        <Box 
-          sx={{ 
-            position: 'relative',
-            width: '100%',
-            height: isMobile && mapDynamicHeight ? `${mapDynamicHeight}px` : '100%',
-            overflow: 'hidden',
-          }}
-        >
-          <Box 
-            id="map" 
-            sx={{ 
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          onToggle={handleSidebarToggle}
+          isMobile={isMobile}
+          onMenuItemClick={handleMenuItemClick}
+        />
+        <StartSurveyDialog
+          open={startSurveyDialogOpen}
+          onClose={() => setStartSurveyDialogOpen(false)}
+          onStartNew={handleStartSurveyNew}
+          onContinue={handleStartSurveyContinue}
+          onShowSnackbar={showSnackbar}
+        />
+        {isMobile && (
+          <IconButton
+            onClick={handleSidebarToggle}
+            sx={{
+              position: 'fixed',
+              top: '3.5rem',
+              left: '0.75rem',
+              zIndex: theme.zIndex.drawer + 15,
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0 2px 8px rgba(0,0,0,0.45)'
+                : '0 2px 8px rgba(0,0,0,0.15)',
+              '&:hover': {
+                backgroundColor: theme.palette.action.hover,
+              }
             }}
-          />
-          
-          {/* Center crosshair for touch devices - relative to map area */}
-          {!hasCursor && (
+            size="small"
+          >
+            <MenuIcon />
+          </IconButton>
+        )}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            p: 0,
+            height: '100vh',
+            overflow: 'hidden',
+            marginTop: { xs: '3.0625rem', sm: '3.5rem' },
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          <Box
+            sx={{
+              position: 'relative',
+              width: '100%',
+              height: isMobile && mapDynamicHeight ? `${mapDynamicHeight}px` : '100%',
+              overflow: 'hidden',
+            }}
+          >
             <Box
+              id="map"
               sx={{
                 position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '1px',
-                height: { xs: '24px', sm: '30px' },
-                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
-                zIndex: theme.zIndex.drawer + 1,
-                pointerEvents: 'none',
-                '&::before': {
-                  content: '""',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+              }}
+            />
+
+            {/* Center crosshair for touch devices - relative to map area */}
+            {!hasCursor && (
+              <Box
+                sx={{
                   position: 'absolute',
                   top: '50%',
                   left: '50%',
                   transform: 'translate(-50%, -50%)',
-                  width: { xs: '24px', sm: '30px' },
-                  height: '1px',
+                  width: '1px',
+                  height: { xs: '24px', sm: '30px' },
                   backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
-                }
-              }}
-            />
-          )}
-        </Box>
-        
-        {/* Live Coordinates card - always visible */}
-        <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
-
-        {(singlePointCaptureActive || isProjectMode) && (
-          <>
-            {/* Waypoint Selector - horizontal scrollable tabs */}
-            <WaypointSelector
-              waypoints={selectorWaypoints}
-              selectedWaypointId={selectedWaypointId}
-              onSelectWaypoint={handleSelectWaypoint}
-            />
-
-            {/* Waypoint Details - always visible during project mode; otherwise visible when a point is selected */}
-            {(
-              (isProjectMode || selectedWaypointId) && waypointDetailsOpen
-            ) && (
-              <WaypointDetails
-                selectedWaypointId={selectedWaypointId}
-                waypointData={waypointData}
-                setWaypointData={setWaypointData}
-                onClose={() => {
-                  // Close details and clear selection
-                  setWaypointDetailsOpen(false);
-                  setSelectedWaypointId(null);
-                  setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
-                  setLocationSelectionActive(false); // Deactivate location selection when closing
-                  updateSelectedMarkerOverlay(null);
-                }}
-                onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
-                locationSelectionActive={locationSelectionActive}
-                onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-                onDelete={handleDeleteWaypoint}
-                onImageUpload={handleImageUpload}
-                imageUploading={imageUploading}
-                savedWaypoints={savedWaypointsList}
-                onNavigate={handleNavigate}
-                sidebarOpen={sidebarOpen}
-                isProjectMode={isProjectMode}
-                activeProjectId={activeProject?.id}
-                currentLocationId={currentLocationWaypointId}
-                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-                canSaveDuringProject={(function() {
-                  if (!isProjectMode) return true;
-                  if (!selectedWaypointId) return true; // allow saving current location
-                  const wp = waypoints.find(w => w.id === selectedWaypointId);
-                  if (!wp) return false;
-                  const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
-                  const isCurrent = selectedWaypointId === currentLocationWaypointId;
-                  const isPinCreated = wp.createdDuringProject && !wp.project_id; // allow pin-created single points
-                  return !!(isProjectPoint || isCurrent || isPinCreated);
-                })()}
-                ref={waypointDetailsRef}
-              />
-            )}
-          </>
-        )}
-        
-        {/* Desktop waypoint details - fixed position */}
-        {(isProjectMode || selectedWaypointId) && waypointDetailsOpen && !isMobile && (
-          <WaypointDetails
-            selectedWaypointId={selectedWaypointId}
-            waypointData={waypointData}
-            setWaypointData={setWaypointData}
-            onClose={() => {
-              setWaypointDetailsOpen(false);
-              setSelectedWaypointId(null);
-              setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
-              setLocationSelectionActive(false); // Deactivate location selection when closing
-              updateSelectedMarkerOverlay(null);
-                  // Remove route when closing waypoint details
-                  if (routePolylineRef.current) {
-                    routePolylineRef.current.remove();
-                    routePolylineRef.current = null;
-                  }
-                  // Remove navigation start marker
-                  if (navigationStartMarkerRef.current) {
-                    navigationStartMarkerRef.current.remove();
-                    navigationStartMarkerRef.current = null;
+                  zIndex: theme.zIndex.drawer + 1,
+                  pointerEvents: 'none',
+                  '&::before': {
+                    content: '""',
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: { xs: '24px', sm: '30px' },
+                    height: '1px',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
                   }
                 }}
-                onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
-            locationSelectionActive={locationSelectionActive}
-            onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-                onDelete={handleDeleteWaypoint}
-                onImageUpload={handleImageUpload}
-                imageUploading={imageUploading}
-                savedWaypoints={savedWaypointsList}
-                onNavigate={handleNavigate}
-                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-            sidebarOpen={sidebarOpen}
-            isProjectMode={isProjectMode}
               />
-        )}
-
-        {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
-        {selectedWaypointId && !singlePointCaptureActive && currentLocationWaypointId === selectedWaypointId && (
-          <WaypointDetails
-            selectedWaypointId={selectedWaypointId}
-            waypointData={waypointData}
-            setWaypointData={setWaypointData}
-            onClose={() => {
-              setSelectedWaypointId(null);
-              setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
-              setLocationSelectionActive(false); // Deactivate location selection when closing
-              updateSelectedMarkerOverlay(null);
-            }}
-            onSave={handleSaveWaypoint}
-            locationSelectionActive={locationSelectionActive}
-            onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-            onDelete={() => {
-              // Don't allow deleting the current location marker
-              showSnackbar('Cannot delete current location marker', 'info');
-            }}
-            onImageUpload={handleImageUpload}
-            imageUploading={imageUploading}
-            savedWaypoints={savedWaypointsList}
-            onNavigate={handleNavigate}
-            currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-            sidebarOpen={sidebarOpen}
-            isProjectMode={isProjectMode}
-          />
-        )}
-
-        {/* Saved Points Dialog */}
-        <SavedPoints
-          open={savedPointsOpen}
-          onClose={() => setSavedPointsOpen(false)}
-          onShowSnackbar={showSnackbar}
-          onSelectWaypoint={(waypoint) => {
-            if (!mapRef.current) return;
-            
-            const map = mapRef.current;
-            const mapContainer = map.getContainer();
-            
-            // Clear previous selection and red circle overlay
-            const previousSelectedId = selectedWaypointId;
-            if (previousSelectedId) {
-              updateSelectedMarkerOverlay(null);
-              setSelectedWaypointId(null);
-            }
-            
-            // Check if waypoint already exists (by database ID)
-            const existingEntry = Object.entries(dbWaypointIds).find(
-              ([localId, dbId]) => dbId === waypoint.id
-            );
-            
-            let waypointId;
-            
-            if (existingEntry) {
-              // Waypoint already exists, use existing local ID
-              waypointId = existingEntry[0];
-              
-              // Update waypoint data in case it changed in database
-              setWaypoints(prev => prev.map(wp => 
-                wp.id === waypointId 
-                  ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', image: waypoint.image || null }
-                  : wp
-              ));
-            } else {
-              // Create new waypoint ID
-              waypointId = `waypoint-${Date.now()}`;
-              
-              // Add to waypoints array
-              setWaypoints(prev => [...prev, {
-                id: waypointId,
-                lat: waypoint.lat,
-                lng: waypoint.lng,
-                name: waypoint.name,
-                notes: waypoint.notes || '',
-                image: waypoint.image || null
-              }]);
-              
-              // Create marker (default L.marker)
-              const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-              
-              // Add click handler
-              marker.on('click', function() {
-                handleSelectWaypoint(waypointId);
-              });
-              
-              markersRef.current[waypointId] = marker;
-              
-              // Store database ID mapping (waypoint.id is the database ID)
-              setDbWaypointIds(prev => ({ ...prev, [waypointId]: waypoint.id }));
-            }
-            
-            // Activate survey mode if not already active
-            if (!singlePointCaptureActive) {
-              setSinglePointCaptureActive(true);
-            }
-            
-            // Update coordinates to show the waypoint location
-            setCoordinates({
-              lat: waypoint.lat.toFixed(6),
-              lng: waypoint.lng.toFixed(6)
-            });
-            
-            // Select the waypoint and open details
-            // Use setTimeout to ensure survey mode is activated and state is updated first
-            setTimeout(() => {
-              // Center map on waypoint
-              map.setView([waypoint.lat, waypoint.lng], 13);
-              
-              // Get current waypoints to ensure we have the latest state
-              setWaypoints(currentWaypoints => {
-                return currentWaypoints;
-              });
-              
-              // Set selected waypoint
-              setSelectedWaypointId(waypointId);
-              
-              // Set waypoint data for editing with all database information
-              setWaypointData({
-                name: waypoint.name,
-                lat: waypoint.lat.toFixed(6),
-                lng: waypoint.lng.toFixed(6),
-                notes: waypoint.notes || '',
-                image: waypoint.image || null
-              });
-            }, 150);
-          }}
-        />
-
-        {/* Export Dialog */}
-        <ExportDialog
-          open={exportDialogOpen}
-          onClose={() => setExportDialogOpen(false)}
-          onShowSnackbar={showSnackbar}
-        />
-
-        {/* Snackbar for notifications */}
-        <CustomSnackbar
-          open={snackbar.open}
-          message={snackbar.message}
-          severity={snackbar.severity}
-          onClose={handleCloseSnackbar}
-        />
-
-        {/* Login Prompt Dialog */}
-        <LoginPromptDialog
-          open={loginPromptOpen}
-          onClose={() => setLoginPromptOpen(false)}
-        />
-        <GPSWarningDialog
-          open={gpsWarningOpen}
-          onClose={() => setGpsWarningOpen(false)}
-          onContinue={handleGpsWarningContinue}
-          projectOngoing={isProjectMode && activeProject && activeProject.id}
-        />
-
-        {/* Hidden file input for importing GeoJSON/KML files */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".geojson,.json,.kml"
-          style={{ display: 'none' }}
-          onChange={handleFileSelect}
-        />
-      </Box>
-
-      {/* Floating bottom bar for project controls */}
-      {isProjectMode && (
-        <Paper ref={projectBarRef} elevation={8} sx={{
-          position: 'fixed',
-          top: isMobile ? '3.5rem' : 'auto',
-          bottom: isMobile ? 'auto' : 32,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(60%,320px)') : 'fit-content',
-          maxWidth: isMobile ? undefined : 'min(90%,720px)',
-          zIndex: theme.zIndex.drawer + 30,
-          display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          alignItems: 'center',
-          gap: 1,
-          px: 1,
-          py: 1,
-          borderRadius: 4,
-          cursor: isMobile ? 'pointer' : 'default',
-          transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)',
-          whiteSpace: 'nowrap'
-        }} onClick={() => { if (isMobile) setProjectBarExpanded(prev => !prev); }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
-            <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%', pr: isMobile && !projectBarExpanded ? '2.5rem' : 0, overflow: 'hidden' }}>
-              <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile && !projectBarExpanded ? 'calc(100% - 60px)' : '100%' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
-              <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
-              {isMobile && (
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
-              )}
-            </Box>
-            {isMobile && (
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); setProjectBarExpanded(prev => !prev); }} aria-label="expand" title="Expand" sx={{ position: 'absolute', right: 6, top: '50%', transform: `translateY(-50%)`, flexShrink: 0 }}>
-                <ExpandMoreIcon sx={{ transform: projectBarExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }} />
-              </IconButton>
             )}
           </Box>
 
-          {( !isMobile || projectBarExpanded ) && (
-            <Box ref={optionsRef} sx={{ display: 'flex', gap: 1, mt: isMobile ? 1 : 0, width: '100%', flexWrap: 'nowrap', justifyContent: 'space-between', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-              <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation();
-                const map = mapRef.current;
-                if (!coordinates || !coordinates.lat || !coordinates.lng) {
-                  showSnackbar('Unable to determine current live location (GPS).', 'error');
+          {/* Live Coordinates card - always visible */}
+          <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
+
+          {(singlePointCaptureActive || isProjectMode) && (
+            <>
+              {/* Waypoint Selector - horizontal scrollable tabs */}
+              <WaypointSelector
+                waypoints={selectorWaypoints}
+                selectedWaypointId={selectedWaypointId}
+                onSelectWaypoint={handleSelectWaypoint}
+              />
+
+              {/* Waypoint Details - always visible during project mode; otherwise visible when a point is selected */}
+              {(
+                (isProjectMode || selectedWaypointId) && waypointDetailsOpen
+              ) && (
+                  <WaypointDetails
+                    selectedWaypointId={selectedWaypointId}
+                    waypointData={waypointData}
+                    setWaypointData={setWaypointData}
+                    onClose={() => {
+                      // Close details and clear selection
+                      setWaypointDetailsOpen(false);
+                      setSelectedWaypointId(null);
+                      setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                      setLocationSelectionActive(false); // Deactivate location selection when closing
+                      updateSelectedMarkerOverlay(null);
+                    }}
+                    onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
+                    locationSelectionActive={locationSelectionActive}
+                    onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+                    onDelete={handleDeleteWaypoint}
+                    onImageUpload={handleImageUpload}
+                    imageUploading={imageUploading}
+                    savedWaypoints={savedWaypointsList}
+                    onNavigate={handleNavigate}
+                    sidebarOpen={sidebarOpen}
+                    isProjectMode={isProjectMode}
+                    activeProjectId={activeProject?.id}
+                    currentLocationId={currentLocationWaypointId}
+                    currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
+                    canSaveDuringProject={(function () {
+                      if (!isProjectMode) return true;
+                      if (!selectedWaypointId) return true; // allow saving current location
+                      const wp = waypoints.find(w => w.id === selectedWaypointId);
+                      if (!wp) return false;
+                      const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
+                      const isCurrent = selectedWaypointId === currentLocationWaypointId;
+                      const isPinCreated = wp.createdDuringProject && !wp.project_id; // allow pin-created single points
+                      return !!(isProjectPoint || isCurrent || isPinCreated);
+                    })()}
+                    ref={waypointDetailsRef}
+                  />
+                )}
+            </>
+          )}
+
+          {/* Desktop waypoint details - fixed position */}
+          {(isProjectMode || selectedWaypointId) && waypointDetailsOpen && !isMobile && (
+            <WaypointDetails
+              selectedWaypointId={selectedWaypointId}
+              waypointData={waypointData}
+              setWaypointData={setWaypointData}
+              onClose={() => {
+                setWaypointDetailsOpen(false);
+                setSelectedWaypointId(null);
+                setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                setLocationSelectionActive(false); // Deactivate location selection when closing
+                updateSelectedMarkerOverlay(null);
+                // Remove route when closing waypoint details
+                if (routePolylineRef.current) {
+                  routePolylineRef.current.remove();
+                  routePolylineRef.current = null;
+                }
+                // Remove navigation start marker
+                if (navigationStartMarkerRef.current) {
+                  navigationStartMarkerRef.current.remove();
+                  navigationStartMarkerRef.current = null;
+                }
+              }}
+              onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
+              locationSelectionActive={locationSelectionActive}
+              onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+              onDelete={handleDeleteWaypoint}
+              onImageUpload={handleImageUpload}
+              imageUploading={imageUploading}
+              savedWaypoints={savedWaypointsList}
+              onNavigate={handleNavigate}
+              currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
+              sidebarOpen={sidebarOpen}
+              isProjectMode={isProjectMode}
+            />
+          )}
+
+          {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
+          {selectedWaypointId && !singlePointCaptureActive && currentLocationWaypointId === selectedWaypointId && (
+            <WaypointDetails
+              selectedWaypointId={selectedWaypointId}
+              waypointData={waypointData}
+              setWaypointData={setWaypointData}
+              onClose={() => {
+                setSelectedWaypointId(null);
+                setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                setLocationSelectionActive(false); // Deactivate location selection when closing
+                updateSelectedMarkerOverlay(null);
+              }}
+              onSave={handleSaveWaypoint}
+              locationSelectionActive={locationSelectionActive}
+              onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+              onDelete={() => {
+                // Don't allow deleting the current location marker
+                showSnackbar('Cannot delete current location marker', 'info');
+              }}
+              onImageUpload={handleImageUpload}
+              imageUploading={imageUploading}
+              savedWaypoints={savedWaypointsList}
+              onNavigate={handleNavigate}
+              currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
+              sidebarOpen={sidebarOpen}
+              isProjectMode={isProjectMode}
+            />
+          )}
+
+          {/* Saved Points Dialog */}
+          <SavedPoints
+            open={savedPointsOpen}
+            onClose={() => setSavedPointsOpen(false)}
+            onShowSnackbar={showSnackbar}
+            onSelectWaypoint={(waypoint) => {
+              if (!mapRef.current) return;
+
+              const map = mapRef.current;
+              const mapContainer = map.getContainer();
+
+              // Clear previous selection and red circle overlay
+              const previousSelectedId = selectedWaypointId;
+              if (previousSelectedId) {
+                updateSelectedMarkerOverlay(null);
+                setSelectedWaypointId(null);
+              }
+
+              // Check if waypoint already exists (by database ID)
+              const existingEntry = Object.entries(dbWaypointIds).find(
+                ([localId, dbId]) => dbId === waypoint.id
+              );
+
+              let waypointId;
+
+              if (existingEntry) {
+                // Waypoint already exists, use existing local ID
+                waypointId = existingEntry[0];
+
+                // Update waypoint data in case it changed in database
+                setWaypoints(prev => prev.map(wp =>
+                  wp.id === waypointId
+                    ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', image: waypoint.image || null }
+                    : wp
+                ));
+              } else {
+                // Create new waypoint ID
+                waypointId = `waypoint-${Date.now()}`;
+
+                // Add to waypoints array
+                setWaypoints(prev => [...prev, {
+                  id: waypointId,
+                  lat: waypoint.lat,
+                  lng: waypoint.lng,
+                  name: waypoint.name,
+                  notes: waypoint.notes || '',
+                  image: waypoint.image || null
+                }]);
+
+                // Create marker (default L.marker)
+                const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
+
+                // Add click handler
+                marker.on('click', function () {
+                  handleSelectWaypoint(waypointId);
+                });
+
+                markersRef.current[waypointId] = marker;
+
+                // Store database ID mapping (waypoint.id is the database ID)
+                setDbWaypointIds(prev => ({ ...prev, [waypointId]: waypoint.id }));
+              }
+
+              // Activate survey mode if not already active
+              if (!singlePointCaptureActive) {
+                setSinglePointCaptureActive(true);
+              }
+
+              // Update coordinates to show the waypoint location
+              setCoordinates({
+                lat: waypoint.lat.toFixed(6),
+                lng: waypoint.lng.toFixed(6)
+              });
+
+              // Select the waypoint and open details
+              // Use setTimeout to ensure survey mode is activated and state is updated first
+              setTimeout(() => {
+                // Center map on waypoint
+                map.setView([waypoint.lat, waypoint.lng], 13);
+
+                // Get current waypoints to ensure we have the latest state
+                setWaypoints(currentWaypoints => {
+                  return currentWaypoints;
+                });
+
+                // Set selected waypoint
+                setSelectedWaypointId(waypointId);
+
+                // Set waypoint data for editing with all database information
+                setWaypointData({
+                  name: waypoint.name,
+                  lat: waypoint.lat.toFixed(6),
+                  lng: waypoint.lng.toFixed(6),
+                  notes: waypoint.notes || '',
+                  image: waypoint.image || null
+                });
+              }, 150);
+            }}
+            onPreviewProject={(project) => {
+              if (isProjectMode) {
+                if (String(activeProject?.id) === String(project.project_id)) {
+                  showSnackbar('Project is already active', 'info');
                   return;
                 }
-                const waypointId = `waypoint-${Date.now()}`;
-                const latNum = parseFloat(coordinates.lat);
-                const lngNum = parseFloat(coordinates.lng);
+                showSnackbar('Please exit current project to preview another project', 'warning');
+                return;
+              }
 
-                const newWp = {
-                  id: waypointId,
-                  lat: latNum,
-                  lng: lngNum,
-                  name: `Point ${ (waypoints.filter(w=> w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1 }`,
-                  notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
-                  image: null,
-                  project_id: activeProject?.id || null,
-                  project_name: activeProject?.name || null,
-                  followsLive: true, // mark this waypoint to follow live GPS
-                  createdDuringProject: isProjectMode ? true : false
-                };
+              if (project.items && project.items.length > 0) {
+                // Clear existing waypoints (except the live blue marker which is separate)
+                // We keep the logic simple: verify if we need to remove specific points. 
+                // The user requested to remove existing "few points marked".
+                // We do not want to remove the current location if it was somehow added to waypoints (like Default Location) 
+                // but usually blue marker matches `currentLocationWaypointId` IF it was added.
+                // However, the blue marker from GPS is NOT in waypoints array.
+                // So clearing waypoints is safe for "removing points marked".
 
-                // Move map to live location so user can see current GPS (do not change zoom)
-                try { map && map.panTo([latNum, lngNum]); } catch (e) {}
+                // If there is a 'Default Location' point (fallback), we might want to keep it? 
+                // The user said "except the blue current location marker". 
+                // If they are on GPS, blue marker is separate. If they are on Default, it's a marker.
+                // Let's assume we clear everything to be clean for the project view.
 
-                // Ensure only one live-following waypoint at a time: remove followsLive from others
-                setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
-                // Mark this as current live-following waypoint so watchPosition can update it
-                setCurrentLocationWaypointId(waypointId);
-
-                if (map) {
-                  const marker = L.marker([latNum, lngNum]).addTo(map);
-                  marker.on('click', function() { handleSelectWaypoint(waypointId); });
-                  markersRef.current[waypointId] = marker;
+                // Explicitly clear waypoints first to satisfy "those should be removed"
+                setWaypoints([]);
+                setDbWaypointIds({});
+                if (markersRef.current) {
+                  Object.keys(markersRef.current).forEach(id => {
+                    try { markersRef.current[id].remove(); } catch (e) { }
+                  });
+                  markersRef.current = {};
                 }
 
-                // Select the newly created live-following waypoint and open details
-                setSelectedWaypointId(waypointId);
-                setWaypointDetailsOpen(true);
-                setWaypointData({
-                  name: newWp.name,
-                  lat: latNum.toFixed(6),
-                  lng: lngNum.toFixed(6),
-                  notes: newWp.notes,
-                  image: null,
-                  project_id: newWp.project_id,
-                  project_name: newWp.project_name,
-                  followsLive: true
-                });
-              }}>
-                <AddLocation />
-              </IconButton>
+                // Small timeout to allow state clear to process before adding new ones
+                setTimeout(() => {
+                  loadProjectWaypointsToMap({ waypoints: project.items }, { id: project.project_id, name: project.project_name });
+                  setSinglePointCaptureActive(true);
+                  showSnackbar(`Loaded points from ${project.project_name}`, 'success');
+                }, 50);
 
-              <IconButton aria-label="start" title="Start" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white' }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
-                <PlayArrowOutlinedIcon />
-              </IconButton>
+              } else {
+                showSnackbar('Project has no points', 'info');
+              }
+            }}
+          />
 
-              <IconButton aria-label="pause" title="Pause" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
-                <PauseOutlinedIcon />
-              </IconButton>
+          {/* Export Dialog */}
+          <ExportDialog
+            open={exportDialogOpen}
+            onClose={() => setExportDialogOpen(false)}
+            onShowSnackbar={showSnackbar}
+          />
 
-              {!projectRecording && (
-                <IconButton aria-label="exit" title="Exit survey" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', animation: 'pulse 1.2s infinite', ml: isMobile ? 0 : 1 }} onClick={(e) => { e.stopPropagation(); exitSurveyMode(); }}>
-                  <CloseIcon />
+          {/* Snackbar for notifications */}
+          <CustomSnackbar
+            open={snackbar.open}
+            message={snackbar.message}
+            severity={snackbar.severity}
+            onClose={handleCloseSnackbar}
+          />
+
+          {/* Login Prompt Dialog */}
+          <LoginPromptDialog
+            open={loginPromptOpen}
+            onClose={() => setLoginPromptOpen(false)}
+          />
+          <GPSWarningDialog
+            open={gpsWarningOpen}
+            onClose={() => setGpsWarningOpen(false)}
+            onContinue={handleGpsWarningContinue}
+            projectOngoing={isProjectMode && activeProject && activeProject.id}
+          />
+
+          {/* Hidden file input for importing GeoJSON/KML files */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".geojson,.json,.kml"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+        </Box>
+
+        {/* Floating bottom bar for project controls */}
+        {isProjectMode && (
+          <Paper ref={projectBarRef} elevation={8} sx={{
+            position: 'fixed',
+            top: isMobile ? '3.5rem' : 'auto',
+            bottom: isMobile ? 'auto' : 32,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(60%,320px)') : 'fit-content',
+            maxWidth: isMobile ? undefined : 'min(90%,720px)',
+            zIndex: theme.zIndex.drawer + 30,
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: 'center',
+            gap: 1,
+            px: 1,
+            py: 1,
+            borderRadius: 4,
+            cursor: isMobile ? 'pointer' : 'default',
+            transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)',
+            whiteSpace: 'nowrap'
+          }} onClick={() => { if (isMobile) setProjectBarExpanded(prev => !prev); }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
+              <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%', pr: isMobile && !projectBarExpanded ? '2.5rem' : 0, overflow: 'hidden' }}>
+                <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile && !projectBarExpanded ? '120px' : '180px' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
+                <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
+                {isMobile && (
+                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
+                )}
+              </Box>
+              {isMobile && (
+                <IconButton size="small" onClick={(e) => { e.stopPropagation(); setProjectBarExpanded(prev => !prev); }} aria-label="expand" title="Expand" sx={{ position: 'absolute', right: 6, top: '50%', transform: `translateY(-50%)`, flexShrink: 0 }}>
+                  <ExpandMoreIcon sx={{ transform: projectBarExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }} />
                 </IconButton>
               )}
-
-              <IconButton aria-label="pin" title="Pin point" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', backgroundColor: pinModeActive ? 'primary.main' : 'transparent', color: pinModeActive ? 'white' : 'inherit' }} onClick={(e) => { e.stopPropagation(); const next = !pinModeActive; setPinModeActive(next); setLocationSelectionActive(next); setSinglePointCaptureActive(next); }}>
-                <LocationOnOutlinedIcon sx={{ fontWeight: pinModeActive ? 700 : 400 }} />
-              </IconButton>
-
-              <IconButton aria-label="stop" title="End" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
-                <StopCircleOutlinedIcon />
-              </IconButton>
             </Box>
-          )}
-        </Paper>
-      )}
-    </Box>
+
+            {(!isMobile || projectBarExpanded) && (
+              <Box ref={optionsRef} sx={{ display: 'flex', gap: 1, mt: isMobile ? 1 : 0, width: '100%', flexWrap: 'nowrap', justifyContent: 'space-between', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+                <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => {
+                  e.stopPropagation();
+                  const map = mapRef.current;
+                  if (!coordinates || !coordinates.lat || !coordinates.lng) {
+                    showSnackbar('Unable to determine current live location (GPS).', 'error');
+                    return;
+                  }
+                  const waypointId = `waypoint-${Date.now()}`;
+                  const latNum = parseFloat(coordinates.lat);
+                  const lngNum = parseFloat(coordinates.lng);
+
+                  const newWp = {
+                    id: waypointId,
+                    lat: latNum,
+                    lng: lngNum,
+                    name: `Point ${(waypoints.filter(w => w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1}`,
+                    notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
+                    image: null,
+                    project_id: activeProject?.id || null,
+                    project_name: activeProject?.name || null,
+                    followsLive: true, // mark this waypoint to follow live GPS
+                    createdDuringProject: isProjectMode ? true : false
+                  };
+
+                  // Move map to live location so user can see current GPS (do not change zoom)
+                  try { map && map.panTo([latNum, lngNum]); } catch (e) { }
+
+                  // Ensure only one live-following waypoint at a time: remove followsLive from others
+                  setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
+                  // Mark this as current live-following waypoint so watchPosition can update it
+                  setCurrentLocationWaypointId(waypointId);
+
+                  if (map) {
+                    const marker = L.marker([latNum, lngNum]).addTo(map);
+                    marker.on('click', function () { handleSelectWaypoint(waypointId); });
+                    markersRef.current[waypointId] = marker;
+                  }
+
+                  // Select the newly created live-following waypoint and open details
+                  setSelectedWaypointId(waypointId);
+                  setWaypointDetailsOpen(true);
+                  setWaypointData({
+                    name: newWp.name,
+                    lat: latNum.toFixed(6),
+                    lng: lngNum.toFixed(6),
+                    notes: newWp.notes,
+                    image: null,
+                    project_id: newWp.project_id,
+                    project_name: newWp.project_name,
+                    followsLive: true
+                  });
+                }}>
+                  <AddLocation />
+                </IconButton>
+
+                <IconButton aria-label="start" title="Start" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white' }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                  <PlayArrowOutlinedIcon />
+                </IconButton>
+
+                <IconButton aria-label="pause" title="Pause" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
+                  <PauseOutlinedIcon />
+                </IconButton>
+
+                {!projectRecording && (
+                  <IconButton aria-label="exit" title="Exit survey" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', animation: 'pulse 1.2s infinite', ml: isMobile ? 0 : 1 }} onClick={(e) => { e.stopPropagation(); exitSurveyMode(); }}>
+                    <CloseIcon />
+                  </IconButton>
+                )}
+
+                <IconButton aria-label="stop" title="End" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
+                  <StopCircleOutlinedIcon />
+                </IconButton>
+              </Box>
+            )}
+          </Paper>
+        )}
+
+        {/* End Project Confirmation Dialog */}
+        <Dialog
+          open={endProjectDialogOpen}
+          onClose={() => setEndProjectDialogOpen(false)}
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              p: 1
+            }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 600 }}>
+            End Project
+          </DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to end this project? You will not be able to add more waypoints to this project.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={() => setEndProjectDialogOpen(false)}
+              variant="text"
+              sx={{ textTransform: 'none' }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmEndProject}
+              variant="contained"
+              color="error"
+              sx={{ textTransform: 'none', boxShadow: 1 }}
+            >
+              End Project
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
     </ThemeProvider>
   )
 }
