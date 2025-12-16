@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { LocationOff as LocationOffIcon } from '@mui/icons-material';
 
-function GPSWarningDialog({ open, onClose, onContinue }) {
+function GPSWarningDialog({ open, onClose, onContinue, projectOngoing = false }) {
   const theme = useTheme();
 
   const handleContinue = () => {
@@ -70,13 +70,15 @@ function GPSWarningDialog({ open, onClose, onContinue }) {
         }}>
           GPS not detected. Make sure it is turned on.
         </Typography>
-        <Typography variant="body2" sx={{ 
-          color: theme.palette.text.secondary, 
-          opacity: 0.8,
-          fontSize: { xs: '0.6rem', sm: '0.65625rem' }
-        }}>
-          The app will use the default location instead.
-        </Typography>
+        {!projectOngoing && (
+          <Typography variant="body2" sx={{ 
+            color: theme.palette.text.secondary, 
+            opacity: 0.8,
+            fontSize: { xs: '0.6rem', sm: '0.65625rem' }
+          }}>
+            The app will use the default location instead.
+          </Typography>
+        )}
       </DialogContent>
       <DialogActions sx={{ p: { xs: 1.125, sm: 1.5 }, pt: { xs: 0.375, sm: 0.75 }, gap: { xs: 0.75, sm: 1.125 } }}>
         <Button
@@ -101,7 +103,7 @@ function GPSWarningDialog({ open, onClose, onContinue }) {
             },
           }}
         >
-          Continue with Default Location
+          {projectOngoing ? 'Continue' : 'Continue with Default Location'}
         </Button>
       </DialogActions>
     </Dialog>

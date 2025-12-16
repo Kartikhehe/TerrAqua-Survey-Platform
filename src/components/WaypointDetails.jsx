@@ -280,7 +280,6 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             value={selectedWaypointId ? waypointData.lat : (currentLocation && currentLocation.lat ? parseFloat(currentLocation.lat).toFixed(6) : '')}
             onChange={(e) => setWaypointData(prev => ({ ...prev, lat: e.target.value }))}
             size="small"
-            disabled={isProjectMode && !selectedWaypointId}
             sx={{
               flex: 1,
               minWidth: 0,
@@ -304,7 +303,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 color: theme.palette.text.secondary,
               },
             }}
-            disabled={isProjectMode}
+            disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
           />
           <TextField
             label="Longitude"
@@ -338,7 +337,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           />
           <IconButton
             onClick={onToggleLocationSelection}
-            disabled={locationSelectionActive || isProjectMode}
+            disabled={locationSelectionActive || Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
             sx={{
               mt: 0.5,
               flexShrink: 0,
@@ -433,7 +432,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               },
             },
           }}
-          disabled={isProjectMode}
+disabled={isProjectMode || Boolean(waypointData?.followsLive)}
         />
 
         <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
@@ -464,7 +463,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               variant="outlined"
               startIcon={<ArrowOutwardOutlinedIcon />}
               onClick={handleNavigateClick}
-              disabled={isProjectMode}
+              disabled={isProjectMode || Boolean(waypointData?.followsLive)}
               sx={{
                 py: { xs: 1.25, sm: 1.5 },
                 minWidth: { xs: '5rem', sm: '7.5rem' },

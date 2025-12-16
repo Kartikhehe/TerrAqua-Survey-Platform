@@ -83,6 +83,7 @@ function App() {
   const [gpsWarningOpen, setGpsWarningOpen] = useState(false); // GPS warning dialog state
   const [gpsActive, setGpsActive] = useState(false); // Whether device GPS watch is active
   const [locationSelectionActive, setLocationSelectionActive] = useState(false); // Location selection mode state
+  const [pinModeActive, setPinModeActive] = useState(false); // pin behavior: allow adding non-project waypoint during survey
   const [defaultLocation, setDefaultLocation] = useState({ lat: 26.516654, lng: 80.231507 }); // Default location from database
   const [startSurveyDialogOpen, setStartSurveyDialogOpen] = useState(false);
   const [activeProject, setActiveProject] = useState(null); // { id, name }
@@ -126,9 +127,27 @@ function App() {
   }, [isMobile]);
 
   // Compute which waypoints should be shown in the top selector
-  const selectorWaypoints = (isProjectMode && activeProject && activeProject.id)
-    ? waypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id))
-    : waypoints;
+  let selectorWaypoints = [];
+  if (isProjectMode) {
+    // In project mode show only points that belong to this project or that were created during this session/project (or are following live GPS)
+    selectorWaypoints = waypoints.filter(wp => (
+      (wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id)) ||
+      wp.createdDuringProject ||
+      wp.followsLive
+    ));
+  } else {
+    // Outside project mode show all plotted waypoints
+    selectorWaypoints = [...waypoints];
+  }
+
+  // Deduplicate waypoints for selector (avoid duplicate names/entries for same lat/lng)
+  const seen = new Map();
+  selectorWaypoints = selectorWaypoints.filter(wp => {
+    const key = `${parseFloat(wp.lat).toFixed(6)}:${parseFloat(wp.lng).toFixed(6)}`;
+    if (seen.has(key)) return false;
+    seen.set(key, true);
+    return true;
+  });
 
   // Rebuild markers on map according to mode (project mode shows only project's points + live location)
   const clearAllMarkers = () => {
@@ -245,6 +264,8 @@ function App() {
     }
     setActiveProject({ id: project.id, name: project.name });
     setIsProjectMode(true);
+    // Remove previously-staged single-point captures so only project points remain visible
+    removePinCapturedPoints();
     setWaypointDetailsOpen(true);
     setSinglePointCaptureActive(true);
     setProjectRecording(true); // still start recording automatically for new project
@@ -276,6 +297,8 @@ function App() {
     }
     setActiveProject({ id: project.id, name: project.name });
     setIsProjectMode(true);
+    // Remove previously-staged single-point captures so only project points remain visible
+    removePinCapturedPoints();
     setWaypointDetailsOpen(true);
     setSinglePointCaptureActive(true);
     setProjectRecording(true);
@@ -350,6 +373,9 @@ function App() {
       showSnackbar('Start or load a project first', 'error');
       return;
     }
+    // Remove any previously marked single-point capture points (non-project pin points)
+    removePinCapturedPoints();
+
     setProjectRecording(true);
     // Persist server status
     projectsAPI.setStatus(activeProject.id, 'playing')
@@ -363,6 +389,39 @@ function App() {
     if (activeProject && activeProject.id) {
       projectsAPI.heartbeat(activeProject.id).catch(() => {});
     }
+  };
+
+  // Remove points created by single-point capture that are not associated with any project
+  const removePinCapturedPoints = () => {
+    if (!waypoints || waypoints.length === 0) return;
+    const toRemove = waypoints.filter(wp => wp.pinCaptured && !wp.project_id).map(wp => wp.id);
+    if (!toRemove.length) return;
+
+    // Remove markers from map
+    toRemove.forEach(id => {
+      try {
+        if (markersRef.current && markersRef.current[id]) {
+          markersRef.current[id].remove();
+          delete markersRef.current[id];
+        }
+      } catch (e) {}
+    });
+
+    // Remove from DB id map
+    setDbWaypointIds(prev => {
+      const copy = { ...prev };
+      toRemove.forEach(id => { delete copy[id]; });
+      return copy;
+    });
+
+    // Clear selection if it was one of the removed
+    if (selectedWaypointId && toRemove.includes(selectedWaypointId)) {
+      setSelectedWaypointId(null);
+      setWaypointDetailsOpen(false);
+    }
+
+    // Finally update waypoints state to remove them
+    setWaypoints(prev => prev.filter(wp => !toRemove.includes(wp.id)));
   };
 
   // Helper used by continue and mount to load project's waypoints into state/map
@@ -805,8 +864,9 @@ function App() {
       if (isProjectMode && activeProject) {
         const wpIsProjectPoint = waypoint.project_id && String(waypoint.project_id) === String(activeProject.id);
         const wpIsCurrentLocation = selectedWaypointId === currentLocationWaypointId;
-        if (!wpIsProjectPoint && !wpIsCurrentLocation) {
-          showSnackbar('Only current location or project points can be saved during survey', 'error');
+        const wpIsPinCreated = waypoint.createdDuringProject && !waypoint.project_id; // allow pin-created single points
+        if (!wpIsProjectPoint && !wpIsCurrentLocation && !wpIsPinCreated) {
+          showSnackbar('Only current location, project points, or pin-created points can be saved during survey', 'error');
           return;
         }
       }
@@ -830,8 +890,8 @@ function App() {
         lng: waypointData.lng,
         notes: waypointData.notes || '',
         image: waypointData.image || null,
-        project_id: waypointData.project_id || (isProjectMode && activeProject ? activeProject.id : null),
-        project_name: waypointData.project_name || (isProjectMode && activeProject ? activeProject.name : null),
+        project_id: (Object.prototype.hasOwnProperty.call(waypointData, 'project_id')) ? waypointData.project_id : (isProjectMode && activeProject ? activeProject.id : null),
+        project_name: (Object.prototype.hasOwnProperty.call(waypointData, 'project_name')) ? waypointData.project_name : (isProjectMode && activeProject ? activeProject.name : null),
       };
 
       const dbId = dbWaypointIds[selectedWaypointId];
@@ -1282,7 +1342,7 @@ function App() {
       updateSelectedMarkerOverlay(waypointId);
     }, 0);
 
-    // Ensure waypoint details show DB values
+    // Ensure waypoint details show DB values, include followsLive flag if present
     setWaypointData({
       name: waypoint.name,
       lat: (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat),
@@ -1291,6 +1351,7 @@ function App() {
       image: waypoint.image || null,
       project_id: waypoint.project_id || null,
       project_name: waypoint.project_name || null,
+      followsLive: waypoint.followsLive || false,
     });
     // Center map on selection
     try {
@@ -1801,6 +1862,13 @@ function App() {
     }
   };
 
+  // When entering project mode, remove any previously created single-point captures
+  useEffect(() => {
+    if (isProjectMode) {
+      removePinCapturedPoints();
+    }
+  }, [isProjectMode]);
+
   // Simple polyline decoder (for encoded polyline format)
   const decodePolyline = (encoded) => {
     const coordinates = [];
@@ -2066,6 +2134,42 @@ function App() {
       }));
     }
   }, [waypoints, selectedWaypointId]);
+
+  // Handler when GPS warning's continue is clicked
+  const handleGpsWarningContinue = async () => {
+    // If a project is ongoing, load its points and center on the last point
+    if (isProjectMode && activeProject && activeProject.id) {
+      try {
+        const detail = await projectsAPI.getById(activeProject.id);
+        if (detail && detail.waypoints && detail.waypoints.length > 0) {
+          // Load project waypoints into state and map
+          loadProjectWaypointsToMap(detail, activeProject);
+          // Center map on the last waypoint
+          const last = detail.waypoints[detail.waypoints.length - 1];
+          const lat = parseFloat(last.latitude);
+          const lng = parseFloat(last.longitude);
+          try { mapRef.current && mapRef.current.panTo([lat, lng]); } catch (e) {}
+          // Select the last project waypoint by its generated local id
+          const localId = `project-${activeProject.id}-${last.id}`;
+          setTimeout(() => {
+            setSelectedWaypointId(localId);
+            setWaypointDetailsOpen(true);
+            // set waypointData from the loaded waypoint in state if available
+            const wp = waypoints.find(w => w.id === localId);
+            if (wp) {
+              setWaypointData({ name: wp.name, lat: (typeof wp.lat === 'number' ? wp.lat.toFixed(6) : wp.lat), lng: (typeof wp.lng === 'number' ? wp.lng.toFixed(6) : wp.lng), notes: wp.notes || '', image: wp.image || null, project_id: wp.project_id || null, project_name: wp.project_name || null });
+            }
+          }, 150);
+        }
+      } catch (err) {
+        console.error('Error loading project for GPS-warning continue:', err);
+      }
+      return;
+    }
+
+    // Otherwise fall back to default location behavior
+    goToDefaultLocation();
+  };
 
   useEffect(() => {
     // initialize map only once
@@ -2679,10 +2783,25 @@ function App() {
 
       // Add click event listener to place marker
       const handleMapClick = (e) => {
-        // When in project (survey) mode, disable creating arbitrary markers
-        if (isProjectMode) return;
-        // Don't handle clicks if location selection mode is active (it's handled separately)
+        // When in project (survey) mode, disable creating arbitrary markers unless pin mode is active
+        if (isProjectMode && !pinModeActive) return;
+        // If location selection is active and a waypoint is selected, set that waypoint's coordinates to the clicked spot
         if (locationSelectionActive && selectedWaypointId) {
+          const latlng = e.latlng;
+          // Update waypoint data and marker
+          setWaypoints(prev => prev.map(wp => wp.id === selectedWaypointId ? ({ ...wp, lat: latlng.lat, lng: latlng.lng }) : wp));
+          // Update marker position if exists
+          try {
+            if (markersRef.current[selectedWaypointId]) {
+              markersRef.current[selectedWaypointId].setLatLng([latlng.lat, latlng.lng]);
+            }
+          } catch (e) {}
+          // Update waypointData in the details pane (so user can still edit name/notes)
+          setWaypointData(prev => ({ ...prev, lat: latlng.lat.toFixed(6), lng: latlng.lng.toFixed(6) }));
+          // Turn off selection modes after assigning coordinates
+          setLocationSelectionActive(false);
+          setPinModeActive(false);
+          setSinglePointCaptureActive(false);
           return;
         }
         
@@ -2708,6 +2827,12 @@ function App() {
         if (existingWaypoint) {
           // Select existing waypoint instead of creating new one
           handleSelectWaypoint(existingWaypoint.id);
+          // If pin mode was active, turn it off after selection
+          if (pinModeActive) {
+            setPinModeActive(false);
+            setLocationSelectionActive(false);
+            setSinglePointCaptureActive(false);
+          }
           return;
         }
         
@@ -2716,6 +2841,10 @@ function App() {
         // Get current waypoints count for naming
         const currentCount = waypoints.length;
         
+        // Determine project association for this click-created point
+        const isPinMode = pinModeActive || locationSelectionActive;
+        const projectIdForNew = isPinMode ? null : (isProjectMode && activeProject?.id ? activeProject.id : null);
+        
         // Create new waypoint
         const newWaypoint = {
           id: waypointId,
@@ -2723,7 +2852,11 @@ function App() {
           lng: latlng.lng,
           name: `Point ${currentCount + 1}`,
           notes: '',
-          image: null
+          image: null,
+          project_id: projectIdForNew,
+          project_name: projectIdForNew ? activeProject?.name : null,
+          createdDuringProject: isProjectMode ? true : false,
+          pinCaptured: isPinMode ? true : false
         };
         
         // Add to waypoints array
@@ -2758,15 +2891,25 @@ function App() {
           
           markersRef.current[waypointId] = marker;
           
-          // Set as selected waypoint with correct name
+          // If we were in pin/location-selection mode, exit it after creating the point
+          if (isPinMode) {
+            setPinModeActive(false);
+            setLocationSelectionActive(false);
+            setSinglePointCaptureActive(false);
+          }
+
+          // Set as selected waypoint with correct name and editable data (pin-created points remain unassigned to project)
           setSelectedWaypointId(waypointId);
+          setWaypointDetailsOpen(true);
           if (updatedWaypoint) {
             setWaypointData({
               name: updatedWaypoint.name,
               lat: latlng.lat.toFixed(6),
               lng: latlng.lng.toFixed(6),
               notes: '',
-              image: null
+              image: null,
+              project_id: updatedWaypoint.project_id || null,
+              project_name: updatedWaypoint.project_name || null
             });
           }
           
@@ -3153,7 +3296,8 @@ function App() {
                   if (!wp) return false;
                   const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
                   const isCurrent = selectedWaypointId === currentLocationWaypointId;
-                  return !!(isProjectPoint || isCurrent);
+                  const isPinCreated = wp.createdDuringProject && !wp.project_id; // allow pin-created single points
+                  return !!(isProjectPoint || isCurrent || isPinCreated);
                 })()}
                 ref={waypointDetailsRef}
               />
@@ -3350,7 +3494,8 @@ function App() {
         <GPSWarningDialog
           open={gpsWarningOpen}
           onClose={() => setGpsWarningOpen(false)}
-          onContinue={goToDefaultLocation}
+          onContinue={handleGpsWarningContinue}
+          projectOngoing={isProjectMode && activeProject && activeProject.id}
         />
 
         {/* Hidden file input for importing GeoJSON/KML files */}
@@ -3371,17 +3516,19 @@ function App() {
           bottom: isMobile ? 'auto' : 32,
           left: '50%',
           transform: 'translateX(-50%)',
-          width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(60%,320px)') : 'auto',
+          width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(60%,320px)') : 'fit-content',
+          maxWidth: isMobile ? undefined : 'min(90%,720px)',
           zIndex: theme.zIndex.drawer + 30,
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           alignItems: 'center',
           gap: 1,
-          px: 2,
+          px: 1,
           py: 1,
           borderRadius: 4,
           cursor: isMobile ? 'pointer' : 'default',
-          transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)'
+          transition: 'width 360ms cubic-bezier(0.22, 1, 0.36, 1)',
+          whiteSpace: 'nowrap'
         }} onClick={() => { if (isMobile) setProjectBarExpanded(prev => !prev); }}>
           <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
             <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%', pr: isMobile && !projectBarExpanded ? '2.5rem' : 0, overflow: 'hidden' }}>
@@ -3391,9 +3538,11 @@ function App() {
                 <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
               )}
             </Box>
-            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setProjectBarExpanded(prev => !prev); }} aria-label="expand" title="Expand" sx={{ position: 'absolute', right: 6, top: '50%', transform: `translateY(-50%)`, flexShrink: 0 }}>
-              <ExpandMoreIcon sx={{ transform: projectBarExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }} />
-            </IconButton>
+            {isMobile && (
+              <IconButton size="small" onClick={(e) => { e.stopPropagation(); setProjectBarExpanded(prev => !prev); }} aria-label="expand" title="Expand" sx={{ position: 'absolute', right: 6, top: '50%', transform: `translateY(-50%)`, flexShrink: 0 }}>
+                <ExpandMoreIcon sx={{ transform: projectBarExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }} />
+              </IconButton>
+            )}
           </Box>
 
           {( !isMobile || projectBarExpanded ) && (
@@ -3417,8 +3566,12 @@ function App() {
                   image: null,
                   project_id: activeProject?.id || null,
                   project_name: activeProject?.name || null,
-                  followsLive: true // mark this waypoint to follow live GPS
+                  followsLive: true, // mark this waypoint to follow live GPS
+                  createdDuringProject: isProjectMode ? true : false
                 };
+
+                // Move map to live location so user can see current GPS (do not change zoom)
+                try { map && map.panTo([latNum, lngNum]); } catch (e) {}
 
                 // Ensure only one live-following waypoint at a time: remove followsLive from others
                 setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
@@ -3441,7 +3594,8 @@ function App() {
                   notes: newWp.notes,
                   image: null,
                   project_id: newWp.project_id,
-                  project_name: newWp.project_name
+                  project_name: newWp.project_name,
+                  followsLive: true
                 });
               }}>
                 <AddLocation />
@@ -3461,8 +3615,8 @@ function App() {
                 </IconButton>
               )}
 
-              <IconButton aria-label="pin" title="Pin point" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); handlePinPointToProject(); }}>
-                <LocationOnOutlinedIcon />
+              <IconButton aria-label="pin" title="Pin point" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', backgroundColor: pinModeActive ? 'primary.main' : 'transparent', color: pinModeActive ? 'white' : 'inherit' }} onClick={(e) => { e.stopPropagation(); const next = !pinModeActive; setPinModeActive(next); setLocationSelectionActive(next); setSinglePointCaptureActive(next); }}>
+                <LocationOnOutlinedIcon sx={{ fontWeight: pinModeActive ? 700 : 400 }} />
               </IconButton>
 
               <IconButton aria-label="stop" title="End" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
