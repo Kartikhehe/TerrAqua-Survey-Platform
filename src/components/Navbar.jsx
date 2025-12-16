@@ -90,10 +90,10 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
     >
       <Toolbar sx={{
         px: { xs: '0.875rem', sm: '1.3125rem', md: '1.75rem' },
-        minHeight: { xs: '3.5rem', sm: '3.5rem' }
+        minHeight: { xs: '4.5rem', sm: '3.5rem' }
       }}>
         <NearMeOutlinedIcon sx={{
-          fontSize: { xs: '1.3125rem', sm: '1.53125rem', md: '1.75rem' },
+          fontSize: { xs: '1.75rem', sm: '1.53125rem', md: '1.75rem' },
           color: '#4CAF50',
           mr: { xs: 0.875, sm: 1.3125 },
           transform: 'scaleX(-1)'
@@ -105,7 +105,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
             flexGrow: 1,
             fontWeight: 600,
             letterSpacing: { xs: '0.2625px', sm: '0.4375px' },
-            fontSize: { xs: '0.9rem', sm: '0.9625rem', md: '1.3125rem' },
+            fontSize: { xs: '1.25rem', sm: '0.9625rem', md: '1.3125rem' },
             color: 'text.primary',
           }}
         >
@@ -118,8 +118,8 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
             ml: { xs: 0.875, sm: 1.75 },
             backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
             borderRadius: '50%',
-            width: { xs: '2.5rem', sm: '2.1875rem' },
-            height: { xs: '2.5rem', sm: '2.1875rem' },
+            width: { xs: '3.25rem', sm: '2.1875rem' },
+            height: { xs: '3.25rem', sm: '2.1875rem' },
             '&:hover': {
               backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
             },
@@ -131,11 +131,12 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           <Avatar
             src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
             sx={{
-              width: 32,
-              height: 32,
+              width: { xs: 40, sm: 32 },
+              height: { xs: 40, sm: 32 },
               bgcolor: theme.palette.primary.main,
               color: 'white',
               fontWeight: 600,
+              fontSize: { xs: '1.125rem', sm: '1rem' },
             }}
             alt="User Avatar"
           >

@@ -77,7 +77,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
           elevation={0}
           sx={{
             position: 'fixed',
-            top: '3.9375rem',
+            top: '8.1375rem',
             left: '50%',
             transform: 'translateX(-50%)',
             maxWidth: '30vw',
@@ -107,7 +107,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
           >
             {selectedWaypoint ? truncate(selectedWaypoint.name || `Point ${selectedIndex + 1}`) : 'Select Point'}
           </Typography>
-          <ExpandMore sx={{ fontSize: '1.25rem', color: theme.palette.text.secondary }} />
+          <ExpandMore sx={{ fontSize: '1.50rem', color: theme.palette.text.secondary }} />
         </Paper>
         <Menu
           anchorEl={dropdownAnchor}

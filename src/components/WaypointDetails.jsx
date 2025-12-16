@@ -94,7 +94,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             fallbackLat = DEFAULT_LOCATION.lat;
             fallbackLng = DEFAULT_LOCATION.lng;
           }
-          
+
           const currentLocationWaypoint = {
             id: 'current-location',
             name: 'Current Location',
@@ -121,7 +121,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         fallbackLat = DEFAULT_LOCATION.lat;
         fallbackLng = DEFAULT_LOCATION.lng;
       }
-      
+
       const currentLocationWaypoint = {
         id: 'current-location',
         name: 'Current Location',
@@ -144,14 +144,14 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         position: 'fixed',
         right: { xs: 0, sm: '1.5rem' },
         bottom: { xs: '5.25rem', sm: '10rem', md: '10rem' },
-        left: { 
+        left: {
           xs: 0,
-          sm: 'auto' 
+          sm: 'auto'
         },
-        width: { 
-          xs: '100%', 
-          sm: '19.25rem', 
-          md: '22.96875rem' 
+        width: {
+          xs: '100%',
+          sm: '19.25rem',
+          md: '22.96875rem'
         },
         maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
         maxHeight: { xs: '40vh', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
@@ -162,8 +162,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           xs: theme.palette.mode === 'dark'
             ? '0 8px 18px rgba(0, 0, 0, 0.35)'
             : '0 8px 18px rgba(0, 0, 0, 0.18)',
-          sm: theme.palette.mode === 'dark' 
-            ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+          sm: theme.palette.mode === 'dark'
+            ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
             : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
         },
         border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
@@ -200,10 +200,10 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
       }}
       ref={ref}
     >
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         mb: 1,
         flexShrink: 0,
         position: 'relative',
@@ -212,7 +212,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         <Typography
           variant="h6"
           sx={{
-            fontSize: { xs: '0.83125rem', sm: '0.875rem', md: '0.9625rem' },
+            fontSize: { xs: '1rem', sm: '0.875rem', md: '0.9625rem' },
             fontWeight: 600,
             color: theme.palette.text.primary,
           }}
@@ -222,7 +222,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         <IconButton
           size="small"
           onClick={onClose}
-          sx={{ 
+          sx={{
             color: theme.palette.text.secondary,
             backgroundColor: theme.palette.action.hover,
             borderRadius: '50%',
@@ -341,13 +341,13 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             sx={{
               mt: 0.5,
               flexShrink: 0,
-              backgroundColor: locationSelectionActive 
-                ? theme.palette.primary.main 
+              backgroundColor: locationSelectionActive
+                ? theme.palette.primary.main
                 : (theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5'),
               color: locationSelectionActive ? 'white' : theme.palette.text.secondary,
               '&:hover': {
-                backgroundColor: locationSelectionActive 
-                  ? theme.palette.primary.dark 
+                backgroundColor: locationSelectionActive
+                  ? theme.palette.primary.dark
                   : (theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0'),
               },
               borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
@@ -432,7 +432,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               },
             },
           }}
-disabled={isProjectMode || Boolean(waypointData?.followsLive)}
+          disabled={isProjectMode || Boolean(waypointData?.followsLive)}
         />
 
         <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
@@ -509,7 +509,7 @@ disabled={isProjectMode || Boolean(waypointData?.followsLive)}
           >
             Delete
           </Button>
-            <Menu
+          <Menu
             anchorEl={anchorEl}
             open={open}
             onClose={handleNavigateClose}
@@ -562,7 +562,7 @@ disabled={isProjectMode || Boolean(waypointData?.followsLive)}
                 </ListItemIcon>
                 <ListItemText
                   primary="Current Location"
-                  secondary={currentLocation.lat && currentLocation.lng 
+                  secondary={currentLocation.lat && currentLocation.lng
                     ? `${parseFloat(currentLocation.lat).toFixed(6)}, ${parseFloat(currentLocation.lng).toFixed(6)}`
                     : 'Getting location...'}
                   primaryTypographyProps={{

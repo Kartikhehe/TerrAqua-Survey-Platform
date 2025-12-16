@@ -21,8 +21,8 @@ import {
 } from '@mui/icons-material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 
-// Responsive drawer widths (87.5% of original)
-const drawerWidth = { xs: '14rem', sm: '14.21875rem', md: '15.3125rem' };
+// Responsive drawer widths (87.5% of original, increased for mobile)
+const drawerWidth = { xs: '18rem', sm: '14.21875rem', md: '15.3125rem' };
 const drawerCollapsedWidth = { xs: '3.0625rem', sm: '3.5rem' };
 
 function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
@@ -76,8 +76,8 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
               duration: theme.transitions.duration.enteringScreen,
             }),
             overflowX: 'hidden',
-            top: { xs: '3.5rem', sm: '3.5rem' },
-            height: { xs: 'calc(100vh - 3.5rem)', sm: 'calc(100vh - 3.5rem)' },
+            top: { xs: '4.5rem', sm: '3.5rem' },
+            height: { xs: 'calc(100vh - 4.5rem)', sm: 'calc(100vh - 3.5rem)' },
             position: 'fixed',
             left: 0,
             zIndex: isMobile ? theme.zIndex.drawer + 20 : theme.zIndex.drawer,
@@ -90,7 +90,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             alignItems: 'center',
             justifyContent: sidebarOpen ? 'flex-end' : 'center',
             padding: { xs: theme.spacing(0, 0.65625), sm: theme.spacing(0, 0.875) },
-            minHeight: { xs: '3.5rem', sm: '3.5rem' },
+            minHeight: { xs: '4.5rem', sm: '3.5rem' },
             borderBottom: `1px solid ${theme.palette.divider}`,
             position: 'absolute',
             top: 0,
@@ -140,8 +140,8 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                     mx: { xs: 0.65625, sm: 0.875 },
                     borderRadius: { xs: 0, sm: '0.765625rem', md: '0.875rem' },
                     justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                    minHeight: { xs: '3rem', sm: '2.625rem' },
-                    py: { xs: 1, sm: 0.5 },
+                    minHeight: { xs: '3.75rem', sm: '2.625rem' },
+                    py: { xs: 1.25, sm: 0.5 },
                     '&:hover': {
                       backgroundColor: theme.palette.action.hover,
                     },
@@ -158,13 +158,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                   <ListItemIcon
                     sx={{
                       color: sidebarOpen ? '#4CAF50' : theme.palette.text.secondary,
-                      minWidth: sidebarOpen ? { xs: '2.25rem', sm: '2.1875rem' } : 'auto',
+                      minWidth: sidebarOpen ? { xs: '2.75rem', sm: '2.1875rem' } : 'auto',
                       justifyContent: 'center',
                       '& .Mui-selected': {
                         color: '#4CAF50',
                       },
                       '& .MuiSvgIcon-root': {
-                        fontSize: { xs: '1.5rem', sm: '1.25rem' },
+                        fontSize: { xs: '1.75rem', sm: '1.25rem' },
                       },
                     }}
                   >
@@ -176,7 +176,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
                       primaryTypographyProps={{
                         fontWeight: 600,
                         color: theme.palette.text.primary,
-                        fontSize: { xs: '1rem', sm: '0.8rem', md: '0.83125rem' },
+                        fontSize: { xs: '1.125rem', sm: '0.8rem', md: '0.83125rem' },
                       }}
                     />
                   )}

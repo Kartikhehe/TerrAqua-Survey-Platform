@@ -1023,7 +1023,7 @@ function App() {
   const updateMobileMapHeight = () => {
     if (!isMobile || typeof window === 'undefined') return;
     const headerEl = document.querySelector('header');
-    const headerHeight = headerEl?.offsetHeight || 56;
+    const headerHeight = headerEl?.offsetHeight || 72; // Updated to 72px (4.5rem) for mobile navbar
     const liveH = liveCoordsRef.current?.offsetHeight || 0;
     const detailsH = selectedWaypointId ? (waypointDetailsRef.current?.offsetHeight || 0) : 0;
     const available = Math.max(200, window.innerHeight - headerHeight - liveH - detailsH);
@@ -3246,7 +3246,7 @@ function App() {
             onClick={handleSidebarToggle}
             sx={{
               position: 'fixed',
-              top: '4.25rem',
+              top: '5rem',
               left: '0.75rem',
               width: '3.5rem',
               height: '3.5rem',
@@ -3275,7 +3275,7 @@ function App() {
             p: 0,
             height: '100vh',
             overflow: 'hidden',
-            marginTop: { xs: '3.5rem', sm: '3.5rem' },
+            marginTop: { xs: '4.5rem', sm: '3.5rem' },
             width: '100%',
             position: 'relative',
           }}
@@ -3635,7 +3635,7 @@ function App() {
         {isProjectMode && (
           <Paper ref={projectBarRef} elevation={8} sx={{
             position: 'fixed',
-            top: isMobile ? '3.5rem' : 'auto',
+            top: isMobile ? '5rem' : 'auto',
             bottom: isMobile ? 'auto' : 32,
             left: '50%',
             transform: 'translateX(-50%)',
