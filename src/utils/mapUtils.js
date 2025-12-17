@@ -100,15 +100,18 @@ export const createLiveLocationMarker = (latlng) => {
  * Compute dynamic map height on mobile based on visible bottom cards
  * @param {boolean} isMobile - Whether the device is mobile
  * @param {boolean} waypointDetailsOpen - Whether waypoint details card is visible
+ * @param {boolean} bottomSheetExpanded - Whether bottom sheet is fully expanded (mobile only)
  * @param {Object} refs - Object containing refs for live coords and waypoint details
  * @param {Function} setMapDynamicHeight - Function to set the map height
  */
-export const updateMobileMapHeight = (isMobile, waypointDetailsOpen, refs, setMapDynamicHeight) => {
+export const updateMobileMapHeight = (isMobile, waypointDetailsOpen, bottomSheetExpanded, refs, setMapDynamicHeight) => {
     if (!isMobile || typeof window === 'undefined') return;
     const headerEl = document.querySelector('header');
     const headerHeight = headerEl?.offsetHeight || 72; // Updated to 72px (4.5rem) for mobile navbar
     const liveH = refs.liveCoordsRef?.current?.offsetHeight || 0;
-    const detailsH = waypointDetailsOpen ? (refs.waypointDetailsRef?.current?.offsetHeight || 0) : 0;
+    // Only include details height if bottom sheet is FULLY EXPANDED, not during animation
+    // Add 30px extra to cover the rounded corners of the waypoint details section
+    const detailsH = (waypointDetailsOpen && bottomSheetExpanded) ? (refs.waypointDetailsRef?.current?.offsetHeight || 0) - 30 : 0;
     const available = Math.max(200, window.innerHeight - headerHeight - liveH - detailsH);
     setMapDynamicHeight(available);
 };

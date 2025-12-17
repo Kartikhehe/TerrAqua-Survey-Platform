@@ -80,13 +80,13 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
             top: '8.1375rem',
             left: '50%',
             transform: 'translateX(-50%)',
-            maxWidth: '30vw',
+            maxWidth: { xs: '25vw', sm: '30vw' },
             px: 0.875,
             py: 0.65625,
             borderRadius: '0.65625rem',
             backgroundColor: theme.palette.background.paper,
-            boxShadow: theme.palette.mode === 'dark' 
-              ? '0 0.125rem 0.5rem rgba(0, 0, 0, 0.5)' 
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 0.125rem 0.5rem rgba(0, 0, 0, 0.5)'
               : '0 0.125rem 0.5rem rgba(0, 0, 0, 0.1)',
             border: `1px solid ${theme.palette.divider}`,
             zIndex: theme.zIndex.drawer + 2,
@@ -115,50 +115,48 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
           onClose={handleDropdownClose}
           PaperProps={{
             sx: {
-              maxHeight: '50vh',
+              maxHeight: '400px',
               width: 'calc(100vw - 2rem)',
-              maxWidth: '30vw',
-              mt: 0.5,
-              borderRadius: '0.75rem',
+              maxWidth: { xs: '200px', sm: '300px' },
+              mt: 1,
+              borderRadius: '0.65625rem',
               backgroundColor: theme.palette.background.paper,
-              boxShadow: theme.palette.mode === 'dark' 
-                ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)' 
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
                 : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
             },
           }}
           transformOrigin={{ horizontal: 'center', vertical: 'top' }}
           anchorOrigin={{ horizontal: 'center', vertical: 'bottom' }}
         >
-          {waypoints.map((waypoint, index) => {
-            const isSelected = waypoint.id === selectedWaypointId;
-            return (
-              <MenuItem
-                key={waypoint.id}
-                onClick={() => handleWaypointSelect(waypoint.id)}
-                selected={isSelected}
-                sx={{
-                  py: 1,
-                  px: 1.5,
-                  '&.Mui-selected': {
-                    backgroundColor: theme.palette.action.selected,
-                    '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                    },
+          {waypoints.map((wp, index) => (
+            <MenuItem
+              key={wp.id}
+              onClick={() => handleWaypointSelect(wp.id)}
+              selected={wp.id === selectedWaypointId}
+              sx={{
+                py: { xs: 0.5, sm: 1 },
+                fontSize: { xs: '0.95rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: '48px' },
+                '&.Mui-selected': {
+                  backgroundColor: theme.palette.action.selected,
+                  '&:hover': {
+                    backgroundColor: theme.palette.action.hover,
                   },
+                },
+              }}
+            >
+              <ListItemText
+                primary={wp.name || `Point ${index + 1}`}
+                primaryTypographyProps={{
+                  fontSize: { xs: '0.95rem', sm: '0.875rem' },
+                  fontWeight: wp.id === selectedWaypointId ? 600 : 400,
                 }}
-              >
-                <ListItemText
-                  primary={waypoint.name || `Point ${index + 1}`}
-                  primaryTypographyProps={{
-                    fontSize: '0.85rem',
-                    fontWeight: isSelected ? 600 : 400,
-                  }}
-                />
-              </MenuItem>
-            );
-          })}
+              />
+            </MenuItem>
+          ))}
         </Menu>
-      </Box>
+      </Box >
     );
   }
 
@@ -175,8 +173,8 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
         py: 0.875,
         borderRadius: '0.765625rem',
         backgroundColor: theme.palette.background.paper,
-        boxShadow: theme.palette.mode === 'dark' 
-          ? '0 0.125rem 0.5rem rgba(0, 0, 0, 0.5)' 
+        boxShadow: theme.palette.mode === 'dark'
+          ? '0 0.125rem 0.5rem rgba(0, 0, 0, 0.5)'
           : '0 0.125rem 0.5rem rgba(0, 0, 0, 0.1)',
         border: `1px solid ${theme.palette.divider}`,
         zIndex: theme.zIndex.drawer + 2,
@@ -206,7 +204,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
           <ChevronLeft />
         </IconButton>
       )}
-      
+
       <Box
         ref={scrollContainerRef}
         sx={{
@@ -239,7 +237,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
                 },
               }}
             >
-                <Typography
+              <Typography
                 sx={{
                   fontSize: { sm: '0.74375rem', md: '0.7875rem' },
                   fontWeight: isSelected ? 600 : 400,

@@ -403,7 +403,8 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                         <ListItemText
                           primary={`${p.project_name} (${p.items.length})`}
                           secondary={'Project'}
-                          primaryTypographyProps={{ fontWeight: 600 }}
+                          primaryTypographyProps={{ fontWeight: 600, fontSize: { xs: '1.05rem', sm: '1rem' } }}
+                          secondaryTypographyProps={{ fontSize: { xs: '0.95rem', sm: '0.875rem' } }}
                         />
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <IconButton
@@ -446,7 +447,8 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                         <ListItemText
                           primary={waypoint.name}
                           secondary={waypoint.notes || 'No description'}
-                          primaryTypographyProps={{ fontWeight: 600 }}
+                          primaryTypographyProps={{ fontWeight: 600, fontSize: { xs: '1.05rem', sm: '1rem' } }}
+                          secondaryTypographyProps={{ fontSize: { xs: '0.95rem', sm: '0.875rem' } }}
                         />
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <IconButton
@@ -495,7 +497,8 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                           <ListItemText
                             primary={waypoint.name}
                             secondary={waypoint.notes || 'No description'}
-                            primaryTypographyProps={{ fontWeight: 600 }}
+                            primaryTypographyProps={{ fontWeight: 600, fontSize: { xs: '1.05rem', sm: '1rem' } }}
+                            secondaryTypographyProps={{ fontSize: { xs: '0.95rem', sm: '0.875rem' } }}
                           />
                           <Box sx={{ display: 'flex', gap: 0.5 }}>
                             <IconButton

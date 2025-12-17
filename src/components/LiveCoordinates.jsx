@@ -26,9 +26,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
         borderRadius: { xs: 0, sm: '0.875rem' },
         backgroundColor: theme.palette.background.paper,
         boxShadow: {
-          xs: theme.palette.mode === 'dark'
-            ? '0 -6px 12px rgba(0, 0, 0, 0.35)'
-            : '0 -6px 12px rgba(0, 0, 0, 0.18)',
+          xs: 'none',
           sm: theme.palette.mode === 'dark'
             ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
             : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',

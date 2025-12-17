@@ -11,8 +11,12 @@ import {
   ListItemText,
   ListItemIcon,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon, LocationOn as LocationOnIcon } from '@mui/icons-material';
+import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon, LocationOn as LocationOnIcon, KeyboardArrowDown } from '@mui/icons-material';
 import React, { useState } from 'react';
 import { CircularProgress } from '@mui/material';
 
@@ -41,29 +45,46 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   activeProjectId = null,
   currentLocationId = null,
   canSaveDuringProject = true,
+  onCollapseBottomSheet = null, // Function to collapse bottom sheet on mobile
 }, ref) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const handleNavigateClick = (event) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleNavigateClose = () => {
+  const handleClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    setDeleteDialogOpen(false);
+    if (onDelete) {
+      onDelete();
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
   };
 
   const handleNavigateSelect = (fromWaypoint) => {
     if (onNavigate && fromWaypoint) {
       onNavigate(fromWaypoint);
     }
-    handleNavigateClose();
+    handleClose();
   };
 
   const handleCurrentLocationSelect = () => {
     if (!onNavigate) {
-      handleNavigateClose();
+      handleClose();
       return;
     }
 
@@ -80,7 +101,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             longitude: longitude,
           };
           onNavigate(currentLocationWaypoint);
-          handleNavigateClose();
+          handleClose();
         },
         (error) => {
           console.error('Error getting current location:', error);
@@ -102,7 +123,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             longitude: fallbackLng,
           };
           onNavigate(currentLocationWaypoint);
-          handleNavigateClose();
+          handleClose();
         },
         {
           enableHighAccuracy: true,
@@ -138,484 +159,610 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   const captureAttr = isTouchDevice ? 'environment' : undefined;
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        position: 'fixed',
-        right: { xs: 0, sm: '1.5rem' },
-        bottom: { xs: '5.25rem', sm: '10rem', md: '10rem' },
-        left: {
-          xs: 0,
-          sm: 'auto'
-        },
-        width: {
-          xs: '100%',
-          sm: '19.25rem',
-          md: '22.96875rem'
-        },
-        maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
-        maxHeight: { xs: '40vh', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
-        p: { xs: 1.1, sm: 1.75, md: 2.625 },
-        borderRadius: { xs: 0, sm: '0.875rem' },
-        backgroundColor: theme.palette.background.paper,
-        boxShadow: {
-          xs: theme.palette.mode === 'dark'
-            ? '0 8px 18px rgba(0, 0, 0, 0.35)'
-            : '0 8px 18px rgba(0, 0, 0, 0.18)',
-          sm: theme.palette.mode === 'dark'
-            ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
-            : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
-        },
-        border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
-        zIndex: {
-          xs: theme.zIndex.drawer + 3, // keep below LiveCoordinates to avoid shadow on it
-          sm: theme.zIndex.drawer + 3,
-        },
-        display: 'flex',
-        flexDirection: 'column',
-        gap: { xs: 1.5, sm: 2 },
-        overflowX: 'hidden',
-        overflowY: { xs: 'scroll', sm: 'hidden' },
-        WebkitOverflowScrolling: { xs: 'touch', sm: 'auto' },
-        scrollbarWidth: { xs: 'thin', sm: 'auto' }, // Firefox - keep scrollbar visible
-        scrollbarColor: { xs: '#9e9e9e #e0e0e0', sm: 'auto' },
-        '&::-webkit-scrollbar': {
-          width: { xs: '8px', sm: '0px' },
-          backgroundColor: { xs: '#e0e0e0', sm: 'transparent' },
-        },
-        '&::-webkit-scrollbar-track': {
-          backgroundColor: { xs: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5', sm: 'transparent' },
-        },
-        '&::-webkit-scrollbar-thumb': {
-          backgroundColor: { xs: theme.palette.mode === 'dark' ? '#9e9e9e' : '#9e9e9e', sm: 'transparent' },
-          borderRadius: '999px',
-          border: { xs: theme.palette.mode === 'dark' ? '2px solid #2a2a2a' : '2px solid #f5f5f5', sm: 'none' },
-        },
-        transform: 'translateZ(0)',
-        willChange: 'transform',
-        transition: theme.transitions.create(['transform', 'opacity', 'box-shadow'], {
-          easing: theme.transitions.easing.easeInOut,
-          duration: theme.transitions.duration.enteringScreen,
-        }),
-      }}
-      ref={ref}
-    >
-      <Box sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        mb: 1,
-        flexShrink: 0,
-        position: 'relative',
-        zIndex: 1,
-      }}>
-        <Typography
-          variant="h6"
-          sx={{
-            fontSize: { xs: '1rem', sm: '0.875rem', md: '0.9625rem' },
-            fontWeight: 600,
-            color: theme.palette.text.primary,
-          }}
-        >
-          Waypoint Details
-        </Typography>
-        <IconButton
-          size="small"
-          onClick={onClose}
-          sx={{
-            color: theme.palette.text.secondary,
-            backgroundColor: theme.palette.action.hover,
-            borderRadius: '50%',
-            width: { xs: '1.53125rem', sm: '1.75rem' },
-            height: { xs: '1.53125rem', sm: '1.75rem' },
-            '&:hover': {
-              backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
-            },
-          }}
-        >
-          <Close />
-        </IconButton>
-      </Box>
-
-      <Box
+    <>
+      <Paper
+        elevation={0}
         sx={{
+          position: 'fixed',
+          right: { xs: 0, sm: '1.5rem' },
+          bottom: { xs: 0, sm: '10rem', md: '10rem' },
+          left: {
+            xs: 0,
+            sm: 'auto'
+          },
+          width: {
+            xs: '100%',
+            sm: '19.25rem',
+            md: '22.96875rem'
+          },
+          maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
+          maxHeight: { xs: 'none', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
+          p: { xs: 0, sm: 1.75, md: 2.625 },
+          pt: { xs: 0, sm: 1.75, md: 2.625 },
+          borderRadius: { xs: '24px 24px 0 0', sm: '0.875rem' },
+          overflow: 'hidden',
+          backgroundColor: theme.palette.background.paper,
+          boxShadow: {
+            xs: theme.palette.mode === 'dark'
+              ? '0 8px 18px rgba(0, 0, 0, 0.35)'
+              : '0 8px 18px rgba(0, 0, 0, 0.18)',
+            sm: theme.palette.mode === 'dark'
+              ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
+              : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
+          },
+          border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
+          zIndex: {
+            xs: theme.zIndex.drawer + 3, // keep below LiveCoordinates to avoid shadow on it
+            sm: theme.zIndex.drawer + 3,
+          },
           display: 'flex',
           flexDirection: 'column',
           gap: { xs: 1.5, sm: 2 },
-          flex: 1,
-          overflow: 'auto',
-          minHeight: 0,
-          pt: '10px', // top padding to match UI
-          pb: '10px', // bottom padding to match UI
+          overflowX: 'hidden',
+          overflowY: { xs: 'visible', sm: 'hidden' },
+          WebkitOverflowScrolling: { xs: 'auto', sm: 'auto' },
+          scrollbarWidth: { xs: 'thin', sm: 'auto' }, // Firefox - keep scrollbar visible
+          scrollbarColor: { xs: '#9e9e9e #e0e0e0', sm: 'auto' },
+          '&::-webkit-scrollbar': {
+            width: { xs: '8px', sm: '0px' },
+            backgroundColor: { xs: '#e0e0e0', sm: 'transparent' },
+          },
+          '&::-webkit-scrollbar-track': {
+            backgroundColor: { xs: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5', sm: 'transparent' },
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: { xs: theme.palette.mode === 'dark' ? '#9e9e9e' : '#9e9e9e', sm: 'transparent' },
+            borderRadius: '999px',
+            border: { xs: theme.palette.mode === 'dark' ? '2px solid #2a2a2a' : '2px solid #f5f5f5', sm: 'none' },
+          },
+          transform: 'translateZ(0)',
+          willChange: 'transform',
+          transition: theme.transitions.create(['transform', 'opacity', 'box-shadow'], {
+            easing: theme.transitions.easing.easeInOut,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
+        ref={ref}
       >
-        <TextField
-          label="Name"
-          value={waypointData.name}
-          onChange={(e) => setWaypointData(prev => ({ ...prev, name: e.target.value }))}
-          fullWidth
-          size="small"
-          placeholder="Enter waypoint name"
-          disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-              '& fieldset': {
-                borderColor: theme.palette.divider,
-              },
-              '&:hover fieldset': {
-                borderColor: theme.palette.text.secondary,
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: '#4CAF50',
-              },
-            },
-          }}
-        />
-
-        <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1.5, md: 2 }, alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-          <TextField
-            label="Latitude"
-            value={selectedWaypointId ? waypointData.lat : (currentLocation && currentLocation.lat ? parseFloat(currentLocation.lat).toFixed(6) : '')}
-            onChange={(e) => setWaypointData(prev => ({ ...prev, lat: e.target.value }))}
-            size="small"
+        {/* Full-width arrow button at top - mobile only */}
+        {onCollapseBottomSheet && (
+          <Box
+            onClick={onCollapseBottomSheet}
             sx={{
-              flex: 1,
-              minWidth: 0,
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                '& fieldset': {
-                  borderColor: theme.palette.divider,
-                },
-                '&:hover fieldset': {
-                  borderColor: theme.palette.text.secondary,
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: '#4CAF50',
-                },
-                '& input': {
-                  color: theme.palette.text.primary,
-                },
-              },
-              '& .MuiInputLabel-root': {
-                color: theme.palette.text.secondary,
-              },
-            }}
-            disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
-          />
-          <TextField
-            label="Longitude"
-            value={selectedWaypointId ? waypointData.lng : (currentLocation && currentLocation.lng ? parseFloat(currentLocation.lng).toFixed(6) : '')}
-            onChange={(e) => setWaypointData(prev => ({ ...prev, lng: e.target.value }))}
-            disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
-            size="small"
-            sx={{
-              flex: 1,
-              minWidth: 0,
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                '& fieldset': {
-                  borderColor: theme.palette.divider,
-                },
-                '&:hover fieldset': {
-                  borderColor: theme.palette.text.secondary,
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: '#4CAF50',
-                },
-                '& input': {
-                  color: theme.palette.text.primary,
-                },
-              },
-              '& .MuiInputLabel-root': {
-                color: theme.palette.text.secondary,
-              },
-            }}
-          />
-          <IconButton
-            onClick={onToggleLocationSelection}
-            disabled={locationSelectionActive || Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
-            sx={{
-              mt: 0.5,
+              display: { xs: 'flex', sm: 'none' },
+              justifyContent: 'center',
+              alignItems: 'center',
+              width: '100%',
+              maxWidth: '60%',
+              mx: 'auto',
+              py: 1,
+              cursor: 'pointer',
+              backgroundColor: 'transparent',
               flexShrink: 0,
-              backgroundColor: locationSelectionActive
-                ? theme.palette.primary.main
-                : (theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5'),
-              color: locationSelectionActive ? 'white' : theme.palette.text.secondary,
+              transition: 'background-color 0.2s',
               '&:hover': {
-                backgroundColor: locationSelectionActive
-                  ? theme.palette.primary.dark
-                  : (theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0'),
+                backgroundColor: theme.palette.action.hover,
               },
-              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-              width: { xs: '1.96875rem', sm: '2.1875rem' },
-              height: { xs: '1.96875rem', sm: '2.1875rem' },
+              '&:active': {
+                backgroundColor: theme.palette.action.selected,
+              },
             }}
-            title={isProjectMode ? 'Location selection disabled during survey' : (locationSelectionActive ? 'Click on map to set location' : 'Select location from map')}
           >
-            <LocationSearchingIcon />
+            <KeyboardArrowDown sx={{ fontSize: '1.75rem', color: theme.palette.text.secondary }} />
+          </Box>
+        )}
+
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: { xs: 0.5, sm: 1 },
+          mt: { xs: 0, sm: 0 },
+          px: { xs: 1.5, sm: 0 },
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 1,
+        }}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontSize: { xs: '1.05rem', sm: '0.875rem', md: '0.9625rem' },
+              fontWeight: 600,
+              color: theme.palette.text.primary,
+            }}
+          >
+            Waypoint Details
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={onClose}
+            sx={{
+              color: theme.palette.text.secondary,
+              backgroundColor: theme.palette.action.hover,
+              borderRadius: '50%',
+              width: { xs: '1.53125rem', sm: '1.75rem' },
+              height: { xs: '1.53125rem', sm: '1.75rem' },
+              '&:hover': {
+                backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+              },
+            }}
+          >
+            <Close />
           </IconButton>
         </Box>
 
-        <Box>
-          <input
-            accept="image/*"
-            style={{ display: 'none' }}
-            id="image-upload"
-            type="file"
-            capture={captureAttr}
-            onChange={onImageUpload}
-            disabled={imageUploading}
-          />
-          <label htmlFor="image-upload">
-            <Button
-              variant="outlined"
-              component="span"
-              startIcon={imageUploading ? <CircularProgress color="inherit" size={16} /> : <CloudUpload />}
-              fullWidth
-              disabled={imageUploading}
-              sx={{
-                py: 1.5,
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                borderColor: theme.palette.divider,
-                color: theme.palette.text.secondary,
-                textTransform: 'none',
-                '&:hover': {
-                  backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
-                  borderColor: '#9E9E9E',
-                },
-              }}
-            >
-              {imageUploading ? 'Uploading image...' : (waypointData.image ? 'Change Image' : 'Upload Image')}
-            </Button>
-          </label>
-          {waypointData.image && (
-            <Box
-              component="img"
-              src={waypointData.image}
-              alt="Uploaded"
-              sx={{
-                width: '100%',
-                maxHeight: 200,
-                objectFit: 'cover',
-                borderRadius: 2,
-                mt: 1.5,
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-              }}
-            />
-          )}
-        </Box>
-
-        <TextField
-          label="Notes"
-          multiline
-          rows={3}
-          value={waypointData.notes}
-          onChange={(e) => setWaypointData(prev => ({ ...prev, notes: e.target.value }))}
-          fullWidth
+        <Box
           sx={{
-            '& .MuiOutlinedInput-root': {
-              backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-              '& fieldset': {
-                borderColor: theme.palette.divider,
-              },
-              '&:hover fieldset': {
-                borderColor: theme.palette.text.secondary,
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: '#4CAF50',
-              },
-            },
+            display: 'flex',
+            flexDirection: 'column',
+            gap: { xs: 1.5, sm: 2 },
+            flex: 1,
+            overflow: { xs: 'hidden', sm: 'auto' },
+            minHeight: 0,
+            px: { xs: 1.5, sm: 0 },
+            pt: '10px',
+            pb: { xs: 2.5, sm: '10px' },
           }}
-
-        />
-
-        <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
-          <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5, md: 2 }, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-            <Button
-              variant="contained"
-              startIcon={<Save />}
-              onClick={onSave}
-              disabled={!canSaveDuringProject}
-              title={!canSaveDuringProject ? 'Only current location or project points can be saved during survey' : undefined}
-              sx={{
-                flex: 1,
-                py: { xs: 1.25, sm: 1.5 },
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                backgroundColor: '#4CAF50',
-                textTransform: 'none',
-                fontSize: { xs: '0.765625rem', sm: '0.7875rem', md: '0.875rem' },
-                boxShadow: '0 0.109375rem 0.4375rem rgba(76, 175, 80, 0.3)',
-                '&:hover': {
-                  backgroundColor: '#45a049',
-                  boxShadow: '0 0.25rem 0.75rem rgba(76, 175, 80, 0.4)',
-                },
-              }}
-            >
-              Save WayPoint
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<ArrowOutwardOutlinedIcon />}
-              onClick={handleNavigateClick}
-              disabled={isProjectMode || Boolean(waypointData?.followsLive)}
-              sx={{
-                py: { xs: 1.25, sm: 1.5 },
-                minWidth: { xs: '5rem', sm: '7.5rem' },
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                fontSize: { xs: '0.765625rem', sm: '0.7875rem', md: '0.875rem' },
-                borderColor: theme.palette.divider,
-                color: theme.palette.text.primary,
-                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                textTransform: 'none',
-                '&:hover': {
-                  borderColor: theme.palette.text.secondary,
-                  backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
-                },
-              }}
-            >
-              Navigate
-            </Button>
-          </Box>
-          <Button
-            variant="outlined"
-            startIcon={<Delete />}
-            onClick={onDelete}
-            disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
+        >
+          <TextField
+            label="Name"
+            value={waypointData.name}
+            onChange={(e) => setWaypointData(prev => ({ ...prev, name: e.target.value }))}
             fullWidth
+            size="small"
+            placeholder="Enter waypoint name"
+            disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
             sx={{
-              py: { xs: 1.25, sm: 1.5 },
-              borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-              fontSize: { xs: '0.765625rem', sm: '0.7875rem', md: '0.875rem' },
-              borderColor: '#9E9E9E',
-              color: '#616161',
-              backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-              textTransform: 'none',
-              '&:hover': {
-                borderColor: '#757575',
-                backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
-              },
-              '&.Mui-disabled': {
-                borderColor: theme.palette.divider,
-                color: theme.palette.text.disabled,
-                backgroundColor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f0f0f0',
+              '& .MuiOutlinedInput-root': {
+                fontSize: { xs: '1rem', sm: '0.875rem' },
+                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                '& fieldset': {
+                  borderColor: theme.palette.divider,
+                },
+                '&:hover fieldset': {
+                  borderColor: theme.palette.text.secondary,
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: '#4CAF50',
+                },
               },
             }}
+          />
+
+          <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1.5, md: 2 }, alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+            <TextField
+              label="Latitude"
+              value={selectedWaypointId ? waypointData.lat : (currentLocation && currentLocation.lat ? parseFloat(currentLocation.lat).toFixed(6) : '')}
+              onChange={(e) => setWaypointData(prev => ({ ...prev, lat: e.target.value }))}
+              size="small"
+              InputProps={{
+                readOnly: selectedWaypointId && (!isProjectMode || (waypointData.project_id && String(waypointData.project_id) !== String(activeProjectId))),
+              }}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  '& fieldset': {
+                    borderColor: theme.palette.divider,
+                  },
+                  '&:hover fieldset': {
+                    borderColor: theme.palette.text.secondary,
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#4CAF50',
+                  },
+                  '& input': {
+                    fontSize: { xs: '1rem', sm: '0.875rem' },
+                    color: theme.palette.text.primary,
+                  },
+                },
+                '& .MuiInputLabel-root': {
+                  color: theme.palette.text.secondary,
+                },
+              }}
+              disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
+            />
+            <TextField
+              label="Longitude"
+              value={selectedWaypointId ? waypointData.lng : (currentLocation && currentLocation.lng ? parseFloat(currentLocation.lng).toFixed(6) : '')}
+              onChange={(e) => setWaypointData(prev => ({ ...prev, lng: e.target.value }))}
+              InputProps={{
+                readOnly: selectedWaypointId && (!isProjectMode || (waypointData.project_id && String(waypointData.project_id) !== String(activeProjectId))),
+              }}
+              disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
+              size="small"
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  '& fieldset': {
+                    borderColor: theme.palette.divider,
+                  },
+                  '&:hover fieldset': {
+                    borderColor: theme.palette.text.secondary,
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#4CAF50',
+                  },
+                  '& input': {
+                    fontSize: { xs: '1rem', sm: '0.875rem' },
+                    color: theme.palette.text.primary,
+                  },
+                },
+                '& .MuiInputLabel-root': {
+                  color: theme.palette.text.secondary,
+                },
+              }}
+            />
+            <IconButton
+              onClick={onToggleLocationSelection}
+              disabled={locationSelectionActive || Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
+              sx={{
+                mt: 0.5,
+                flexShrink: 0,
+                backgroundColor: locationSelectionActive
+                  ? theme.palette.primary.main
+                  : (theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5'),
+                color: locationSelectionActive ? 'white' : theme.palette.text.secondary,
+                '&:hover': {
+                  backgroundColor: locationSelectionActive
+                    ? theme.palette.primary.dark
+                    : (theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0'),
+                },
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                width: { xs: '1.96875rem', sm: '2.1875rem' },
+                height: { xs: '1.96875rem', sm: '2.1875rem' },
+              }}
+              title={isProjectMode ? 'Location selection disabled during survey' : (locationSelectionActive ? 'Click on map to set location' : 'Select location from map')}
+            >
+              <LocationSearchingIcon />
+            </IconButton>
+          </Box>
+
+          <Box>
+            <input
+              accept="image/*"
+              style={{ display: 'none' }}
+              id="image-upload"
+              type="file"
+              capture={captureAttr}
+              onChange={onImageUpload}
+              disabled={imageUploading}
+            />
+            <label htmlFor="image-upload">
+              <Button
+                variant="outlined"
+                component="span"
+                startIcon={imageUploading ? <CircularProgress color="inherit" size={16} /> : <CloudUpload />}
+                fullWidth
+                disabled={imageUploading}
+                sx={{
+                  py: 1.5,
+                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                  borderColor: theme.palette.divider,
+                  color: theme.palette.text.secondary,
+                  textTransform: 'none',
+                  '&:hover': {
+                    backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+                    borderColor: '#9E9E9E',
+                  },
+                }}
+              >
+                {imageUploading ? 'Uploading image...' : (waypointData.image ? 'Change Image' : 'Upload Image')}
+              </Button>
+            </label>
+            {waypointData.image && (
+              <Box
+                component="img"
+                src={waypointData.image}
+                alt="Uploaded"
+                sx={{
+                  width: '100%',
+                  maxHeight: 200,
+                  objectFit: 'cover',
+                  borderRadius: 2,
+                  mt: 1.5,
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                }}
+              />
+            )}
+          </Box>
+
+          <TextField
+            label="Notes"
+            multiline
+            rows={3}
+            value={waypointData.notes}
+            onChange={(e) => setWaypointData(prev => ({ ...prev, notes: e.target.value }))}
+            fullWidth
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                '& fieldset': {
+                  borderColor: theme.palette.divider,
+                },
+                '&:hover fieldset': {
+                  borderColor: theme.palette.text.secondary,
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: '#4CAF50',
+                },
+                '& textarea': {
+                  fontSize: { xs: '1rem', sm: '0.875rem' },
+                },
+              },
+            }}
+
+          />
+
+          <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
+            <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5, md: 2 }, flexWrap: { xs: 'nowrap', sm: 'wrap' } }}>
+              <Button
+                variant="contained"
+                startIcon={<Save />}
+                onClick={onSave}
+                disabled={!canSaveDuringProject}
+                title={!canSaveDuringProject ? 'Only current location or project points can be saved during survey' : undefined}
+                sx={{
+                  flex: { xs: 2, sm: 1 }, // 50% on mobile, equal on desktop
+                  py: { xs: 1.25, sm: 1.5 },
+                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  backgroundColor: '#4CAF50',
+                  textTransform: 'none',
+                  fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
+                  boxShadow: '0 0.109375rem 0.4375rem rgba(76, 175, 80, 0.3)',
+                  '&:hover': {
+                    backgroundColor: '#45a049',
+                    boxShadow: '0 0.25rem 0.75rem rgba(76, 175, 80, 0.4)',
+                  },
+                }}
+              >
+                Save WayPoint
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<ArrowOutwardOutlinedIcon />}
+                onClick={handleNavigateClick}
+                disabled={isProjectMode || Boolean(waypointData?.followsLive)}
+                sx={{
+                  flex: { xs: 1, sm: 'initial' }, // 25% on mobile, auto on desktop
+                  py: { xs: 1.25, sm: 1.5 },
+                  minWidth: { xs: 'auto', sm: '7.5rem' },
+                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
+                  borderColor: theme.palette.divider,
+                  color: theme.palette.text.primary,
+                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                  textTransform: 'none',
+                  '&:hover': {
+                    borderColor: theme.palette.text.secondary,
+                    backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+                  },
+                }}
+              >
+                Navigate
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<Delete />}
+                onClick={handleDeleteClick}
+                disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
+                sx={{
+                  display: { xs: 'flex', sm: 'none' }, // Show on mobile only in this row
+                  flex: 1, // 25% on mobile
+                  py: 1.25,
+                  minWidth: 'auto',
+                  borderRadius: '0.65625rem',
+                  fontSize: '0.9rem',
+                  borderColor: '#9E9E9E',
+                  color: '#616161',
+                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                  textTransform: 'none',
+                  '&:hover': {
+                    borderColor: '#757575',
+                    backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+                  },
+                  '&.Mui-disabled': {
+                    borderColor: theme.palette.divider,
+                    color: theme.palette.text.disabled,
+                    backgroundColor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f0f0f0',
+                  },
+                }}
+              >
+                Delete
+              </Button>
+            </Box>
+            {/* Delete button for sm and up - separate row */}
+            <Button
+              variant="outlined"
+              startIcon={<Delete />}
+              onClick={onDelete}
+              disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
+              fullWidth
+              sx={{
+                display: { xs: 'none', sm: 'flex' }, // Hide on mobile, show on sm and up
+                py: { xs: 1.25, sm: 1.5 },
+                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
+                borderColor: '#9E9E9E',
+                color: '#616161',
+                backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                textTransform: 'none',
+                '&:hover': {
+                  borderColor: '#757575',
+                  backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
+                },
+                '&.Mui-disabled': {
+                  borderColor: theme.palette.divider,
+                  color: theme.palette.text.disabled,
+                  backgroundColor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#f0f0f0',
+                },
+              }}
+            >
+              Delete
+            </Button>
+            <Menu
+              anchorEl={anchorEl}
+              open={open}
+              onClose={handleClose}
+              PaperProps={{
+                sx: {
+                  mt: 0.5,
+                  borderRadius: 2,
+                  minWidth: 200,
+                  maxHeight: 300,
+                  width: '280px',
+                  backgroundColor: theme.palette.background.paper,
+                  boxShadow: theme.palette.mode === 'dark'
+                    ? '0 4px 12px rgba(0, 0, 0, 0.5)'
+                    : '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  overflow: 'auto',
+                },
+              }}
+              MenuListProps={{
+                sx: {
+                  overflow: 'auto',
+                  maxHeight: 300,
+                },
+              }}
+            >
+              <MenuItem
+                disabled
+                sx={{
+                  color: theme.palette.text.secondary,
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  opacity: 0.7,
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: theme.palette.background.paper,
+                  zIndex: 1,
+                }}
+              >
+                Navigate from
+              </MenuItem>
+              {/* Current Location option - always available */}
+              {currentLocation && !isProjectMode && (
+                <MenuItem
+                  onClick={handleCurrentLocationSelect}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <MyLocationIcon sx={{ color: '#2196f3', fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Current Location"
+                    secondary={currentLocation.lat && currentLocation.lng
+                      ? `${parseFloat(currentLocation.lat).toFixed(6)}, ${parseFloat(currentLocation.lng).toFixed(6)}`
+                      : 'Getting location...'}
+                    primaryTypographyProps={{
+                      fontSize: '0.9rem',
+                      color: theme.palette.text.primary,
+                      fontWeight: 500,
+                    }}
+                    secondaryTypographyProps={{
+                      fontSize: '0.75rem',
+                      color: theme.palette.text.secondary,
+                    }}
+                  />
+                </MenuItem>
+              )}
+              {currentLocation && savedWaypoints.length > 0 && <Divider />}
+              {/* Saved waypoints */}
+              {savedWaypoints.length === 0 && !currentLocation && (
+                <MenuItem disabled sx={{ color: theme.palette.text.secondary }}>
+                  No saved waypoints available
+                </MenuItem>
+              )}
+              {savedWaypoints.map((waypoint) => (
+                <MenuItem
+                  key={waypoint.id}
+                  onClick={() => handleNavigateSelect(waypoint)}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <LocationOnIcon sx={{ color: '#4CAF50', fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={waypoint.name}
+                    secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)}`}
+                    primaryTypographyProps={{
+                      fontSize: '0.9rem',
+                      color: theme.palette.text.primary,
+                      fontWeight: 500,
+                    }}
+                    secondaryTypographyProps={{
+                      fontSize: '0.75rem',
+                      color: theme.palette.text.secondary,
+                    }}
+                  />
+                </MenuItem>
+              ))}
+            </Menu>
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            handleDeleteConfirm();
+          } else if (e.key === 'Escape') {
+            handleDeleteCancel();
+          }
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            p: 1
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>
+          Delete Waypoint
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this waypoint? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={handleDeleteCancel}
+            variant="text"
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+            sx={{ textTransform: 'none', boxShadow: 1 }}
           >
             Delete
           </Button>
-          <Menu
-            anchorEl={anchorEl}
-            open={open}
-            onClose={handleNavigateClose}
-            PaperProps={{
-              sx: {
-                maxHeight: 300,
-                width: '280px',
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                backgroundColor: theme.palette.background.paper,
-                boxShadow: theme.palette.mode === 'dark'
-                  ? '0 4px 12px rgba(0, 0, 0, 0.5)'
-                  : '0 4px 12px rgba(0, 0, 0, 0.1)',
-                overflow: 'auto',
-              },
-            }}
-            MenuListProps={{
-              sx: {
-                overflow: 'auto',
-                maxHeight: 300,
-              },
-            }}
-          >
-            <MenuItem
-              disabled
-              sx={{
-                color: theme.palette.text.secondary,
-                fontSize: '0.85rem',
-                fontWeight: 500,
-                opacity: 0.7,
-                position: 'sticky',
-                top: 0,
-                backgroundColor: theme.palette.background.paper,
-                zIndex: 1,
-              }}
-            >
-              Navigate from
-            </MenuItem>
-            {/* Current Location option - always available */}
-            {currentLocation && !isProjectMode && (
-              <MenuItem
-                onClick={handleCurrentLocationSelect}
-                sx={{
-                  '&:hover': {
-                    backgroundColor: theme.palette.action.hover,
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  <MyLocationIcon sx={{ color: '#2196f3', fontSize: 20 }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Current Location"
-                  secondary={currentLocation.lat && currentLocation.lng
-                    ? `${parseFloat(currentLocation.lat).toFixed(6)}, ${parseFloat(currentLocation.lng).toFixed(6)}`
-                    : 'Getting location...'}
-                  primaryTypographyProps={{
-                    fontSize: '0.9rem',
-                    color: theme.palette.text.primary,
-                    fontWeight: 500,
-                  }}
-                  secondaryTypographyProps={{
-                    fontSize: '0.75rem',
-                    color: theme.palette.text.secondary,
-                  }}
-                />
-              </MenuItem>
-            )}
-            {currentLocation && savedWaypoints.length > 0 && <Divider />}
-            {/* Saved waypoints */}
-            {savedWaypoints.length === 0 && !currentLocation && (
-              <MenuItem disabled sx={{ color: theme.palette.text.secondary }}>
-                No saved waypoints available
-              </MenuItem>
-            )}
-            {savedWaypoints.map((waypoint) => (
-              <MenuItem
-                key={waypoint.id}
-                onClick={() => handleNavigateSelect(waypoint)}
-                sx={{
-                  '&:hover': {
-                    backgroundColor: theme.palette.action.hover,
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40 }}>
-                  <LocationOnIcon sx={{ color: '#4CAF50', fontSize: 20 }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={waypoint.name}
-                  secondary={`${parseFloat(waypoint.latitude).toFixed(6)}, ${parseFloat(waypoint.longitude).toFixed(6)}`}
-                  primaryTypographyProps={{
-                    fontSize: '0.9rem',
-                    color: theme.palette.text.primary,
-                    fontWeight: 500,
-                  }}
-                  secondaryTypographyProps={{
-                    fontSize: '0.75rem',
-                    color: theme.palette.text.secondary,
-                  }}
-                />
-              </MenuItem>
-            ))}
-          </Menu>
-        </Box>
-      </Box>
-    </Paper>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 });
 

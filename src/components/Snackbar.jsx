@@ -28,13 +28,13 @@ function CustomSnackbar({ open, message, severity, onClose }) {
           minWidth: { xs: 'auto', sm: '14.0625rem' },
           maxWidth: { xs: '100%', sm: '18.75rem' },
           width: { xs: '100%', sm: 'auto' },
-          fontSize: { xs: '0.65625rem', sm: '0.75rem' },
+          fontSize: { xs: '0.9rem', sm: '0.75rem' },
           '& .MuiAlert-icon': {
             color: '#fff',
-            fontSize: { xs: '0.84375rem', sm: '0.9375rem' },
+            fontSize: { xs: '1.1rem', sm: '0.9375rem' },
           },
           '& .MuiAlert-message': {
-            fontSize: { xs: '0.65625rem', sm: '0.75rem' },
+            fontSize: { xs: '0.9rem', sm: '0.75rem' },
             padding: { xs: '0.375rem 0', sm: '0.5625rem 0' },
           },
           '& .MuiAlert-action': {
