@@ -3550,14 +3550,14 @@ function App() {
             left: '50%',
             transform: 'translateX(-50%)',
             width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(45%,230px)') : 'fit-content',
-            maxWidth: isMobile ? '72%' : 'min(90%,720px)',
+            maxWidth: { xs: '72%', sm: 'min(95%, 900px)', md: 'min(90%, 1000px)' },
             zIndex: { xs: theme.zIndex.drawer + 3, sm: theme.zIndex.drawer + 30 },
             display: 'flex',
             flexDirection: isMobile ? 'column' : 'row',
             alignItems: 'center',
             gap: isMobile ? 0.5 : 1,
-            px: 1,
-            py: 1,
+            px: { xs: 1, sm: 2, md: 3 },
+            py: { xs: 1, sm: 1.5 },
             borderRadius: 4,
             cursor: isMobile ? 'pointer' : 'default',
             transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -3579,7 +3579,7 @@ function App() {
             </Box>
 
             {(!isMobile || projectBarExpanded) && (
-              <Box ref={optionsRef} sx={{ display: 'flex', gap: isMobile ? 0.5 : 1, mt: isMobile ? 1 : 0, width: '100%', flexWrap: 'nowrap', justifyContent: 'space-between', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+              <Box ref={optionsRef} sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5, md: 2 }, mt: isMobile ? 1 : 0, width: isMobile ? '100%' : 'auto', flexWrap: 'nowrap', justifyContent: isMobile ? 'space-between' : 'center', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
                 <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', borderRadius: isMobile ? '50%' : undefined, aspectRatio: isMobile ? '1' : undefined, minWidth: isMobile ? '40px' : undefined, width: isMobile ? '40px' : undefined, height: isMobile ? '40px' : undefined, '& .MuiSvgIcon-root': { fontSize: isMobile ? '1.75rem' : undefined } }} onClick={async (e) => {
                   e.stopPropagation();
 
