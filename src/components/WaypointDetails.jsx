@@ -337,7 +337,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               onChange={(e) => setWaypointData(prev => ({ ...prev, lat: e.target.value }))}
               size="small"
               InputProps={{
-                readOnly: selectedWaypointId && (!isProjectMode || (waypointData.project_id && String(waypointData.project_id) !== String(activeProjectId))),
+                readOnly: !!selectedWaypointId, // Always read-only if a waypoint is selected (saved point or during survey)
               }}
               sx={{
                 flex: 1,
@@ -370,7 +370,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               value={selectedWaypointId ? waypointData.lng : (currentLocation && currentLocation.lng ? parseFloat(currentLocation.lng).toFixed(6) : '')}
               onChange={(e) => setWaypointData(prev => ({ ...prev, lng: e.target.value }))}
               InputProps={{
-                readOnly: selectedWaypointId && (!isProjectMode || (waypointData.project_id && String(waypointData.project_id) !== String(activeProjectId))),
+                readOnly: !!selectedWaypointId, // Always read-only if a waypoint is selected
               }}
               disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
               size="small"
@@ -401,7 +401,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             />
             <IconButton
               onClick={onToggleLocationSelection}
-              disabled={locationSelectionActive || Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
+              // Disable unless we are creating a brand new point (no selected ID)
+              disabled={!!selectedWaypointId || locationSelectionActive}
               sx={{
                 mt: 0.5,
                 flexShrink: 0,

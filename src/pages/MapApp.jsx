@@ -65,6 +65,7 @@ L.Icon.Default.mergeOptions({
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [singlePointCaptureActive, setSinglePointCaptureActive] = useState(false);
+  const [previewModeActive, setPreviewModeActive] = useState(false);
   const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [cursorCoordinates, setCursorCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [currentLocationWaypointId, setCurrentLocationWaypointId] = useState(null);
@@ -107,7 +108,18 @@ function App() {
   const [autoPausedPromptShown, setAutoPausedPromptShown] = useState(false);
   const [isProjectMode, setIsProjectMode] = useState(false);
   const [endProjectDialogOpen, setEndProjectDialogOpen] = useState(false); // Confirmation dialog for ending project
+  const [exitProjectWarningOpen, setExitProjectWarningOpen] = useState(false); // Warning dialog for restricted actions during project
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
+
+  // Refs to track state for async/timeout usage (prevent stale closures)
+  const waypointsRef = useRef(waypoints);
+  const activeProjectRef = useRef(activeProject);
+  const isProjectModeRef = useRef(isProjectMode);
+  const loadingProjectRef = useRef(false); // Lock to prevent clearing map while loading project
+
+  useEffect(() => { waypointsRef.current = waypoints; }, [waypoints]);
+  useEffect(() => { activeProjectRef.current = activeProject; }, [activeProject]);
+  useEffect(() => { isProjectModeRef.current = isProjectMode; }, [isProjectMode]);
   const watchPositionIdRef = useRef(null); // Reference to watchPosition ID for cleanup
   const routePolylineRef = useRef(null); // Reference to route polyline on map
   const navigationStartMarkerRef = useRef(null); // Reference to starting point marker for navigation
@@ -158,16 +170,35 @@ function App() {
 
   // Rebuild markers on map according to mode (project mode shows only project's points + live location)
   const clearAllMarkers = () => {
+    // 1. Clear via ref (cleanup knowns)
     try {
       Object.keys(markersRef.current).forEach(id => {
         try { markersRef.current[id].remove(); } catch (e) { }
         delete markersRef.current[id];
       });
-    } catch (e) { console.error('Error clearing markers:', e); }
-    // clear selected overlay too
+    } catch (e) { console.error('Error clearing markers ref:', e); }
+
+    // 2. Clear selected overlay
     if (selectedMarkerOverlayRef.current) {
       try { selectedMarkerOverlayRef.current.remove(); } catch (e) { }
       selectedMarkerOverlayRef.current = null;
+    }
+
+    // 3. Nuclear sweep: iterate map layers to remove any ghost markers
+    if (mapRef.current) {
+      mapRef.current.eachLayer((layer) => {
+        // Skip base tile layers
+        if (layer instanceof L.TileLayer) return;
+
+        // Skip the live location marker
+        if (liveLocationMarkerRef.current && layer === liveLocationMarkerRef.current) return;
+
+        // Remove Markers (pins) and CircleMarkers (overlays)
+        // Also remove Polylines (routes) to ensure clean slate
+        if (layer instanceof L.Marker || layer instanceof L.CircleMarker || layer instanceof L.Polyline) {
+          try { layer.remove(); } catch (e) { }
+        }
+      });
     }
   };
 
@@ -199,11 +230,19 @@ function App() {
   const refreshMapMarkers = () => {
     const map = mapRef.current;
     if (!map) return;
+
+    // Use refs to get latest state, avoiding stale closures in timeouts
+    const currentWaypoints = waypointsRef.current;
+    const currentIsProjectMode = isProjectModeRef.current;
+    const currentActiveProject = activeProjectRef.current;
+
     clearAllMarkers();
+
     // Add only project waypoints in project mode, otherwise add all
-    const itemsToAdd = (isProjectMode && activeProject && activeProject.id)
-      ? waypoints.filter(wp => wp.project_id && String(wp.project_id) === String(activeProject.id))
-      : waypoints;
+    const itemsToAdd = (currentIsProjectMode && currentActiveProject && currentActiveProject.id)
+      ? currentWaypoints.filter(wp => wp.project_id && String(wp.project_id) === String(currentActiveProject.id))
+      : currentWaypoints;
+
     itemsToAdd.forEach(wp => addMarkerForWaypoint(wp));
     // add live location marker
     try {
@@ -225,6 +264,28 @@ function App() {
     }
     // ensure selected overlay is updated
     updateSelectedMarkerOverlay(selectedWaypointId);
+  };
+
+  // Universal function to clear everything but the live location
+  const resetMapAndState = () => {
+    // 1. Clear waypoints state (clears selector bar and effectively the React representation of points)
+    setWaypoints([]);
+
+    // 2. Clear all marker instances from the map
+    clearAllMarkers();
+
+    // 3. Clear other relevant UI states
+    setDbWaypointIds({});
+    setSelectedWaypointId(null);
+    setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+    updateSelectedMarkerOverlay(null);
+    setCurrentLocationWaypointId(null);
+
+    // Note: Live location marker (liveLocationMarkerRef) is separate from markersRef 
+    // and is NOT cleared by clearAllMarkers(), so it stays.
+
+    // Update refs immediately to reflect cleared state
+    waypointsRef.current = [];
   };
 
   // Detect if device has cursor (mouse) or is touch-only
@@ -271,6 +332,9 @@ function App() {
     }
     setActiveProject({ id: project.id, name: project.name });
     setIsProjectMode(true);
+    // Clear everything before starting fresh project survey
+    resetMapAndState();
+
     // Remove previously-staged single-point captures so only project points remain visible
     removePinCapturedPoints();
     setWaypointDetailsOpen(true);
@@ -331,6 +395,9 @@ function App() {
     }
     setActiveProject({ id: project.id, name: project.name });
     setIsProjectMode(true);
+    // Clear everything before loading resumed project
+    resetMapAndState();
+
     // Remove previously-staged single-point captures so only project points remain visible
     removePinCapturedPoints();
     setWaypointDetailsOpen(true);
@@ -815,9 +882,24 @@ function App() {
   };
 
   const handleMenuItemClick = (item) => {
+    // Check if project mode is active for restricted actions
+    // Allowed actions: 'Exit Survey' (which isn't in menu directly but handled via Stop)
+    // Restricted: Single Point Capture, Start Survey (new), Saved Points, Import File
+    if (isProjectMode && ['Single Point Capture', 'Start Survey', 'Saved Points', 'Import File'].includes(item)) {
+      setExitProjectWarningOpen(true);
+      if (isMobile) setSidebarOpen(false);
+      return;
+    }
+
     if (item === 'Single Point Capture') {
-      setSinglePointCaptureActive(!singlePointCaptureActive);
-      if (singlePointCaptureActive) {
+      const willBeActive = !singlePointCaptureActive;
+      setSinglePointCaptureActive(willBeActive);
+      setPreviewModeActive(false);
+
+      if (willBeActive) {
+        // Trigger reset when activating
+        resetMapAndState();
+
         // Reset when turning off survey
         setSelectedWaypointId(null);
         setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
@@ -1079,6 +1161,7 @@ function App() {
       // Activate survey mode if not already active
       if (!singlePointCaptureActive) {
         setSinglePointCaptureActive(true);
+        setPreviewModeActive(false);
       }
 
       // Add waypoints to the map
@@ -1389,6 +1472,7 @@ function App() {
       // Activate survey mode if not already active
       if (!singlePointCaptureActive) {
         setSinglePointCaptureActive(true);
+        setPreviewModeActive(false);
       }
 
       // Update coordinates to show the waypoint location
@@ -2360,6 +2444,7 @@ function App() {
                   }
                   return prev;
                 });
+                setPreviewModeActive(false);
 
                 // Wait a bit for survey mode to activate, then create waypoint
                 setTimeout(() => {
@@ -2624,6 +2709,9 @@ function App() {
 
       // Add click event listener to place marker
       const handleMapClick = (e) => {
+        // Prevent adding points if in preview mode
+        if (previewModeActive) return;
+
         // When in project (survey) mode, disable creating arbitrary markers unless pin mode is active
         if (isProjectMode && !pinModeActive) return;
         // If location selection is active and a waypoint is selected, set that waypoint's coordinates to the clicked spot
@@ -2791,7 +2879,7 @@ function App() {
       // Refresh markers to ensure live marker and saved markers are correct
       setTimeout(() => refreshMapMarkers(), 10);
     }
-  }, [singlePointCaptureActive]);
+  }, [singlePointCaptureActive, previewModeActive]);
 
   // Recalculate map size when mobile padding changes (e.g., waypoint details open)
   // On mobile with bottom sheet, only resize when FULLY EXPANDED, not during animation
@@ -3294,66 +3382,32 @@ function App() {
             onClose={() => setSavedPointsOpen(false)}
             onShowSnackbar={showSnackbar}
             onSelectWaypoint={(waypoint) => {
-              if (!mapRef.current) return;
+              // Clear current map/state before showing the selected saved point
+              resetMapAndState();
 
-              const map = mapRef.current;
-              const mapContainer = map.getContainer();
+              const waypointId = `saved-${waypoint.id}`;
 
-              // Clear previous selection and red circle overlay
-              const previousSelectedId = selectedWaypointId;
-              if (previousSelectedId) {
-                updateSelectedMarkerOverlay(null);
-                setSelectedWaypointId(null);
-              }
+              // We don't check alreadyExists because we just cleared everything!
+              // But if we want to support multiple saved points later, we should revisit.
+              // For now, "view saved point" implies viewing just that one (or adding it to empty map).
 
-              // Check if waypoint already exists (by database ID)
-              const existingEntry = Object.entries(dbWaypointIds).find(
-                ([localId, dbId]) => dbId === waypoint.id
-              );
-
-              let waypointId;
-
-              if (existingEntry) {
-                // Waypoint already exists, use existing local ID
-                waypointId = existingEntry[0];
-
-                // Update waypoint data in case it changed in database
-                setWaypoints(prev => prev.map(wp =>
-                  wp.id === waypointId
-                    ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', image: waypoint.image || null }
-                    : wp
-                ));
-              } else {
-                // Create new waypoint ID
-                waypointId = `waypoint-${Date.now()}`;
-
-                // Add to waypoints array
-                setWaypoints(prev => [...prev, {
-                  id: waypointId,
-                  lat: waypoint.lat,
-                  lng: waypoint.lng,
-                  name: waypoint.name,
-                  notes: waypoint.notes || '',
-                  image: waypoint.image || null
-                }]);
-
-                // Create marker (default L.marker)
-                const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-
-                // Add click handler
-                marker.on('click', function () {
-                  handleSelectWaypoint(waypointId);
-                });
-
-                markersRef.current[waypointId] = marker;
-
-                // Store database ID mapping (waypoint.id is the database ID)
-                setDbWaypointIds(prev => ({ ...prev, [waypointId]: waypoint.id }));
-              }
+              // Add to map
+              setWaypoints([{
+                id: waypointId,
+                lat: waypoint.lat,
+                lng: waypoint.lng,
+                name: waypoint.name,
+                notes: waypoint.notes || '',
+                image: waypoint.image || null,
+                project_id: waypoint.project_id || null,
+                project_name: waypoint.project_name || null
+              }]);
+              setDbWaypointIds({ [waypointId]: waypoint.id });
 
               // Activate survey mode if not already active
               if (!singlePointCaptureActive) {
                 setSinglePointCaptureActive(true);
+                setPreviewModeActive(false);
               }
 
               // Update coordinates to show the waypoint location
@@ -3362,29 +3416,19 @@ function App() {
                 lng: waypoint.lng.toFixed(6)
               });
 
-              // Select the waypoint and open details
-              // Use setTimeout to ensure survey mode is activated and state is updated first
               setTimeout(() => {
-                // Center map on waypoint
-                map.setView([waypoint.lat, waypoint.lng], 13);
+                const map = mapRef.current;
+                if (!map) return;
 
-                // Get current waypoints to ensure we have the latest state
-                setWaypoints(currentWaypoints => {
-                  return currentWaypoints;
-                });
+                const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
+                marker.on('click', function () { handleSelectWaypoint(waypointId); });
+                markersRef.current[waypointId] = marker;
+                marker.fire('click');
 
-                // Set selected waypoint
-                setSelectedWaypointId(waypointId);
+                map.setView([waypoint.lat, waypoint.lng], 15);
+              }, 100);
 
-                // Set waypoint data for editing with all database information
-                setWaypointData({
-                  name: waypoint.name,
-                  lat: waypoint.lat.toFixed(6),
-                  lng: waypoint.lng.toFixed(6),
-                  notes: waypoint.notes || '',
-                  image: waypoint.image || null
-                });
-              }, 150);
+              setSavedPointsOpen(false);
             }}
             onPreviewProject={(project) => {
               if (isProjectMode) {
@@ -3398,32 +3442,13 @@ function App() {
 
               if (project.items && project.items.length > 0) {
                 // Clear existing waypoints (except the live blue marker which is separate)
-                // We keep the logic simple: verify if we need to remove specific points. 
-                // The user requested to remove existing "few points marked".
-                // We do not want to remove the current location if it was somehow added to waypoints (like Default Location) 
-                // but usually blue marker matches `currentLocationWaypointId` IF it was added.
-                // However, the blue marker from GPS is NOT in waypoints array.
-                // So clearing waypoints is safe for "removing points marked".
-
-                // If there is a 'Default Location' point (fallback), we might want to keep it? 
-                // The user said "except the blue current location marker". 
-                // If they are on GPS, blue marker is separate. If they are on Default, it's a marker.
-                // Let's assume we clear everything to be clean for the project view.
-
-                // Explicitly clear waypoints first to satisfy "those should be removed"
-                setWaypoints([]);
-                setDbWaypointIds({});
-                if (markersRef.current) {
-                  Object.keys(markersRef.current).forEach(id => {
-                    try { markersRef.current[id].remove(); } catch (e) { }
-                  });
-                  markersRef.current = {};
-                }
+                resetMapAndState();
 
                 // Small timeout to allow state clear to process before adding new ones
                 setTimeout(() => {
                   loadProjectWaypointsToMap({ waypoints: project.items }, { id: project.project_id, name: project.project_name });
                   setSinglePointCaptureActive(true);
+                  setPreviewModeActive(true);
                   showSnackbar(`Loaded points from ${project.project_name}`, 'success');
                 }, 50);
 
@@ -3651,6 +3676,32 @@ function App() {
               sx={{ textTransform: 'none', boxShadow: 1 }}
             >
               End Project
+            </Button>
+          </DialogActions>
+        </Dialog>
+        {/* Exit Project Warning Dialog */}
+        <Dialog
+          open={exitProjectWarningOpen}
+          onClose={() => setExitProjectWarningOpen(false)}
+          PaperProps={{
+            sx: { borderRadius: 3, p: 1 }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 600 }}>
+            Project in Progress
+          </DialogTitle>
+          <DialogContent>
+            <Typography>
+              You need to exit the current survey project before accessing this feature.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={() => setExitProjectWarningOpen(false)}
+              variant="contained"
+              sx={{ textTransform: 'none', borderRadius: 2 }}
+            >
+              OK
             </Button>
           </DialogActions>
         </Dialog>
