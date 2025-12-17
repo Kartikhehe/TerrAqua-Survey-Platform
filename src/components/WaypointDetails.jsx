@@ -584,7 +584,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             <Button
               variant="outlined"
               startIcon={<Delete />}
-              onClick={onDelete}
+              onClick={handleDeleteClick}
               disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
               fullWidth
               sx={{

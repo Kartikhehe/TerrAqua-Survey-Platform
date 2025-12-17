@@ -288,26 +288,29 @@ function App() {
     waypointsRef.current = [];
   };
 
-  // Detect if device has cursor (mouse) or is touch-only
-  // Check for touch support - if device supports touch, assume no cursor
+  // Detect if device has cursor (mouse/trackpad) or is touch-only
+  // Use pointer media query to detect if primary input is a fine pointer (mouse/trackpad)
   const [hasCursor, setHasCursor] = useState(() => {
     if (typeof window === 'undefined') return true;
-    // Check if device has touch capability
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    // Check if it's a hybrid device (like Surface) - assume it has cursor if screen is large
-    const isLargeScreen = window.innerWidth >= 768;
-    return !hasTouch || (hasTouch && isLargeScreen);
+    // Check if the primary pointing device is precise (mouse/trackpad)
+    // pointer: fine = mouse/trackpad, pointer: coarse = touch
+    return window.matchMedia('(pointer: fine)').matches;
   });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const checkCursor = () => {
-      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      const isLargeScreen = window.innerWidth >= 768;
-      setHasCursor(!hasTouch || (hasTouch && isLargeScreen));
+      // Re-check if primary pointing device is precise
+      setHasCursor(window.matchMedia('(pointer: fine)').matches);
     };
+    // Listen for changes (e.g., when external mouse is connected/disconnected)
+    const mediaQuery = window.matchMedia('(pointer: fine)');
+    mediaQuery.addEventListener('change', checkCursor);
     window.addEventListener('resize', checkCursor);
-    return () => window.removeEventListener('resize', checkCursor);
+    return () => {
+      mediaQuery.removeEventListener('change', checkCursor);
+      window.removeEventListener('resize', checkCursor);
+    };
   }, []);
 
   const handleToggleDarkMode = () => {
