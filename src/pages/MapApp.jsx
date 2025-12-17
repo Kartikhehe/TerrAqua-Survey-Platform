@@ -333,8 +333,13 @@ function App() {
       setStartSurveyDialogOpen(false);
       return;
     }
-    setActiveProject({ id: project.id, name: project.name });
+
+    // Set active project FIRST - update both state and ref immediately
+    const projectInfo = { id: project.id, name: project.name };
+    setActiveProject(projectInfo);
+    activeProjectRef.current = projectInfo; // Update ref immediately for synchronous access
     setIsProjectMode(true);
+    isProjectModeRef.current = true; // Update ref immediately
     // Clear everything before starting fresh project survey
     resetMapAndState();
 
@@ -348,14 +353,14 @@ function App() {
 
     // Persist state and save Start Point
     try {
-      // Set project status to playing
+      // Set project status to playing FIRST
       await projectsAPI.setStatus(project.id, 'playing');
 
       console.log('Waiting for GPS coordinates...', coordinates);
 
       // Wait for GPS coordinates to be available
       let attempts = 0;
-      const maxAttempts = 15; // Increased to 3 seconds
+      const maxAttempts = 15; // 3 seconds total
       while ((!coordinates?.lat || !coordinates?.lng) && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 200));
         attempts++;
@@ -367,11 +372,49 @@ function App() {
       // Auto-save Start Point with current GPS location
       if (coordinates?.lat && coordinates?.lng) {
         console.log('Saving Start Point with coordinates:', coordinates);
-        const result = await createProjectWaypoint('Start Point');
-        if (result) {
+
+        // Directly save the waypoint with project ID
+        const lat = parseFloat(coordinates.lat);
+        const lng = parseFloat(coordinates.lng);
+        const waypointId = `wp-${Date.now()}`;
+
+        try {
+          const saved = await waypointsAPI.create({
+            name: 'Start Point',
+            lat: lat,
+            lng: lng,
+            notes: '',
+            project_id: project.id
+          });
+
+          // Add to local state
+          const waypoint = {
+            id: waypointId,
+            name: 'Start Point',
+            lat,
+            lng,
+            notes: '',
+            image: null,
+            project_id: project.id,
+            project_name: project.name
+          };
+
+          setWaypoints(prev => [...prev, waypoint]);
+
+          // Create marker
+          const map = mapRef.current;
+          if (map) {
+            const marker = L.marker([lat, lng]).addTo(map);
+            marker.on('click', function () { handleSelectWaypoint(waypointId); });
+            markersRef.current[waypointId] = marker;
+          }
+
+          setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
           console.log('Start Point saved successfully');
-        } else {
-          console.log('Start Point save returned null');
+          showSnackbar('Start Point saved', 'success');
+        } catch (err) {
+          console.error('Error saving Start Point:', err);
+          showSnackbar('Error saving Start Point: ' + err.message, 'error');
         }
       } else {
         console.log('GPS not available after waiting');
@@ -379,7 +422,7 @@ function App() {
       }
     } catch (err) {
       console.error('Error setting project to playing or saving Start Point:', err);
-      showSnackbar('Error saving Start Point: ' + err.message, 'error');
+      showSnackbar('Error initializing project: ' + err.message, 'error');
     }
 
     // Clear selection so details default to current location
