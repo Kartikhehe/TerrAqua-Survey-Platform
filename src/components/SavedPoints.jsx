@@ -251,13 +251,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
         fullWidth
         PaperProps={{
           sx: {
-            borderRadius: { xs: '0.5625rem', sm: '0.75rem' },
+            borderRadius: { xs: '0.75rem', sm: '1rem' },
             backgroundColor: theme.palette.background.paper,
             boxShadow: theme.palette.mode === 'dark'
-              ? '0 0.1875rem 0.5625rem rgba(0, 0, 0, 0.5)'
-              : '0 0.1875rem 0.5625rem rgba(0, 0, 0, 0.1)',
-            margin: { xs: '0.75rem', sm: 'auto' },
-            maxHeight: { xs: 'calc(100vh - 1.5rem)', sm: '90vh' },
+              ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
+              : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
+            margin: { xs: '1rem', sm: 'auto' },
+            maxHeight: { xs: '80vh', sm: '90vh' },
+            width: { xs: 'calc(100% - 2rem)', sm: 'auto' } // Ensure it doesn't touch edges on mobile
           },
         }}
       >
@@ -347,7 +348,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
           </Box>
         )}
 
-        <DialogContent sx={{ p: 0, maxHeight: { xs: 'calc(100vh - 12rem)', sm: '60vh' }, overflow: 'auto' }}>
+        <DialogContent sx={{ p: 0, maxHeight: { xs: '55vh', sm: '60vh' }, overflow: 'auto' }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 3, sm: 4 } }}>
               <CircularProgress sx={{ color: '#4CAF50' }} />
@@ -452,12 +453,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                             size="small"
                             onClick={(e) => handleDeleteClick(waypoint.id, e)}
                             color="error"
+                            title="Delete point"
                           >
                             <DeleteOutlined fontSize="small" />
                           </IconButton>
                           <IconButton
                             size="small"
                             onClick={(e) => handleViewClick(waypoint, e)}
+                            title="Locate on map"
                           >
                             <ArrowOutwardOutlined fontSize="small" />
                           </IconButton>
@@ -499,12 +502,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                               size="small"
                               onClick={(e) => handleDeleteClick(waypoint.id, e)}
                               color="error"
+                              title="Delete point"
                             >
                               <DeleteOutlined fontSize="small" />
                             </IconButton>
                             <IconButton
                               size="small"
                               onClick={(e) => handleViewClick(waypoint, e)}
+                              title="Locate on map"
                             >
                               <ArrowOutwardOutlined fontSize="small" />
                             </IconButton>

@@ -309,7 +309,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             label="Longitude"
             value={selectedWaypointId ? waypointData.lng : (currentLocation && currentLocation.lng ? parseFloat(currentLocation.lng).toFixed(6) : '')}
             onChange={(e) => setWaypointData(prev => ({ ...prev, lng: e.target.value }))}
-            disabled={isProjectMode && !selectedWaypointId}
+            disabled={Boolean(waypointData?.followsLive) || (isProjectMode && selectedWaypointId && waypointData.project_id && String(waypointData.project_id) === String(activeProjectId))}
             size="small"
             sx={{
               flex: 1,
@@ -432,7 +432,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               },
             },
           }}
-          disabled={isProjectMode || Boolean(waypointData?.followsLive)}
+
         />
 
         <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
