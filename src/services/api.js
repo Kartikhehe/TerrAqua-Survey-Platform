@@ -360,3 +360,80 @@ export const projectsAPI = {
   }
 };
 
+// Tracks API
+export const tracksAPI = {
+  create: async (projectId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to create track');
+    }
+    return response.json();
+  },
+
+  addPoint: async (trackId, point) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/points`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(point),
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to add track point');
+    }
+    return response.json();
+  },
+
+  endTrack: async (trackId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/end`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to end track');
+    }
+    return response.json();
+  },
+
+  getActiveTrack: async (projectId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/project/${projectId}/active`, {
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      if (response.status === 404) return null; // No active track
+      throw new Error('Failed to fetch active track');
+    }
+    return response.json();
+  },
+
+  getByProject: async (projectId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/project/${projectId}`, {
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error('Failed to fetch tracks');
+    return response.json();
+  },
+
+  exportGPX: async (trackId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/gpx`, {
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error('Failed to export GPX');
+    return response.text();
+  },
+};
+
