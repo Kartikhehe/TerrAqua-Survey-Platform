@@ -191,6 +191,9 @@ function App() {
 
     // 3. Nuclear sweep: iterate map layers to remove any ghost markers
     if (mapRef.current) {
+      // Get all legitimate marker instances from markersRef
+      const legitimateMarkers = new Set(Object.values(markersRef.current));
+
       mapRef.current.eachLayer((layer) => {
         // Skip base tile layers
         if (layer instanceof L.TileLayer) return;
@@ -201,6 +204,11 @@ function App() {
         // Remove Markers (pins) and CircleMarkers (overlays)
         // Also remove Polylines (routes) to ensure clean slate, BUT preserve the live GPS track and current navigation route
         if (layer instanceof L.Marker || layer instanceof L.CircleMarker || layer instanceof L.Polyline) {
+          // Exclude legitimate waypoint markers that are tracked in markersRef
+          if (layer instanceof L.Marker && legitimateMarkers.has(layer)) {
+            return;
+          }
+
           // Exclude live GPS track polyline if it exists
           if (gpsTrackerRef.current && gpsTrackerRef.current.polyline && layer === gpsTrackerRef.current.polyline) {
             return;
@@ -1238,6 +1246,9 @@ function App() {
           : { ...wp, name: `Point ${index + 1}` }
       );
       setWaypoints(updatedWaypoints);
+
+      // Refresh map markers to ensure the saved point appears immediately
+      setTimeout(() => refreshMapMarkers(), 10);
 
       // After saving current location as a project point, advance default name for the next unsaved save
       if (isProjectMode && selectedWaypointId === currentLocationWaypointId) {
