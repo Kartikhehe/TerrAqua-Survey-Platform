@@ -67,7 +67,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [singlePointCaptureActive, setSinglePointCaptureActive] = useState(false);
   const [previewModeActive, setPreviewModeActive] = useState(false);
-  const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
+  const [coordinates, setCoordinates] = useState({ lat: 0, lng: 0, accuracy: null, elevation: null });
   const [cursorCoordinates, setCursorCoordinates] = useState({ lat: 0, lng: 0, accuracy: null });
   const [currentLocationWaypointId, setCurrentLocationWaypointId] = useState(null);
   const currentLocationWaypointRef = useRef(null);
@@ -2422,7 +2422,8 @@ function App() {
               setCoordinates({
                 lat: newLat.toFixed(6),
                 lng: newLng.toFixed(6),
-                accuracy: newAccuracy ? Math.round(newAccuracy) : null
+                accuracy: newAccuracy ? Math.round(newAccuracy) : null,
+                elevation: position.coords.altitude ? Math.round(position.coords.altitude) : null
               });
 
               // If accuracy becomes low, show a lightweight snackbar warning (non-blocking)
@@ -2838,7 +2839,8 @@ function App() {
       gpsTrackerRef.current.processPosition(
         coordinates.lat,
         coordinates.lng,
-        coordinates.accuracy || null
+        coordinates.accuracy || null,
+        coordinates.elevation || null
       );
     }
   }, [coordinates, projectRecording]);
