@@ -51,6 +51,7 @@ import { createSurveyMarker, createLiveLocationMarker, updateMobileMapHeight } f
 import { parseGeoJSON, parseKML } from '../utils/fileUtils';
 import { startTimerFromProject, stopTimer } from '../utils/projectUtils';
 import { decodePolyline } from '../utils/navigationUtils';
+import { GPSTracker } from '../utils/gpsTracker';
 import { INDIA_CENTER, drawerWidth, drawerCollapsedWidth } from '../constants/mapConstants';
 
 // Ensure default Leaflet markers load correctly when bundled (e.g., on Vercel)
@@ -111,12 +112,9 @@ function App() {
   const [exitProjectWarningOpen, setExitProjectWarningOpen] = useState(false); // Warning dialog for restricted actions during project
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
 
-  // GPS Tracking state
-  const [activeTrackId, setActiveTrackId] = useState(null); // Current active track ID
-  const [trackPolyline, setTrackPolyline] = useState(null); // Leaflet polyline for current track
-  const trackPolylineRef = useRef(null); // Reference to track polyline
-  const trackRecordingIntervalRef = useRef(null); // Interval for recording GPS points
-  const [trackPoints, setTrackPoints] = useState([]); // Array of recorded GPS points
+  // GPS Tracking (using GPSTracker class)
+  const gpsTrackerRef = useRef(null); // Reference to GPSTracker instance
+  const loadedTracksRef = useRef([]); // Array of loaded track polylines for cleanup
 
   // Refs to track state for async/timeout usage (prevent stale closures)
   const waypointsRef = useRef(waypoints);
@@ -281,7 +279,10 @@ function App() {
     // 2. Clear all marker instances from the map
     clearAllMarkers();
 
-    // 3. Clear other relevant UI states
+    // 3. Clear GPS tracks
+    clearGPSTrack();
+
+    // 4. Clear other relevant UI states
     setDbWaypointIds({});
     setSelectedWaypointId(null);
     setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
@@ -558,7 +559,7 @@ function App() {
     setProjectRecording(true);
 
     // Start or resume GPS tracking
-    if (activeTrackId) {
+    if (gpsTrackerRef.current) {
       // Resume existing track
       resumeGPSTracking();
     } else {
@@ -703,63 +704,12 @@ function App() {
     showSnackbar('Exited survey mode', 'info');
   };
 
-  // GPS Tracking Functions
+  // GPS Tracking Functions (using GPSTracker class)
   const startGPSTracking = async (projectId) => {
     try {
-      // Create a new track in the database
-      const track = await tracksAPI.create(projectId);
-      setActiveTrackId(track.id);
-      setTrackPoints([]);
-
-      // Create polyline on map (dotted line while recording)
-      const map = mapRef.current;
-      if (map) {
-        const polyline = L.polyline([], {
-          color: '#4CAF50',
-          weight: 3,
-          opacity: 0.7,
-          dashArray: '10, 10', // Dotted line
-          smoothFactor: 1
-        }).addTo(map);
-
-        trackPolylineRef.current = polyline;
-        setTrackPolyline(polyline);
-      }
-
-      // Start recording GPS points every 5 seconds
-      trackRecordingIntervalRef.current = setInterval(async () => {
-        if (coordinates?.lat && coordinates?.lng) {
-          try {
-            const point = {
-              lat: coordinates.lat,
-              lng: coordinates.lng,
-              accuracy: coordinates.accuracy || null,
-              elevation: null, // Can be added if available from GPS
-              timestamp: new Date().toISOString()
-            };
-
-            // Add point to database
-            await tracksAPI.addPoint(track.id, point);
-
-            // Update local track points
-            setTrackPoints(prev => {
-              const updated = [...prev, point];
-
-              // Update polyline on map
-              if (trackPolylineRef.current) {
-                const latlngs = updated.map(p => [p.lat, p.lng]);
-                trackPolylineRef.current.setLatLngs(latlngs);
-              }
-
-              return updated;
-            });
-          } catch (error) {
-            console.error('Error recording track point:', error);
-          }
-        }
-      }, 5000); // Record every 5 seconds
-
-      console.log('GPS tracking started for track ID:', track.id);
+      gpsTrackerRef.current = new GPSTracker(mapRef.current, projectId);
+      await gpsTrackerRef.current.start();
+      console.log('GPS tracking started');
     } catch (error) {
       console.error('Error starting GPS tracking:', error);
       showSnackbar('Failed to start GPS tracking', 'error');
@@ -767,129 +717,66 @@ function App() {
   };
 
   const pauseGPSTracking = () => {
-    // Stop recording GPS points
-    if (trackRecordingIntervalRef.current) {
-      clearInterval(trackRecordingIntervalRef.current);
-      trackRecordingIntervalRef.current = null;
+    if (gpsTrackerRef.current) {
+      gpsTrackerRef.current.pause();
+      console.log('GPS tracking paused');
     }
-
-    // Change polyline to solid (paused state)
-    if (trackPolylineRef.current) {
-      trackPolylineRef.current.setStyle({
-        dashArray: null, // Solid line when paused
-        opacity: 0.8
-      });
-    }
-
-    console.log('GPS tracking paused');
   };
 
   const resumeGPSTracking = () => {
-    // Resume recording GPS points
-    if (activeTrackId && !trackRecordingIntervalRef.current) {
-      trackRecordingIntervalRef.current = setInterval(async () => {
-        if (coordinates?.lat && coordinates?.lng) {
-          try {
-            const point = {
-              lat: coordinates.lat,
-              lng: coordinates.lng,
-              accuracy: coordinates.accuracy || null,
-              elevation: null,
-              timestamp: new Date().toISOString()
-            };
-
-            await tracksAPI.addPoint(activeTrackId, point);
-
-            setTrackPoints(prev => {
-              const updated = [...prev, point];
-
-              if (trackPolylineRef.current) {
-                const latlngs = updated.map(p => [p.lat, p.lng]);
-                trackPolylineRef.current.setLatLngs(latlngs);
-              }
-
-              return updated;
-            });
-          } catch (error) {
-            console.error('Error recording track point:', error);
-          }
-        }
-      }, 5000);
-
-      // Change polyline back to dotted (recording state)
-      if (trackPolylineRef.current) {
-        trackPolylineRef.current.setStyle({
-          dashArray: '10, 10',
-          opacity: 0.7
-        });
-      }
-
+    if (gpsTrackerRef.current) {
+      gpsTrackerRef.current.resume();
       console.log('GPS tracking resumed');
     }
   };
 
   const stopGPSTracking = async () => {
-    // Stop recording
-    if (trackRecordingIntervalRef.current) {
-      clearInterval(trackRecordingIntervalRef.current);
-      trackRecordingIntervalRef.current = null;
-    }
-
-    // End track in database
-    if (activeTrackId) {
+    if (gpsTrackerRef.current) {
       try {
-        await tracksAPI.endTrack(activeTrackId);
-        console.log('GPS tracking ended for track ID:', activeTrackId);
+        const result = await gpsTrackerRef.current.stop();
+        console.log('GPS tracking ended. Distance:', result.total_distance, 'm');
+        return result;
       } catch (error) {
-        console.error('Error ending track:', error);
+        console.error('Error stopping GPS tracking:', error);
       }
     }
-
-    // Change polyline to solid final state
-    if (trackPolylineRef.current) {
-      trackPolylineRef.current.setStyle({
-        dashArray: null,
-        opacity: 1,
-        color: '#2196F3' // Blue for completed track
-      });
-    }
-
-    setActiveTrackId(null);
   };
 
   const clearGPSTrack = () => {
-    // Remove polyline from map
-    if (trackPolylineRef.current) {
-      trackPolylineRef.current.remove();
-      trackPolylineRef.current = null;
+    if (gpsTrackerRef.current) {
+      gpsTrackerRef.current.clear();
+      gpsTrackerRef.current = null;
     }
 
-    setTrackPolyline(null);
-    setTrackPoints([]);
-    setActiveTrackId(null);
+    // Clear loaded tracks
+    loadedTracksRef.current.forEach(polyline => {
+      try {
+        polyline.remove();
+      } catch (e) { }
+    });
+    loadedTracksRef.current = [];
   };
 
   const loadProjectTracks = async (projectId) => {
     try {
-      const tracks = await tracksAPI.getByProject(projectId);
+      // Clear previous tracks
+      loadedTracksRef.current.forEach(polyline => {
+        try {
+          polyline.remove();
+        } catch (e) { }
+      });
+      loadedTracksRef.current = [];
 
-      // Display all tracks on the map
-      const map = mapRef.current;
-      if (map && tracks.length > 0) {
-        tracks.forEach(track => {
-          const points = track.track_points || [];
-          if (points.length > 0) {
-            const latlngs = points.map(p => [p.lat, p.lng]);
+      // Load tracks using GPSTracker static method
+      const result = await GPSTracker.loadTrack(mapRef.current, projectId);
 
-            L.polyline(latlngs, {
-              color: track.is_active ? '#4CAF50' : '#2196F3',
-              weight: 3,
-              opacity: track.is_active ? 0.7 : 1,
-              dashArray: track.is_active ? '10, 10' : null,
-              smoothFactor: 1
-            }).addTo(map);
-          }
-        });
+      if (result && result.polyline) {
+        loadedTracksRef.current.push(result.polyline);
+        console.log(`Loaded track with ${result.data.points.length} points`);
+
+        if (result.data.summary) {
+          console.log('Total distance:', result.data.summary.total_distance, 'm');
+        }
       }
     } catch (error) {
       console.error('Error loading project tracks:', error);
@@ -2905,6 +2792,20 @@ function App() {
     };
   }, [isMobile, projectBarExpanded, waypoints.length, projectRecording]);
 
+  // Process GPS coordinates for real-time tracking
+  useEffect(() => {
+    if (!projectRecording || !gpsTrackerRef.current) return;
+
+    if (coordinates?.lat && coordinates?.lng) {
+      // Process position with GPSTracker (smart saving + real-time line)
+      gpsTrackerRef.current.processPosition(
+        coordinates.lat,
+        coordinates.lng,
+        coordinates.accuracy || null
+      );
+    }
+  }, [coordinates, projectRecording]);
+
   useEffect(() => {
     if (!mapRef.current || satelliteHybridMode) return;
 
@@ -3723,6 +3624,10 @@ function App() {
                 // Small timeout to allow state clear to process before adding new ones
                 setTimeout(() => {
                   loadProjectWaypointsToMap({ waypoints: project.items }, { id: project.project_id, name: project.project_name });
+
+                  // Load GPS tracks for this project
+                  loadProjectTracks(project.project_id);
+
                   setSinglePointCaptureActive(true);
                   setPreviewModeActive(true);
                   showSnackbar(`Loaded points from ${project.project_name}`, 'success');

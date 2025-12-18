@@ -360,10 +360,10 @@ export const projectsAPI = {
   }
 };
 
-// Tracks API
+// Tracks API (PostGIS-based)
 export const tracksAPI = {
-  create: async (projectId) => {
-    const response = await fetch(`${API_BASE_URL}/tracks`, {
+  start: async (projectId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/start`, {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
@@ -372,31 +372,32 @@ export const tracksAPI = {
     if (!response.ok) {
       if (response.status === 401) throw new Error('Authentication required');
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Failed to create track');
+      throw new Error(errorData.error || 'Failed to start track');
     }
     return response.json();
   },
 
-  addPoint: async (trackId, point) => {
-    const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/points`, {
+  addPointsBatch: async (projectId, points) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/points/batch`, {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
-      body: JSON.stringify(point),
+      body: JSON.stringify({ project_id: projectId, points }),
     });
     if (!response.ok) {
       if (response.status === 401) throw new Error('Authentication required');
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Failed to add track point');
+      throw new Error(errorData.error || 'Failed to add track points');
     }
     return response.json();
   },
 
-  endTrack: async (trackId) => {
-    const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/end`, {
+  endTrack: async (projectId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/end`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       credentials: 'include',
+      body: JSON.stringify({ project_id: projectId }),
     });
     if (!response.ok) {
       if (response.status === 401) throw new Error('Authentication required');
@@ -427,8 +428,8 @@ export const tracksAPI = {
     return response.json();
   },
 
-  exportGPX: async (trackId) => {
-    const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/gpx`, {
+  exportGPX: async (projectId) => {
+    const response = await fetch(`${API_BASE_URL}/tracks/${projectId}/gpx`, {
       headers: getAuthHeaders(),
       credentials: 'include',
     });
