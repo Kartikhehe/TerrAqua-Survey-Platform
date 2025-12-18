@@ -21,6 +21,7 @@ export class GPSTracker {
         this.isActive = false;
         this.isPaused = false;
         this.trackId = null;
+        this.isInitializing = false; // New state to prevent points before trackId is ready
 
         // Point buffering
         this.pointBuffer = [];
@@ -65,9 +66,11 @@ export class GPSTracker {
 
             // Start track on server
             try {
+                this.isInitializing = true;
                 const track = await tracksAPI.start(this.projectId);
                 console.log('[GPSTracker] 📡 Server track started:', track.id);
                 this.trackId = track.id;
+                this.isInitializing = false;
                 return track;
             } catch (error) {
                 console.warn('[GPSTracker] 📡 Server track start delayed/failed:', error.message);
@@ -89,7 +92,11 @@ export class GPSTracker {
      * Called whenever GPS coordinates change
      */
     processPosition(latIn, lngIn, accuracy, elevation = null) {
-        if (!this.isActive || this.isPaused) return;
+        if (!this.isActive || this.isPaused || this.isInitializing || !this.trackId) {
+            // Uncomment for debugging if needed
+            // console.log(`[GPSTracker] Skipping point: active=${this.isActive}, paused=${this.isPaused}, init=${this.isInitializing}, hasId=${!!this.trackId}`);
+            return;
+        }
 
         // Ensure numbers
         const lat = parseFloat(latIn);
@@ -174,6 +181,7 @@ export class GPSTracker {
             lng,
             accuracy,
             elevation,
+            track_id: this.trackId, // Tag point with the specific session ID
             timestamp: new Date(time).toISOString()
         };
 
@@ -239,9 +247,10 @@ export class GPSTracker {
      */
     async pause() {
         this.isPaused = true;
+        this.stopBatchTimer(); // Stop timer while paused
 
         // Send any remaining buffered points
-        this.sendBatch();
+        await this.sendBatch();
 
         // Finalize segment on server
         try {
@@ -250,6 +259,10 @@ export class GPSTracker {
         } catch (error) {
             console.error('[GPSTracker] ❌ Failed to finalize track segment on pause:', error);
         }
+
+        // Reset point saving thresholds to ensure fresh start on resume
+        this.lastSavedPoint = null;
+        this.lastSavedTime = null;
 
         // Change polyline to solid
         if (this.polyline) {
@@ -266,6 +279,9 @@ export class GPSTracker {
      * Resume tracking
      */
     async resume() {
+        if (!this.isActive) return;
+
+        this.isInitializing = true;
         this.isPaused = false;
 
         // Start a new segment in local visualization
@@ -278,8 +294,12 @@ export class GPSTracker {
             const track = await tracksAPI.start(this.projectId);
             console.log('[GPSTracker] 📡 New track segment started:', track.id);
             this.trackId = track.id;
+            this.isInitializing = false;
+            this.startBatchTimer(); // Restart timer
         } catch (error) {
             console.error('[GPSTracker] ❌ Failed to start new track segment on resume:', error);
+            // Even if server fails, we'll try to continue locally
+            this.isInitializing = false;
         }
 
         // Change polyline back to dotted
