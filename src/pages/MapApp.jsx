@@ -364,6 +364,9 @@ function App() {
       // Set project status to playing FIRST
       await projectsAPI.setStatus(project.id, 'playing');
 
+      // Start GPS tracking for new project
+      startGPSTracking(project.id);
+
       console.log('Waiting for GPS coordinates...', coordinates);
 
       // Wait for GPS coordinates to be available
@@ -559,11 +562,14 @@ function App() {
     setProjectRecording(true);
 
     // Start or resume GPS tracking
+    console.log('[GPS] Checking GPS tracker ref:', gpsTrackerRef.current);
     if (gpsTrackerRef.current) {
       // Resume existing track
+      console.log('[GPS] Resuming existing track');
       resumeGPSTracking();
     } else {
       // Start new track
+      console.log('[GPS] Starting new track for project:', activeProject.id);
       startGPSTracking(activeProject.id);
     }
 
@@ -707,12 +713,16 @@ function App() {
   // GPS Tracking Functions (using GPSTracker class)
   const startGPSTracking = async (projectId) => {
     try {
+      console.log('[GPS] Starting GPS tracking for project:', projectId);
+      console.log('[GPS] Map ref:', mapRef.current);
       gpsTrackerRef.current = new GPSTracker(mapRef.current, projectId);
+      console.log('[GPS] GPSTracker instance created');
       await gpsTrackerRef.current.start();
-      console.log('GPS tracking started');
+      console.log('[GPS] ✅ GPS tracking started successfully');
+      showSnackbar('GPS tracking started', 'success');
     } catch (error) {
-      console.error('Error starting GPS tracking:', error);
-      showSnackbar('Failed to start GPS tracking', 'error');
+      console.error('[GPS] ❌ Error starting GPS tracking:', error);
+      showSnackbar('Failed to start GPS tracking: ' + error.message, 'error');
     }
   };
 
@@ -2042,6 +2052,10 @@ function App() {
         if (projectData.status === 'playing') {
           showSnackbar(`Survey of "${projectData.name}" is ongoing.`, 'info');
           startTimerFromProject(projectData);
+          // Auto-resume GPS tracking on mount/refresh if project is active
+          startGPSTracking(projectData.id);
+          // Load existing tracks for visualization
+          loadProjectTracks(projectData.id);
         }
         // If the project was auto_paused due to inactivity, inform user once
         if (projectData.auto_paused && !autoPausedPromptShown) {

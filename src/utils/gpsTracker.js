@@ -35,7 +35,7 @@ export class GPSTracker {
         this.config = {
             minTimeDelta: 5000, // 5 seconds in milliseconds
             minDistance: 5, // 5 meters
-            maxAccuracy: 20, // Ignore points with accuracy > 20m
+            maxAccuracy: 50, // Ignore points with accuracy > 50m
             batchSize: 5, // Send batch when buffer reaches this size
             batchInterval: 15000, // Or send every 15 seconds
         };
@@ -49,28 +49,33 @@ export class GPSTracker {
      */
     async start() {
         try {
+            console.log('[GPSTracker] 🚀 Starting tracker for project:', this.projectId);
+
             // Start track on server
             const track = await tracksAPI.start(this.projectId);
+            console.log('[GPSTracker] 📡 Server track started:', track.id);
+
             this.trackId = track.id;
             this.isActive = true;
             this.isPaused = false;
 
-            // Create polyline for visualization
+            // Create polyline for visualization (dotted line)
+            console.log('[GPSTracker] 🎨 Creating dotted polyline...');
             this.polyline = L.polyline([], {
                 color: '#4CAF50',
-                weight: 3,
-                opacity: 0.7,
-                dashArray: '10, 10',
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '2, 12', // Dotted look
+                lineCap: 'round',
                 smoothFactor: 1
             }).addTo(this.map);
 
             // Start batch timer
             this.startBatchTimer();
 
-            console.log('GPS tracking started for project:', this.projectId);
             return track;
         } catch (error) {
-            console.error('Error starting GPS tracking:', error);
+            console.error('[GPSTracker] ❌ Error starting GPS tracking:', error);
             throw error;
         }
     }
@@ -79,25 +84,33 @@ export class GPSTracker {
      * Process new GPS position
      * Called whenever GPS coordinates change
      */
-    processPosition(lat, lng, accuracy, elevation = null) {
+    processPosition(latIn, lngIn, accuracy, elevation = null) {
         if (!this.isActive || this.isPaused) return;
 
+        // Ensure numbers
+        const lat = parseFloat(latIn);
+        const lng = parseFloat(lngIn);
         const now = Date.now();
 
         // Filter out inaccurate points
         if (accuracy && accuracy > this.config.maxAccuracy) {
-            console.log(`Ignoring inaccurate point: ${accuracy}m`);
+            console.log(`[GPSTracker] ⚠️ Ignoring inaccurate point: ${accuracy}m > ${this.config.maxAccuracy}m`);
             return;
         }
 
-        // Add to visual polyline immediately (real-time feedback)
-        this.allPoints.push([lat, lng]);
-        if (this.polyline) {
-            this.polyline.setLatLngs(this.allPoints);
-        }
-
         // Decide whether to save this point
-        if (this.shouldSavePoint(lat, lng, now)) {
+        const shouldSave = this.shouldSavePoint(lat, lng, now);
+
+        if (shouldSave) {
+            console.log('[GPSTracker] 📍 New point saved and plotted');
+
+            // Add to visual polyline ONLY when saved (keeps it clean)
+            this.allPoints.push([lat, lng]);
+            if (this.polyline) {
+                this.polyline.setLatLngs(this.allPoints);
+            }
+
+            // Buffer for server upload
             this.bufferPoint(lat, lng, accuracy, elevation, now);
         }
     }
@@ -147,8 +160,11 @@ export class GPSTracker {
         this.lastSavedPoint = { lat, lng };
         this.lastSavedTime = time;
 
+        console.log(`[GPSTracker] 💾 Buffered point. Buffer size: ${this.pointBuffer.length}/${this.config.batchSize}`);
+
         // Send batch if buffer is full
         if (this.pointBuffer.length >= this.config.batchSize) {
+            console.log('[GPSTracker] 📤 Buffer full, sending batch now...');
             this.sendBatch();
         }
     }
@@ -157,18 +173,24 @@ export class GPSTracker {
      * Send buffered points to server
      */
     async sendBatch() {
-        if (this.pointBuffer.length === 0) return;
+        if (this.pointBuffer.length === 0) {
+            console.log('[GPSTracker] No points to send');
+            return;
+        }
 
         const pointsToSend = [...this.pointBuffer];
         this.pointBuffer = [];
 
+        console.log(`[GPSTracker] 🚀 Sending batch of ${pointsToSend.length} points to server...`);
+
         try {
             await tracksAPI.addPointsBatch(this.projectId, pointsToSend);
-            console.log(`Sent batch of ${pointsToSend.length} points`);
+            console.log(`[GPSTracker] ✅ Successfully sent batch of ${pointsToSend.length} points`);
         } catch (error) {
-            console.error('Error sending batch:', error);
+            console.error('[GPSTracker] ❌ Error sending batch:', error);
             // Re-add points to buffer on error
             this.pointBuffer = [...pointsToSend, ...this.pointBuffer];
+            console.log('[GPSTracker] 🔄 Re-added points to buffer for retry');
         }
     }
 
@@ -203,8 +225,8 @@ export class GPSTracker {
         // Change polyline to solid
         if (this.polyline) {
             this.polyline.setStyle({
-                dashArray: null,
-                opacity: 0.8
+                dashArray: '1, 1', // Very fine dashes to show "paused"
+                opacity: 0.5
             });
         }
 
@@ -220,8 +242,8 @@ export class GPSTracker {
         // Change polyline back to dotted
         if (this.polyline) {
             this.polyline.setStyle({
-                dashArray: '10, 10',
-                opacity: 0.7
+                dashArray: '2, 12',
+                opacity: 0.8
             });
         }
 
@@ -246,7 +268,7 @@ export class GPSTracker {
             // Change polyline to final state
             if (this.polyline) {
                 this.polyline.setStyle({
-                    dashArray: null,
+                    dashArray: null, // Solid line for finished track
                     opacity: 1,
                     color: '#2196F3'
                 });

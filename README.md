@@ -378,6 +378,10 @@ Navigation and Tracking App/
 - Change the PORT in `.env` if 3001 is already in use
 - Update the frontend API base URL accordingly
 
+## GPS Path Tracking Documentation
+
+For detailed technical documentation on the real-time GPS path tracking and plotting feature, including database schema and implementation details, please see [GPS_PATH_TRACKING_README.md](./GPS_PATH_TRACKING_README.md).
+
 ## License
 
 MIT
