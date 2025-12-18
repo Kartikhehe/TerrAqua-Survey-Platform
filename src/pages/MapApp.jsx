@@ -206,8 +206,8 @@ function App() {
             return;
           }
 
-          // Exclude loaded project tracks
-          if (loadedTracksRef.current.includes(layer)) {
+          // Exclude loaded project tracks (and their segments)
+          if (loadedTracksRef.current.includes(layer) || layer.isTrackSegment) {
             return;
           }
 
@@ -742,16 +742,16 @@ function App() {
     }
   };
 
-  const pauseGPSTracking = () => {
+  const pauseGPSTracking = async () => {
     if (gpsTrackerRef.current) {
-      gpsTrackerRef.current.pause();
+      await gpsTrackerRef.current.pause();
       console.log('GPS tracking paused');
     }
   };
 
-  const resumeGPSTracking = () => {
+  const resumeGPSTracking = async () => {
     if (gpsTrackerRef.current) {
-      gpsTrackerRef.current.resume();
+      await gpsTrackerRef.current.resume();
       console.log('GPS tracking resumed');
     }
   };
@@ -2653,6 +2653,7 @@ function App() {
                   const latlng = [latitude, longitude];
 
                   // Create waypoint with "My Location" as name
+
                   const newWaypoint = {
                     id: waypointId,
                     lat: latitude,

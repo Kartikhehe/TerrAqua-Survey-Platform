@@ -29,7 +29,7 @@ export class GPSTracker {
 
         // Visual elements
         this.polyline = null;
-        this.allPoints = [];
+        this.allPoints = [[]]; // Array of segments (each segment is an array of [lat, lng])
 
         // Configuration
         this.config = {
@@ -113,8 +113,10 @@ export class GPSTracker {
                     this.polyline.addTo(this.map);
                 }
 
-                const livePath = [...this.allPoints, [lat, lng]]; // temporary tail shows movement
-                this.polyline.setLatLngs(livePath);
+                // Temporary tail shows movement within the CURRENT segment
+                const currentSegment = [...this.allPoints[this.allPoints.length - 1], [lat, lng]];
+                const segmentsToDraw = [...this.allPoints.slice(0, -1), currentSegment];
+                this.polyline.setLatLngs(segmentsToDraw);
             } catch (e) {
                 console.error('[GPSTracker] Error updating live polyline:', e);
             }
@@ -123,8 +125,8 @@ export class GPSTracker {
         if (shouldSave) {
             console.log('[GPSTracker] 📍 New point saved and plotted');
 
-            // Add to visual polyline permanently when saved
-            this.allPoints.push([lat, lng]);
+            // Add to visual polyline permanently when saved (to the CURRENT segment)
+            this.allPoints[this.allPoints.length - 1].push([lat, lng]);
             if (this.polyline) {
                 this.polyline.setLatLngs(this.allPoints);
             }
@@ -235,11 +237,19 @@ export class GPSTracker {
     /**
      * Pause tracking
      */
-    pause() {
+    async pause() {
         this.isPaused = true;
 
         // Send any remaining buffered points
         this.sendBatch();
+
+        // Finalize segment on server
+        try {
+            await tracksAPI.endTrack(this.projectId);
+            console.log('[GPSTracker] 📡 Track segment finalized on pause');
+        } catch (error) {
+            console.error('[GPSTracker] ❌ Failed to finalize track segment on pause:', error);
+        }
 
         // Change polyline to solid
         if (this.polyline) {
@@ -255,8 +265,22 @@ export class GPSTracker {
     /**
      * Resume tracking
      */
-    resume() {
+    async resume() {
         this.isPaused = false;
+
+        // Start a new segment in local visualization
+        if (this.allPoints[this.allPoints.length - 1].length > 0) {
+            this.allPoints.push([]);
+        }
+
+        // Start a new segment on the server
+        try {
+            const track = await tracksAPI.start(this.projectId);
+            console.log('[GPSTracker] 📡 New track segment started:', track.id);
+            this.trackId = track.id;
+        } catch (error) {
+            console.error('[GPSTracker] ❌ Failed to start new track segment on resume:', error);
+        }
 
         // Change polyline back to dotted
         if (this.polyline) {
@@ -308,7 +332,7 @@ export class GPSTracker {
             this.polyline.remove();
             this.polyline = null;
         }
-        this.allPoints = [];
+        this.allPoints = [[]];
         this.pointBuffer = [];
         this.lastSavedPoint = null;
         this.lastSavedTime = null;
@@ -329,19 +353,60 @@ export class GPSTracker {
             const data = await tracksAPI.getByProject(projectId);
 
             if (data.points && data.points.length > 0) {
-                const latlngs = data.points.map(p => [p.lat, p.lng]);
+                // Group points by track_id (session) with time-gap fallback for legacy data
+                const segments = [];
+                let currentSegment = [];
+                let lastPointTime = null;
+                let lastTrackId = null;
 
-                const polyline = L.polyline(latlngs, {
-                    color: '#2196F3',
-                    weight: 3,
-                    opacity: 1,
-                    smoothFactor: 1
-                }).addTo(map);
+                data.points.forEach(p => {
+                    const time = new Date(p.recorded_at).getTime();
+                    const tid = p.track_id;
 
-                console.log(`Loaded track with ${data.points.length} points`);
-                console.log('Total distance:', data.summary?.total_distance, 'm');
+                    // Split if: 
+                    // 1. track_id changed
+                    // 2. OR track_id is null AND time gap is > 5 minutes
+                    const timeGapLimit = 5 * 60 * 1000; // 5 minutes
+                    const isNewTrackId = tid !== lastTrackId && lastTrackId !== null;
+                    const isTimeGap = !tid && lastPointTime && (time - lastPointTime > timeGapLimit);
 
-                return { polyline, data };
+                    if (isNewTrackId || isTimeGap) {
+                        if (currentSegment.length >= 2) {
+                            segments.push(currentSegment);
+                        }
+                        currentSegment = [];
+                    }
+
+                    currentSegment.push([p.lat, p.lng]);
+                    lastPointTime = time;
+                    lastTrackId = tid;
+                });
+
+                // Add last segment
+                if (currentSegment.length >= 2) {
+                    segments.push(currentSegment);
+                }
+
+                // Create a LayerGroup to hold all segment polylines
+                const layerGroup = L.layerGroup().addTo(map);
+
+                segments.forEach(latlngs => {
+                    const segment = L.polyline(latlngs, {
+                        color: '#2196F3', // Blue for saved tracks
+                        weight: 4,
+                        opacity: 0.8,
+                        lineCap: 'round',
+                        smoothFactor: 1
+                    });
+
+                    segment.isTrackSegment = true; // Mark for preservation in MapApp
+                    segment.addTo(layerGroup);
+                });
+
+                console.log(`Loaded track with ${data.points.length} points across ${segments.length} segments`);
+
+                // Return the layerGroup as "polyline" so MapApp's cleanup still works
+                return { polyline: layerGroup, data };
             }
 
             return null;
