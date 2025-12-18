@@ -88,8 +88,11 @@ export const waypointsAPI = {
       if (response.status === 401) {
         throw new Error('Authentication required');
       }
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Failed to create waypoint');
+      // Try to parse response body for better diagnostics
+      let errorBody = {};
+      try { errorBody = await response.json(); } catch (e) { }
+      console.error('waypointsAPI.create failed', response.status, errorBody);
+      throw new Error(errorBody.error || `Failed to create waypoint (status ${response.status})`);
     }
     return response.json();
   },

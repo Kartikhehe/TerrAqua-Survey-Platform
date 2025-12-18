@@ -199,8 +199,23 @@ function App() {
         if (liveLocationMarkerRef.current && layer === liveLocationMarkerRef.current) return;
 
         // Remove Markers (pins) and CircleMarkers (overlays)
-        // Also remove Polylines (routes) to ensure clean slate
+        // Also remove Polylines (routes) to ensure clean slate, BUT preserve the live GPS track and current navigation route
         if (layer instanceof L.Marker || layer instanceof L.CircleMarker || layer instanceof L.Polyline) {
+          // Exclude live GPS track polyline if it exists
+          if (gpsTrackerRef.current && gpsTrackerRef.current.polyline && layer === gpsTrackerRef.current.polyline) {
+            return;
+          }
+
+          // Exclude loaded project tracks
+          if (loadedTracksRef.current.includes(layer)) {
+            return;
+          }
+
+          // Exclude current navigation route polyline
+          if (routePolylineRef.current && layer === routePolylineRef.current) {
+            return;
+          }
+
           try { layer.remove(); } catch (e) { }
         }
       });
@@ -371,7 +386,7 @@ function App() {
 
       // Wait for GPS coordinates to be available
       let attempts = 0;
-      const maxAttempts = 15; // 3 seconds total
+      const maxAttempts = 30; // 6 seconds total (more generous wait for initial lock)
       while ((!coordinates?.lat || !coordinates?.lng) && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 200));
         attempts++;
@@ -510,7 +525,8 @@ function App() {
     // Save end point for project only if it doesn't exist
     if (!hasEndPoint) {
       try {
-        await createProjectWaypoint('End Point');
+        // Pass explicit project details to avoid race conditions with activeProject state
+        await createProjectWaypoint('End Point', activeProject?.id, activeProject?.name);
       } catch (err) {
         console.error('Error saving end point:', err);
       }
@@ -913,15 +929,21 @@ function App() {
   };
 
   // Create and persist a waypoint for the active project with a given name
-  const createProjectWaypoint = async (name = 'Point') => {
+  // Accept optional overrides to avoid relying on component state during startup
+  const createProjectWaypoint = async (name = 'Point', projectIdOverride = null, projectNameOverride = null) => {
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
       return null;
     }
-    if (!activeProject || !activeProject.id) {
+
+    const projectToUse = projectIdOverride ? { id: projectIdOverride, name: projectNameOverride } : activeProject;
+
+    if (!projectToUse || !projectToUse.id) {
+      console.error('createProjectWaypoint: no active project (params)', { projectToUse, projectIdOverride });
       showSnackbar('No active project to add point to', 'error');
       return null;
     }
+
     const map = mapRef.current;
     // Prefer live device coordinates if available, otherwise fall back to map center
     let lat = coordinates?.lat;
@@ -932,7 +954,7 @@ function App() {
         lat = center.lat;
         lng = center.lng;
       }
-    } catch (e) { }
+    } catch (e) { console.error('createProjectWaypoint: error getting map center fallback', e); }
     if (!lat || !lng) {
       showSnackbar('Unable to determine current location', 'error');
       return null;
@@ -941,7 +963,7 @@ function App() {
     // For regular points (not Start/End Point), check for duplicate names
     let finalName = name;
     if (name !== 'Start Point' && name !== 'End Point') {
-      const projectWaypoints = waypoints.filter(wp => wp.project_id === activeProject.id);
+      const projectWaypoints = waypoints.filter(wp => wp.project_id === projectToUse.id);
       let counter = 2;
       while (projectWaypoints.some(wp => wp.name === finalName)) {
         finalName = `${name} ${counter}`;
@@ -953,13 +975,14 @@ function App() {
       name: finalName,
       lat: parseFloat(lat).toFixed(6),
       lng: parseFloat(lng).toFixed(6),
-      notes: `${finalName} for project ${activeProject.name}`,
+      notes: `${finalName} for project ${projectToUse.name || ''}`,
       image: null,
-      project_id: activeProject.id,
-      project_name: activeProject.name,
+      project_id: projectToUse.id,
+      project_name: projectToUse.name || null,
     };
 
     try {
+      console.log('Creating project waypoint', newWp);
       const saved = await waypointsAPI.create(newWp);
       // Add to map and local list
       const waypointId = `waypoint-${Date.now()}`;
@@ -1409,9 +1432,9 @@ function App() {
           // Center map on all imported waypoints (fit bounds)
           if (newWaypoints.length > 1) {
             const bounds = L.latLngBounds(newWaypoints.map(wp => [wp.lat, wp.lng]));
-            map.fitBounds(bounds, { padding: [50, 50] });
+            try { map && map.fitBounds && map.fitBounds(bounds, { padding: [50, 50] }); } catch (e) { console.error('Error calling map.fitBounds after import:', e); }
           } else {
-            map.setView([newWaypoints[0].lat, newWaypoints[0].lng], 13);
+            try { map && map.setView && map.setView([newWaypoints[0].lat, newWaypoints[0].lng], 13); } catch (e) { console.error('Error calling map.setView after import:', e); }
           }
         }, 100);
       }
@@ -1488,7 +1511,7 @@ function App() {
       const map = mapRef.current;
       const marker = markersRef.current[waypointId];
       if (marker && map) {
-        map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
+        try { map && map.setView && map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14)); } catch (e) { console.error('Error centering map on marker:', e); }
       }
     } catch (e) { }
   };
@@ -1658,7 +1681,7 @@ function App() {
       // Use setTimeout to ensure survey mode is activated and state is updated first
       setTimeout(() => {
         // Center map on waypoint
-        map.setView([waypoint.lat, waypoint.lng], 13);
+        try { map && map.setView && map.setView([waypoint.lat, waypoint.lng], 13); } catch (e) { console.error('Error centering map on waypoint:', e); }
 
         // Get current waypoints to ensure we have the latest state
         setWaypoints(currentWaypoints => {
@@ -1781,7 +1804,7 @@ function App() {
     if (!map) return;
 
     // Set view to default location
-    map.setView([defaultLocation.lat, defaultLocation.lng], 15);
+    try { map && map.setView && map.setView([defaultLocation.lat, defaultLocation.lng], 15); } catch (e) { console.error('Error calling map.setView in goToDefaultLocation:', e); }
 
     // Update coordinates with default location
     setCoordinates({
@@ -2351,7 +2374,7 @@ function App() {
           }
 
           // Set view to current location with zoomed out view (zoom level 12 for city-level view)
-          map.setView([latitude, longitude], 15);
+          try { map && map.setView && map.setView([latitude, longitude], 15); } catch (e) { console.error('Error calling map.setView in getCurrentPosition:', e); }
           if (isMobile) {
             updateMobileMapHeight();
             // ensure layout settles then re-center at desired zoom on mobile
@@ -2476,7 +2499,7 @@ function App() {
             },
             {
               enableHighAccuracy: true,
-              timeout: 5000,
+              timeout: 12000, // Increased timeout for better reliability
               maximumAge: 1000 // Update every second
             }
           );
@@ -2491,7 +2514,7 @@ function App() {
         },
         {
           enableHighAccuracy: true, // Use high accuracy for better location
-          timeout: 5000, // Reduced timeout to show warning faster
+          timeout: 12000, // Increased timeout 
           maximumAge: 0 // Don't use cached location, get fresh one
         }
       );
@@ -2554,7 +2577,7 @@ function App() {
               .then(data => {
                 if (data && data.length > 0) {
                   const { lat, lon } = data[0];
-                  map.setView([parseFloat(lat), parseFloat(lon)], 13);
+                  try { map && map.setView && map.setView([parseFloat(lat), parseFloat(lon)], 13); } catch (e) { console.error('Error calling map.setView on search result:', e); }
                   setTimeout(() => {
                     setSnackbar({ open: true, message: `Found: ${data[0].display_name}`, severity: 'success' });
                   }, 0);
@@ -2611,7 +2634,7 @@ function App() {
                 const accuracy = position.coords.accuracy || 0;
 
                 // Center map on location
-                map.setView([latitude, longitude], 15);
+                try { map && map.setView && map.setView([latitude, longitude], 15); } catch (e) { console.error('Error setting view from locate handler:', e); }
                 locateButton.style.opacity = '1';
 
                 // Activate survey mode if not already active

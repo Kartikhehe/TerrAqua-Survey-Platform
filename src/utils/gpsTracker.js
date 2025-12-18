@@ -4,8 +4,8 @@
  * Features:
  * - Smart point saving (time >= 5s OR distance >= 5m)
  * - Batch point submission (reduces API calls)
- * - Real-time polyline visualization
- * - Accuracy filtering (ignores points with accuracy > 20m)
+ * - Real-time polyline visualization (live dotted path while moving)
+ * - Accuracy filtering (ignores points with accuracy > configured threshold)
  * - Battery optimization
  */
 
@@ -35,7 +35,7 @@ export class GPSTracker {
         this.config = {
             minTimeDelta: 5000, // 5 seconds in milliseconds
             minDistance: 5, // 5 meters
-            maxAccuracy: 50, // Ignore points with accuracy > 50m
+            maxAccuracy: 200, // Ignore points with accuracy > 200m (looser due to unreliable devices)
             batchSize: 5, // Send batch when buffer reaches this size
             batchInterval: 15000, // Or send every 15 seconds
         };
@@ -49,13 +49,6 @@ export class GPSTracker {
      */
     async start() {
         try {
-            console.log('[GPSTracker] 🚀 Starting tracker for project:', this.projectId);
-
-            // Start track on server
-            const track = await tracksAPI.start(this.projectId);
-            console.log('[GPSTracker] 📡 Server track started:', track.id);
-
-            this.trackId = track.id;
             this.isActive = true;
             this.isPaused = false;
 
@@ -63,22 +56,33 @@ export class GPSTracker {
             console.log('[GPSTracker] 🎨 Creating dotted polyline...');
             this.polyline = L.polyline([], {
                 color: '#4CAF50',
-                weight: 4,
-                opacity: 0.8,
-                dashArray: '2, 12', // Dotted look
+                weight: 5,
+                opacity: 0.9,
+                dashArray: '1, 15', // True dotted look (short dots, wide gaps)
                 lineCap: 'round',
                 smoothFactor: 1
             }).addTo(this.map);
 
+            // Start track on server
+            try {
+                const track = await tracksAPI.start(this.projectId);
+                console.log('[GPSTracker] 📡 Server track started:', track.id);
+                this.trackId = track.id;
+                return track;
+            } catch (error) {
+                console.warn('[GPSTracker] 📡 Server track start delayed/failed:', error.message);
+                // We continue local tracking even if server start fails initially
+                // Buffering will handle it once tracksAPI.start is successful or retried
+            }
+
             // Start batch timer
             this.startBatchTimer();
-
-            return track;
         } catch (error) {
             console.error('[GPSTracker] ❌ Error starting GPS tracking:', error);
             throw error;
         }
     }
+
 
     /**
      * Process new GPS position
@@ -101,10 +105,25 @@ export class GPSTracker {
         // Decide whether to save this point
         const shouldSave = this.shouldSavePoint(lat, lng, now);
 
+        // Update visual polyline immediately (shows dotted live path even before it is buffered)
+        if (this.polyline) {
+            try {
+                // Ensure polyline is still on map (in case it was removed by MapApp's refresh)
+                if (!this.map.hasLayer(this.polyline)) {
+                    this.polyline.addTo(this.map);
+                }
+
+                const livePath = [...this.allPoints, [lat, lng]]; // temporary tail shows movement
+                this.polyline.setLatLngs(livePath);
+            } catch (e) {
+                console.error('[GPSTracker] Error updating live polyline:', e);
+            }
+        }
+
         if (shouldSave) {
             console.log('[GPSTracker] 📍 New point saved and plotted');
 
-            // Add to visual polyline ONLY when saved (keeps it clean)
+            // Add to visual polyline permanently when saved
             this.allPoints.push([lat, lng]);
             if (this.polyline) {
                 this.polyline.setLatLngs(this.allPoints);
@@ -242,8 +261,8 @@ export class GPSTracker {
         // Change polyline back to dotted
         if (this.polyline) {
             this.polyline.setStyle({
-                dashArray: '2, 12',
-                opacity: 0.8
+                dashArray: '1, 15',
+                opacity: 0.9
             });
         }
 
