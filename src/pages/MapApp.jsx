@@ -2628,9 +2628,9 @@ function App() {
         locateButton.style.cssText = `
           width: ${buttonSize};
           height: ${buttonSize};
-          line-height: ${buttonSize};
-          text-align: center;
-          display: block;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           background-color: ${darkMode ? '#1e1e1e' : '#fff'};
           color: ${darkMode ? '#fff' : '#333'};
           text-decoration: none;
@@ -2640,7 +2640,7 @@ function App() {
         // Add Material-UI MyLocation icon as SVG
         const locateIconSize = isSmallScreen ? '1.5rem' : '1.09375rem';
         const locateIcon = `
-          <svg width="${locateIconSize}" height="${locateIconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${isSmallScreen ? '0.75rem' : '0.4375rem'};">
+          <svg width="${locateIconSize}" height="${locateIconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" fill="#4CAF50"/>
           </svg>
         `;
@@ -2742,7 +2742,12 @@ function App() {
           }
         };
 
-        L.DomEvent.on(locateButton, 'click', locateHandlerRef.current);
+        L.DomEvent.on(locateButton, 'click', (e) => {
+          e.preventDefault();
+          if (locateHandlerRef.current) {
+            locateHandlerRef.current();
+          }
+        });
 
         return container;
       },
@@ -3379,7 +3384,7 @@ function App() {
             p: 0,
             height: '100vh',
             overflow: 'hidden',
-            marginTop: { xs: '4.5rem', sm: '3.5rem' },
+            marginTop: { xs: '4rem', sm: '3.5rem' },
             width: '100%',
             position: 'relative',
           }}

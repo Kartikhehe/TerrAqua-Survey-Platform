@@ -92,7 +92,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
         px: { xs: '0.875rem', sm: '1.3125rem', md: '1.75rem' },
         minHeight: { xs: '4rem', sm: '3.5rem' }
       }}>
-        <Box sx={{ flexGrow: 1 }}>
+        <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
           <img
             src="/src/assets/SurveyZest logo.png"
             alt="SurveyZest"
