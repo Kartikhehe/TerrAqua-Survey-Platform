@@ -1272,6 +1272,14 @@ function App() {
         }
       }
 
+      // Close waypoint details on mobile after save
+      if (isMobile) {
+        setWaypointDetailsOpen(false);
+        setSelectedWaypointId(null);
+        setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+        updateSelectedMarkerOverlay(null);
+      }
+
     } catch (error) {
       console.error('Error saving waypoint:', error);
       if (error.message === 'Authentication required') {
@@ -1332,6 +1340,11 @@ function App() {
       setSelectedWaypointId(null);
       setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
       updateSelectedMarkerOverlay(null);
+
+      // Close waypoint details on mobile after delete
+      if (isMobile) {
+        setWaypointDetailsOpen(false);
+      }
     } catch (error) {
       console.error('Error deleting waypoint:', error);
       if (error.message === 'Authentication required') {
@@ -3729,47 +3742,208 @@ function App() {
 
         {/* Floating bottom bar for project controls */}
         {isProjectMode && (
-          <Paper ref={projectBarRef} elevation={8} sx={{
-            position: 'fixed',
-            top: isMobile ? '5rem' : 'auto',
-            bottom: isMobile ? 'auto' : 32,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: isMobile ? (projectBarWidth ? `${projectBarWidth}px` : 'min(45%,230px)') : 'fit-content',
-            maxWidth: { xs: '72%', sm: 'min(95%, 900px)', md: 'min(90%, 1000px)' },
-            zIndex: { xs: theme.zIndex.drawer + 3, sm: theme.zIndex.drawer + 30 },
-            display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row',
-            alignItems: 'center',
-            gap: isMobile ? 0.5 : 1,
-            px: { xs: 1, sm: 2, md: 3 },
-            py: { xs: 1, sm: 1.5 },
-            borderRadius: 4,
-            cursor: isMobile ? 'pointer' : 'default',
-            transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-            whiteSpace: 'nowrap'
-          }} onClick={() => { if (isMobile) setProjectBarExpanded(prev => !prev); }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
-              <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%', pr: isMobile && !projectBarExpanded ? '2.5rem' : 0, overflow: 'hidden' }}>
-                <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile && !projectBarExpanded ? '120px' : '180px' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
-                <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
-                {isMobile && (
-                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
-                )}
-              </Box>
-              {isMobile && (
-                <IconButton size="small" onClick={(e) => { e.stopPropagation(); setProjectBarExpanded(prev => !prev); }} aria-label="expand" title="Expand" sx={{ position: 'absolute', right: 6, top: '50%', transform: `translateY(-50%)`, flexShrink: 0 }}>
-                  <ExpandMoreIcon sx={{ transform: projectBarExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }} />
+          <>
+            {/* Exit button - separate floating button for both mobile and desktop */}
+            {!projectRecording && (
+              <Paper
+                elevation={8}
+                sx={{
+                  position: 'fixed',
+                  ...(isMobile ? {
+                    right: '0.75rem',
+                    top: mapDynamicHeight ? `calc(${mapDynamicHeight / 2}px - 13.5rem + 4.5rem)` : 'calc(50% - 13.5rem + 4.5rem)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  } : {
+                    bottom: 32,
+                    left: 'calc(50% - 280px)',
+                    display: 'flex',
+                    flexDirection: 'row',
+                  }),
+                  zIndex: theme.zIndex.drawer + 30,
+                  gap: 0.75,
+                  p: 0.75,
+                  borderRadius: 4,
+                  backgroundColor: theme.palette.background.paper,
+                  opacity: 0.65
+                }}
+              >
+                <IconButton
+                  aria-label="exit"
+                  title="Exit survey"
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    width: '3.5rem',
+                    height: '3.5rem',
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover,
+                    },
+                    '& .MuiSvgIcon-root': {
+                      fontSize: isMobile ? '2rem' : '1.25rem'
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    exitSurveyMode();
+                  }}
+                >
+                  <CloseIcon />
                 </IconButton>
-              )}
-            </Box>
+              </Paper>
+            )}
 
-            {(!isMobile || projectBarExpanded) && (
-              <Box ref={optionsRef} sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5, md: 2 }, mt: isMobile ? 1 : 0, width: isMobile ? '100%' : 'auto', flexWrap: 'nowrap', justifyContent: isMobile ? 'space-between' : 'center', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
-                <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', borderRadius: isMobile ? '50%' : undefined, aspectRatio: isMobile ? '1' : undefined, minWidth: isMobile ? '40px' : undefined, width: isMobile ? '40px' : undefined, height: isMobile ? '40px' : undefined, '& .MuiSvgIcon-root': { fontSize: isMobile ? '1.75rem' : undefined } }} onClick={async (e) => {
+            <Paper ref={projectBarRef} elevation={8} sx={{
+              position: 'fixed',
+              top: isMobile ? '5rem' : 'auto',
+              bottom: isMobile ? 'auto' : 32,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: isMobile ? 'auto' : 'fit-content',
+              maxWidth: { xs: '90%', sm: 'min(95%, 900px)', md: 'min(90%, 1000px)' },
+              zIndex: { xs: theme.zIndex.drawer + 3, sm: theme.zIndex.drawer + 30 },
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: isMobile ? 0.5 : 1,
+              px: { xs: 2, sm: 2, md: 3 },
+              py: { xs: 1, sm: 1.5 },
+              borderRadius: 4,
+              cursor: 'default',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              whiteSpace: 'nowrap'
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
+                <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%' }}>
+                  <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? '120px' : '180px' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
+                  <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
+                  {isMobile && (
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
+                  )}
+                </Box>
+              </Box>
+
+              {!isMobile && (
+                <Box ref={optionsRef} sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5, md: 2 }, width: 'auto', flexWrap: 'nowrap', justifyContent: 'center', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
+                  <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center' }} onClick={async (e) => {
+                    e.stopPropagation();
+
+                    // Check authentication first
+                    if (!isAuthenticated) {
+                      setLoginPromptOpen(true);
+                      return;
+                    }
+
+                    const map = mapRef.current;
+                    if (!coordinates || !coordinates.lat || !coordinates.lng) {
+                      showSnackbar('Unable to determine current live location (GPS).', 'error');
+                      return;
+                    }
+
+                    const waypointId = `waypoint-${Date.now()}`;
+                    const latNum = parseFloat(coordinates.lat);
+                    const lngNum = parseFloat(coordinates.lng);
+
+                    const newWp = {
+                      id: waypointId,
+                      lat: latNum,
+                      lng: lngNum,
+                      name: `Point ${(waypoints.filter(w => w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1}`,
+                      notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
+                      image: null,
+                      project_id: activeProject?.id || null,
+                      project_name: activeProject?.name || null,
+                      followsLive: true,
+                      createdDuringProject: isProjectMode ? true : false
+                    };
+
+                    // Move map to live location
+                    try { map && map.panTo([latNum, lngNum]); } catch (e) { }
+
+                    // Ensure only one live-following waypoint at a time
+                    setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
+                    setCurrentLocationWaypointId(waypointId);
+
+                    if (map) {
+                      const marker = L.marker([latNum, lngNum]).addTo(map);
+                      marker.on('click', function () { handleSelectWaypoint(waypointId); });
+                      markersRef.current[waypointId] = marker;
+                    }
+
+                    // Auto-save the waypoint to database
+                    try {
+                      const waypointPayload = {
+                        name: newWp.name,
+                        lat: latNum,
+                        lng: lngNum,
+                        notes: newWp.notes || '',
+                        image: null,
+                        project_id: newWp.project_id,
+                        project_name: newWp.project_name,
+                      };
+
+                      const savedWaypoint = await waypointsAPI.create(waypointPayload);
+                      setDbWaypointIds(prev => ({ ...prev, [waypointId]: savedWaypoint.id }));
+                      showSnackbar('Point saved! You can add more details.', 'success');
+                    } catch (error) {
+                      console.error('Error auto-saving waypoint:', error);
+                      if (error.message === 'Authentication required') {
+                        setLoginPromptOpen(true);
+                        return;
+                      }
+                      showSnackbar('Point created locally. Save again to update.', 'warning');
+                    }
+
+                    // Select the waypoint and open details for editing
+                    setSelectedWaypointId(waypointId);
+                    setWaypointDetailsOpen(true);
+                    setWaypointData({
+                      name: newWp.name,
+                      lat: latNum.toFixed(6),
+                      lng: lngNum.toFixed(6),
+                      notes: newWp.notes,
+                      image: null,
+                      project_id: newWp.project_id,
+                      project_name: newWp.project_name,
+                      followsLive: true
+                    });
+                  }}>
+                    <AddLocation />
+                  </IconButton>
+
+                  <IconButton aria-label="start" title="Start" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#45a049' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                    <PlayArrowOutlinedIcon />
+                  </IconButton>
+
+                  <IconButton aria-label="pause" title="Pause" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', transition: 'all 0.25s ease' }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
+                    <PauseOutlinedIcon />
+                  </IconButton>
+
+                  <IconButton aria-label="stop" title="End" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', transition: 'all 0.25s ease' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
+                    <StopCircleOutlinedIcon />
+                  </IconButton>
+                </Box>
+              )}
+            </Paper>
+
+            {isMobile && (
+              <Paper elevation={8} sx={{
+                position: 'fixed',
+                right: '0.75rem',
+                top: mapDynamicHeight ? `calc(${mapDynamicHeight / 2}px + 4.5rem)` : 'calc(50% + 4.5rem)',
+                transform: 'translateY(-50%)',
+                zIndex: theme.zIndex.drawer + 30,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.75,
+                p: 0.75,
+                borderRadius: 4,
+                backgroundColor: theme.palette.background.paper,
+                opacity: 0.85
+              }}>
+                <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={async (e) => {
                   e.stopPropagation();
 
-                  // Check authentication first
                   if (!isAuthenticated) {
                     setLoginPromptOpen(true);
                     return;
@@ -3798,10 +3972,8 @@ function App() {
                     createdDuringProject: isProjectMode ? true : false
                   };
 
-                  // Move map to live location
                   try { map && map.panTo([latNum, lngNum]); } catch (e) { }
 
-                  // Ensure only one live-following waypoint at a time
                   setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
                   setCurrentLocationWaypointId(waypointId);
 
@@ -3811,7 +3983,6 @@ function App() {
                     markersRef.current[waypointId] = marker;
                   }
 
-                  // Auto-save the waypoint to database
                   try {
                     const waypointPayload = {
                       name: newWp.name,
@@ -3835,7 +4006,6 @@ function App() {
                     showSnackbar('Point created locally. Save again to update.', 'warning');
                   }
 
-                  // Select the waypoint and open details for editing
                   setSelectedWaypointId(waypointId);
                   setWaypointDetailsOpen(true);
                   setWaypointData({
@@ -3848,30 +4018,31 @@ function App() {
                     project_name: newWp.project_name,
                     followsLive: true
                   });
+
+                  // Expand bottom sheet on mobile
+                  if (isMobile && bottomSheetRef.current) {
+                    setTimeout(() => {
+                      bottomSheetRef.current.expand();
+                    }, 100);
+                  }
                 }}>
                   <AddLocation />
                 </IconButton>
 
-                <IconButton aria-label="start" title="Start" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', aspectRatio: isMobile ? '1' : undefined, minWidth: isMobile ? '40px' : undefined, width: isMobile ? '40px' : undefined, height: isMobile ? '40px' : undefined, transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#45a049' }, '& .MuiSvgIcon-root': { fontSize: isMobile ? '1.75rem' : undefined } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                <IconButton aria-label="start" title="Start" sx={{ display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#45a049' }, '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
                   <PlayArrowOutlinedIcon />
                 </IconButton>
 
-                <IconButton aria-label="pause" title="Pause" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', borderRadius: isMobile ? '50%' : undefined, aspectRatio: isMobile ? '1' : undefined, minWidth: isMobile ? '40px' : undefined, width: isMobile ? '40px' : undefined, height: isMobile ? '40px' : undefined, transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: isMobile ? '1.75rem' : undefined } }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
+                <IconButton aria-label="pause" title="Pause" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
                   <PauseOutlinedIcon />
                 </IconButton>
 
-                {!projectRecording && (
-                  <IconButton aria-label="exit" title="Exit survey" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', ml: isMobile ? 0 : 1, borderRadius: isMobile ? '50%' : undefined, aspectRatio: isMobile ? '1' : undefined, minWidth: isMobile ? '40px' : undefined, width: isMobile ? '40px' : undefined, height: isMobile ? '40px' : undefined, '& .MuiSvgIcon-root': { fontSize: isMobile ? '1.75rem' : undefined } }} onClick={(e) => { e.stopPropagation(); exitSurveyMode(); }}>
-                    <CloseIcon />
-                  </IconButton>
-                )}
-
-                <IconButton aria-label="stop" title="End" sx={{ flex: isMobile ? 1 : 'initial', display: 'flex', justifyContent: 'center', borderRadius: isMobile ? '50%' : undefined, aspectRatio: isMobile ? '1' : undefined, minWidth: isMobile ? '40px' : undefined, width: isMobile ? '40px' : undefined, height: isMobile ? '40px' : undefined, transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: isMobile ? '1.75rem' : undefined } }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
+                <IconButton aria-label="stop" title="End" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
                   <StopCircleOutlinedIcon />
                 </IconButton>
-              </Box>
+              </Paper>
             )}
-          </Paper>
+          </>
         )}
 
         {/* End Project Confirmation Dialog */}
