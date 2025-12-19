@@ -280,7 +280,6 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
               <Avatar
-                src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
                 sx={{
                   width: 40,
                   height: 40,

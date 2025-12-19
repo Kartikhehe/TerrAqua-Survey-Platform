@@ -288,16 +288,38 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
               {viewProjectId !== null ? 'Project Points' : 'Saved Points'}
             </Typography>
           </Box>
-          <IconButton
-            onClick={onClose}
-            size="small"
-            sx={{
-              color: theme.palette.text.secondary,
-              '&:hover': { backgroundColor: theme.palette.action.hover },
-            }}
-          >
-            <Close />
-          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {viewProjectId !== null && (
+              <Button
+                onClick={(e) => {
+                  const project = processedData.projects.find(p => p.project_id === viewProjectId);
+                  if (project) {
+                    handlePreviewProject(project, e);
+                  }
+                }}
+                size="small"
+                endIcon={<ArrowOutwardOutlined />}
+                sx={{
+                  textTransform: 'none',
+                  color: theme.palette.text.secondary,
+                  '&:hover': { backgroundColor: theme.palette.action.hover },
+                  mr: 0.5,
+                }}
+              >
+                See all
+              </Button>
+            )}
+            <IconButton
+              onClick={onClose}
+              size="small"
+              sx={{
+                color: theme.palette.text.secondary,
+                '&:hover': { backgroundColor: theme.palette.action.hover },
+              }}
+            >
+              <Close />
+            </IconButton>
+          </Box>
         </DialogTitle>
 
         {/* Search and Sort Toolbar */}
@@ -398,7 +420,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, mr: { xs: 1.5, sm: 2 } }}>
-                          <FolderIcon sx={{ color: '#4CAF50' }} />
+                          <FolderIcon sx={{ color: '#4CAF50', fontSize: { xs: '1.75rem', sm: '1.5rem' } }} />
                         </Box>
                         <ListItemText
                           primary={`${p.project_name} (${p.items.length})`}
@@ -413,14 +435,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                             color="error"
                             title="Delete project"
                           >
-                            <DeleteOutlined fontSize="small" />
+                            <DeleteOutlined sx={{ fontSize: { xs: '1.4rem', sm: '1.25rem' } }} />
                           </IconButton>
                           <IconButton
                             size="small"
                             onClick={(e) => handlePreviewProject(p, e)}
                             title="See all points"
                           >
-                            <ArrowOutwardOutlined fontSize="small" />
+                            <ArrowOutwardOutlined sx={{ fontSize: { xs: '1.4rem', sm: '1.25rem' } }} />
                           </IconButton>
                         </Box>
                       </ListItemButton>
@@ -442,7 +464,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, mr: { xs: 1.5, sm: 2 } }}>
-                          <LocationOn sx={{ color: '#2196F3' }} />
+                          <LocationOn sx={{ color: '#2196F3', fontSize: { xs: '1.75rem', sm: '1.5rem' } }} />
                         </Box>
                         <ListItemText
                           primary={waypoint.name}
@@ -457,14 +479,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                             color="error"
                             title="Delete point"
                           >
-                            <DeleteOutlined fontSize="small" />
+                            <DeleteOutlined sx={{ fontSize: { xs: '1.4rem', sm: '1.25rem' } }} />
                           </IconButton>
                           <IconButton
                             size="small"
                             onClick={(e) => handleViewClick(waypoint, e)}
                             title="Locate on map"
                           >
-                            <ArrowOutwardOutlined fontSize="small" />
+                            <ArrowOutwardOutlined sx={{ fontSize: { xs: '1.4rem', sm: '1.25rem' } }} />
                           </IconButton>
                         </Box>
                       </ListItemButton>
@@ -492,7 +514,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                           }}
                         >
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, mr: { xs: 1.5, sm: 2 } }}>
-                            <LocationOn sx={{ color: '#2196F3' }} />
+                            <LocationOn sx={{ color: '#2196F3', fontSize: { xs: '1.75rem', sm: '1.5rem' } }} />
                           </Box>
                           <ListItemText
                             primary={waypoint.name}
@@ -507,14 +529,14 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                               color="error"
                               title="Delete point"
                             >
-                              <DeleteOutlined fontSize="small" />
+                              <DeleteOutlined sx={{ fontSize: { xs: '1.4rem', sm: '1.25rem' } }} />
                             </IconButton>
                             <IconButton
                               size="small"
                               onClick={(e) => handleViewClick(waypoint, e)}
                               title="Locate on map"
                             >
-                              <ArrowOutwardOutlined fontSize="small" />
+                              <ArrowOutwardOutlined sx={{ fontSize: { xs: '1.4rem', sm: '1.25rem' } }} />
                             </IconButton>
                           </Box>
                         </ListItemButton>

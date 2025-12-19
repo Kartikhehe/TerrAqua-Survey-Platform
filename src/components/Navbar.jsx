@@ -13,7 +13,7 @@ import {
   Switch,
   FormControlLabel,
 } from '@mui/material';
-import { NearMeOutlined as NearMeOutlinedIcon, DarkMode, LightMode, LocationOn as LocationOnIcon, SatelliteAlt as SatelliteAltIcon } from '@mui/icons-material';
+import { DarkMode, LightMode, LocationOn as LocationOnIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -92,25 +92,17 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
         px: { xs: '0.875rem', sm: '1.3125rem', md: '1.75rem' },
         minHeight: { xs: '4rem', sm: '3.5rem' }
       }}>
-        <NearMeOutlinedIcon sx={{
-          fontSize: { xs: '1.75rem', sm: '1.53125rem', md: '1.75rem' },
-          color: '#4CAF50',
-          mr: { xs: 0.875, sm: 1.3125 },
-          transform: 'scaleX(-1)'
-        }} />
-        <Typography
-          variant="h5"
-          component="div"
-          sx={{
-            flexGrow: 1,
-            fontWeight: 600,
-            letterSpacing: { xs: '0.2625px', sm: '0.4375px' },
-            fontSize: { xs: '1.25rem', sm: '0.9625rem', md: '1.3125rem' },
-            color: 'text.primary',
-          }}
-        >
-          GPS-based Survey App
-        </Typography>
+        <Box sx={{ flexGrow: 1 }}>
+          <img
+            src="/src/assets/SurveyZest logo.png"
+            alt="SurveyZest"
+            style={{
+              height: '2.5rem',
+              width: 'auto',
+              objectFit: 'contain'
+            }}
+          />
+        </Box>
         <IconButton
           onClick={handleClick}
           size="small"
@@ -129,7 +121,6 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           aria-expanded={open ? 'true' : undefined}
         >
           <Avatar
-            src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
             sx={{
               width: { xs: 34, sm: 32 },
               height: { xs: 34, sm: 32 },
@@ -188,7 +179,6 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
           <MenuItem onClick={handleClose}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
               <Avatar
-                src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
                 sx={{
                   width: 32,
                   height: 32,
