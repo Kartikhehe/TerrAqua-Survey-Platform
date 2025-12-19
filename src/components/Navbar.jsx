@@ -16,6 +16,7 @@ import {
 import { DarkMode, LightMode, LocationOn as LocationOnIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import logo from '../assets/SurveyZest logo.png';
 
 const drawerWidth = 260;
 const drawerCollapsedWidth = 64;
@@ -94,7 +95,7 @@ function Navbar({ sidebarOpen, isMobile, darkMode, onToggleDarkMode, onSetDefaul
       }}>
         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
           <img
-            src="/src/assets/SurveyZest logo.png"
+            src={logo}
             alt="SurveyZest"
             style={{
               height: '2.5rem',
