@@ -3332,6 +3332,11 @@ function App() {
           onToggle={handleSidebarToggle}
           isMobile={isMobile}
           onMenuItemClick={handleMenuItemClick}
+          satelliteHybridMode={satelliteHybridMode}
+          onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
+          darkMode={darkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+          onSetDefaultLocation={handleSetDefaultLocation}
         />
         <StartSurveyDialog
           open={startSurveyDialogOpen}
@@ -3345,7 +3350,7 @@ function App() {
             onClick={handleSidebarToggle}
             sx={{
               position: 'fixed',
-              top: '5rem',
+              top: '4.5rem',
               left: '0.75rem',
               width: '3.5rem',
               height: '3.5rem',

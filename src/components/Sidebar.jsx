@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Drawer,
   List,
@@ -10,6 +11,13 @@ import {
   IconButton,
   Backdrop,
   useTheme,
+  Avatar,
+  Typography,
+  Divider,
+  Button,
+  Menu,
+  MenuItem,
+  Switch,
 } from '@mui/material';
 import {
   AddLocationAltOutlined as AddLocationAltOutlinedIcon,
@@ -17,21 +25,92 @@ import {
   IosShareOutlined as IosShareOutlinedIcon,
   InputOutlined as InputOutlinedIcon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  SatelliteAlt as SatelliteAltIcon,
+  Map as MapIcon,
+  Logout as LogoutIcon,
+  Settings as SettingsIcon,
+  DarkMode,
+  LightMode,
+  LocationOn as LocationOnIcon,
 } from '@mui/icons-material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 // Responsive drawer widths (87.5% of original, increased for mobile)
 const drawerWidth = { xs: '18rem', sm: '14.21875rem', md: '15.3125rem' };
 const drawerCollapsedWidth = { xs: '3.0625rem', sm: '3.5rem' };
 
-function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
+function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHybridMode, onToggleSatelliteHybrid, darkMode, onToggleDarkMode, onSetDefaultLocation }) {
   const theme = useTheme();
+  const { user, logout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
+  const settingsOpen = Boolean(settingsAnchorEl);
+  const isDark = theme.palette.mode === 'dark';
+
+  // Get user data from auth context
+  const userName = isAuthenticated ? (user?.full_name || 'User') : 'Guest User';
+  const userFirstName = userName && userName.split(' ')[0];
+  const userEmail = isAuthenticated ? (user?.email || '') : 'Not Logged in';
+
+  // Generate avatar initials from full name
+  const getAvatarInitials = (name) => {
+    if (!name) return 'U';
+    if (name === 'Guest User') return 'GU';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const handleSettingsClick = (event) => {
+    setSettingsAnchorEl(event.currentTarget);
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsAnchorEl(null);
+  };
+
+  const handleDarkModeToggle = () => {
+    if (onToggleDarkMode) {
+      onToggleDarkMode();
+    }
+    handleSettingsClose();
+  };
+
+  const handleSetDefaultLocation = () => {
+    if (onSetDefaultLocation) {
+      onSetDefaultLocation();
+    }
+    handleSettingsClose();
+  };
+
   const menuItems = [
     { text: 'Single Point Capture', icon: <LocationOnOutlinedIcon />, action: () => onMenuItemClick('Single Point Capture') },
     { text: 'Start Survey', icon: <AddLocationAltOutlinedIcon />, action: () => onMenuItemClick('Start Survey') },
     { text: 'View Saved Points', icon: <BookmarkAddedOutlinedIcon />, action: () => onMenuItemClick('Saved Points') },
     { text: 'Export Data', icon: <IosShareOutlinedIcon />, action: () => onMenuItemClick('Export Data') },
+    {
+      text: satelliteHybridMode ? 'OpenStreet Mode' : 'Satellite Mode',
+      icon: satelliteHybridMode ? <MapIcon /> : <SatelliteAltIcon />,
+      action: () => {
+        if (onToggleSatelliteHybrid) {
+          onToggleSatelliteHybrid();
+        }
+      }
+    },
     { text: 'Import File', icon: <InputOutlinedIcon />, action: () => onMenuItemClick('Import File') },
   ];
 
@@ -76,11 +155,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
               duration: theme.transitions.duration.enteringScreen,
             }),
             overflowX: 'hidden',
-            top: { xs: '4.5rem', sm: '3.5rem' },
-            height: { xs: 'calc(100vh - 4.5rem)', sm: 'calc(100vh - 3.5rem)' },
+            top: { xs: '4rem', sm: '3.5rem' },
+            height: { xs: 'calc(100vh - 4rem)', sm: 'calc(100vh - 3.5rem)' },
             position: 'fixed',
             left: 0,
             zIndex: isMobile ? theme.zIndex.drawer + 20 : theme.zIndex.drawer,
+            display: 'flex',
+            flexDirection: 'column',
           },
         })}
       >
@@ -90,7 +171,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             alignItems: 'center',
             justifyContent: sidebarOpen ? 'flex-end' : 'center',
             padding: { xs: theme.spacing(0, 0.65625), sm: theme.spacing(0, 0.875) },
-            minHeight: { xs: '4.5rem', sm: '3.5rem' },
+            minHeight: { xs: '4rem', sm: '3.5rem' },
             borderBottom: `1px solid ${theme.palette.divider}`,
             position: 'absolute',
             top: 0,
@@ -120,7 +201,9 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
           </IconButton>
         </Box>
-        <List sx={{ pt: { xs: '3.9375rem', sm: '4.375rem' } }}>
+
+        {/* Menu Items - with flex:1 to push user section to bottom */}
+        <List sx={{ pt: { xs: '3.9375rem', sm: '4.375rem' }, flex: 1, overflowY: 'auto' }}>
           {menuItems.map((item) => (
             <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
               <Tooltip
@@ -185,10 +268,154 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick }) {
             </ListItem>
           ))}
         </List>
+
+        {/* User Section at Bottom */}
+        {sidebarOpen && (
+          <Box
+            sx={{
+              borderTop: `1px solid ${theme.palette.divider}`,
+              p: 2,
+              backgroundColor: theme.palette.background.paper,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Avatar
+                src={`https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(userFirstName)}&size=32`}
+                sx={{
+                  width: 40,
+                  height: 40,
+                  bgcolor: theme.palette.primary.main,
+                  color: 'white',
+                  fontWeight: 600,
+                }}
+              >
+                {getAvatarInitials(userName)}
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      fontSize: '0.875rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {userName}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={handleSettingsClick}
+                    sx={{
+                      padding: 0.25,
+                      '& .MuiSvgIcon-root': {
+                        fontSize: '1rem',
+                      },
+                    }}
+                  >
+                    <SettingsIcon />
+                  </IconButton>
+                </Box>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    fontSize: '0.75rem',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'block',
+                  }}
+                >
+                  {userEmail}
+                </Typography>
+              </Box>
+            </Box>
+            {isAuthenticated && (
+              <Button
+                fullWidth
+                variant="outlined"
+                color="error"
+                startIcon={<LogoutIcon />}
+                onClick={handleLogout}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  py: 0.75,
+                  fontSize: '0.875rem',
+                }}
+              >
+                Logout
+              </Button>
+            )}
+          </Box>
+        )}
+
+        {/* Settings Menu */}
+        <Menu
+          anchorEl={settingsAnchorEl}
+          open={settingsOpen}
+          onClose={handleSettingsClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'left',
+          }}
+          PaperProps={{
+            elevation: 3,
+            sx: {
+              minWidth: 200,
+              borderRadius: 2,
+              mt: -1,
+            },
+          }}
+        >
+          <MenuItem onClick={handleDarkModeToggle} sx={{ py: 1.1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                {isDark ? (
+                  <DarkMode sx={{ fontSize: '1.09375rem', color: 'text.secondary' }} />
+                ) : (
+                  <LightMode sx={{ fontSize: '1.09375rem', color: 'text.secondary' }} />
+                )}
+                <Typography sx={{ color: 'text.primary', fontSize: '0.85rem' }}>
+                  {isDark ? 'Dark Mode' : 'Light Mode'}
+                </Typography>
+              </Box>
+              <Switch
+                checked={isDark}
+                onChange={handleDarkModeToggle}
+                size="small"
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#4CAF50',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: '#4CAF50',
+                  },
+                }}
+              />
+            </Box>
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={handleSetDefaultLocation} sx={{ py: 1.1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
+              <LocationOnIcon sx={{ fontSize: '1.09375rem', color: 'text.secondary' }} />
+              <Typography sx={{ color: 'text.primary', fontSize: '0.85rem' }}>
+                Set Default Location
+              </Typography>
+            </Box>
+          </MenuItem>
+        </Menu>
       </Drawer>
     </>
   );
 }
 
 export default Sidebar;
-
