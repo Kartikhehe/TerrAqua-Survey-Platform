@@ -151,6 +151,8 @@ const ImageGallery = ({
             {canAddMore && (
                 <>
                     <input
+                        key={images.length}
+                        capture="environment"
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
