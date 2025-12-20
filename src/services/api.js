@@ -216,16 +216,8 @@ export const uploadAPI = {
     }
 
     const uploadUrl = `${API_BASE_URL}/upload/multiple`;
-    let credentialsMode = 'include';
-    try {
-      const backendOrigin = new URL(API_BASE_URL).origin;
-      const frontendOrigin = typeof window !== 'undefined' && window.location.origin;
-      if (frontendOrigin && backendOrigin !== frontendOrigin) {
-        credentialsMode = 'omit';
-      }
-    } catch (err) {
-      credentialsMode = 'include';
-    }
+    // Always include credentials to match deleteImage behavior which is working
+    const credentialsMode = 'include';
 
     const response = await fetch(uploadUrl, {
       method: 'POST',
