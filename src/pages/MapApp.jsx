@@ -571,7 +571,7 @@ function App() {
     showSnackbar(newVal ? 'Recording started' : 'Recording paused', 'info');
   };
 
-  const handleStartRecording = () => {
+  const handleStartRecording = async () => {
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
       return;
@@ -580,6 +580,47 @@ function App() {
       showSnackbar('Start or load a project first', 'error');
       return;
     }
+
+    // Request background location permission on Android (dynamic import to avoid build errors)
+    try {
+      // Check if we're on a native platform
+      const { Capacitor } = await import('@capacitor/core');
+
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+        try {
+          const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+          const permission = await BackgroundGeolocation.requestPermissions();
+          console.log('Background location permission:', permission);
+
+          if (permission?.location !== 'granted') {
+            // Show guidance to user
+            const userConfirmed = window.confirm(
+              "Background location access is required for continuous tracking.\n\n" +
+              "Please follow these steps:\n" +
+              "1. Tap 'Settings' when prompted\n" +
+              "2. Go to Permissions → Location\n" +
+              "3. Select 'Allow all the time'\n\n" +
+              "Tap OK to open settings, or Cancel to continue without background tracking."
+            );
+
+            if (userConfirmed) {
+              showSnackbar('Please enable "Allow all the time" in location permissions', 'warning');
+            } else {
+              showSnackbar('Background tracking may not work without "Allow all the time" permission', 'warning');
+            }
+          } else {
+            showSnackbar('Background location permission granted', 'success');
+          }
+        } catch (error) {
+          console.error('Error requesting background location permission:', error);
+          showSnackbar('Failed to request location permission', 'error');
+        }
+      }
+    } catch (error) {
+      // Capacitor not available (web build), continue normally
+      console.log('Running on web, skipping native permission request');
+    }
+
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
 
@@ -734,10 +775,168 @@ function App() {
     showSnackbar('Exited survey mode', 'info');
   };
 
+
+  // --------------------------------------------------------------------------
+  // GPS & Location Tracking Logic (Foreground vs Background)
+  // --------------------------------------------------------------------------
+
+  // Shared position update handler
+  const handlePositionUpdate = (latitude, longitude, accuracy, altitude) => {
+    // Update coordinates
+    setCoordinates({
+      lat: latitude.toFixed(6),
+      lng: longitude.toFixed(6),
+      accuracy: accuracy ? Math.round(accuracy) : null,
+      elevation: altitude ? Math.round(altitude) : null
+    });
+
+    // Update live location marker
+    if (liveLocationMarkerRef.current) {
+      liveLocationMarkerRef.current.setLatLng([latitude, longitude]);
+    } else if (mapRef.current) {
+      liveLocationMarkerRef.current = createLiveLocationMarker([latitude, longitude]).addTo(mapRef.current);
+    }
+
+    // Update WaypointDetails if open and unselected (showing live coords)
+    if (waypointDetailsOpen && !selectedWaypointId) {
+      setWaypointData(prev => ({ ...prev, lat: latitude.toFixed(6), lng: longitude.toFixed(6), notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}` }));
+    }
+
+    // Update following waypoints
+    const liveId = currentLocationWaypointRef.current || 'current-location';
+    setWaypoints(prev => prev.map(wp => {
+      if (wp.followsLive || wp.id === liveId) {
+        return { ...wp, lat: latitude, lng: longitude, notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}` };
+      }
+      return wp;
+    }));
+
+    // Update live waypoint marker position in markersRef
+    try {
+      const liveWaypointId = currentLocationWaypointRef.current;
+      if (liveWaypointId && markersRef.current[liveWaypointId]) {
+        markersRef.current[liveWaypointId].setLatLng([latitude, longitude]);
+      }
+    } catch (e) { }
+
+    // Update selected waypoint details if it is the live one
+    if (selectedWaypointId && selectedWaypointId === currentLocationWaypointRef.current) {
+      setWaypointData(prev => ({ ...prev, lat: latitude.toFixed(6), lng: longitude.toFixed(6), notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}` }));
+    }
+  };
+
+  // Helper to stop current watcher (whether Web or Native)
+  const stopLocationWatcher = async () => {
+    if (watchPositionIdRef.current !== null) {
+      if (typeof watchPositionIdRef.current === 'string') {
+        // Native watcher (string ID)
+        try {
+          const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+          await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
+        } catch (e) { console.error('Error stopping native watcher:', e); }
+      } else if (navigator.geolocation) {
+        // Web watcher (number ID)
+        navigator.geolocation.clearWatch(watchPositionIdRef.current);
+      }
+      watchPositionIdRef.current = null;
+    }
+  };
+
+  // Start standard foreground tracking (Web API) - Lightweight, for map viewing
+  const startForegroundTracking = async () => {
+    await stopLocationWatcher(); // Clear existing
+
+    if (navigator.geolocation) {
+      // First get current position for immediate fix
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy, altitude } = position.coords;
+          handlePositionUpdate(latitude, longitude, accuracy, altitude);
+          setGpsActive(true);
+
+          // Initial center if needed (only on very first load logic, but here we just ensure marker)
+          // If map is empty or uninitialized, might need check.
+          try {
+            if (mapRef.current && !gpsActive) {
+              mapRef.current.setView([latitude, longitude], 15);
+            }
+          } catch (e) { }
+
+          // Watch
+          watchPositionIdRef.current = navigator.geolocation.watchPosition(
+            (pos) => {
+              handlePositionUpdate(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.altitude);
+            },
+            (err) => { console.error(err); setGpsActive(false); },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 1000 }
+          );
+        },
+        (err) => {
+          console.error('Foreground init error:', err);
+          setGpsWarningOpen(true);
+        },
+        { enableHighAccuracy: true, timeout: 12000 }
+      );
+    } else {
+      setGpsWarningOpen(true);
+    }
+  };
+
+  // Start heavy-duty background tracking (Native Plugin) - For Active Surveys
+  const startNativeBackgroundTracking = async () => {
+    await stopLocationWatcher(); // Clear existing
+
+    try {
+      const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+
+      // Check permissions gently
+      try {
+        const status = await BackgroundGeolocation.checkPermissions();
+        if (status.location !== 'granted') {
+          await BackgroundGeolocation.requestPermissions();
+        }
+      } catch (e) { console.warn('checkPermissions failed', e); }
+
+      const watcherId = await BackgroundGeolocation.addWatcher(
+        {
+          backgroundMessage: "Recording survey track...",
+          backgroundTitle: "TerrAqua",
+          requestPermissions: true,
+          stale: false,
+          distanceFilter: 2 // Update every 2 meters for recording
+        },
+        (location, error) => {
+          if (error) {
+            console.error('BackgroundGeolocation error:', error);
+            return;
+          }
+          handlePositionUpdate(location.latitude, location.longitude, location.accuracy, location.altitude);
+          setGpsActive(true);
+        }
+      );
+      watchPositionIdRef.current = watcherId;
+      console.log('Native Background Tracking active:', watcherId);
+
+    } catch (e) {
+      console.error('Failed to start native background tracking, falling back to foreground:', e);
+      startForegroundTracking();
+    }
+  };
+
   // GPS Tracking Functions (using GPSTracker class)
   const startGPSTracking = async (projectId) => {
     try {
       console.log('[GPS] Starting GPS tracking for project:', projectId);
+
+      // If Native, switch to Background Tracking Mode
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          console.log('[GPS] Switching to Native Background Mode');
+          await startNativeBackgroundTracking();
+        }
+      } catch (e) { }
+
       console.log('[GPS] Map ref:', mapRef.current);
       gpsTrackerRef.current = new GPSTracker(mapRef.current, projectId);
       console.log('[GPS] GPSTracker instance created');
@@ -769,6 +968,16 @@ function App() {
       try {
         const result = await gpsTrackerRef.current.stop();
         console.log('GPS tracking ended. Distance:', result.total_distance, 'm');
+
+        // If Native, revert to Foreground Tracking Mode
+        try {
+          const { Capacitor } = await import('@capacitor/core');
+          if (Capacitor.isNativePlatform()) {
+            console.log('[GPS] Reverting to Foreground Mode');
+            await startForegroundTracking();
+          }
+        } catch (e) { }
+
         return result;
       } catch (error) {
         console.error('Error stopping GPS tracking:', error);
@@ -2383,170 +2592,8 @@ function App() {
       tileLayerRef.current = tileLayer;
     }
 
-    // Try to get user's current location and center map on it
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude, accuracy } = position.coords;
-          const hasAccuracy = typeof accuracy === 'number' && !Number.isNaN(accuracy);
-
-          // If accuracy is reported but is low, log a warning and show a small snackbar
-          // Do NOT block or return — still show the live location even if accuracy is poor.
-          if (hasAccuracy && accuracy > 100) {
-            console.log('Low GPS accuracy detected. Accuracy (m):', accuracy);
-            setSnackbar({ open: true, message: `Low GPS accuracy: ±${Math.round(accuracy)}m — location may be imprecise`, severity: 'warning' });
-          }
-
-          // Set view to current location with zoomed out view (zoom level 12 for city-level view)
-          try { map && map.setView && map.setView([latitude, longitude], 15); } catch (e) { console.error('Error calling map.setView in getCurrentPosition:', e); }
-          if (isMobile) {
-            updateMobileMapHeight();
-            // ensure layout settles then re-center at desired zoom on mobile
-            setTimeout(() => {
-              try { map.invalidateSize(); } catch (e) { }
-              try { map.setView([latitude, longitude], 15, { animate: false }); } catch (e) { }
-            }, 120);
-          }
-
-          // Update coordinates with accuracy
-          setCoordinates({
-            lat: latitude.toFixed(6),
-            lng: longitude.toFixed(6),
-            accuracy: accuracy ? Math.round(accuracy) : null
-          });
-
-          // Create blue circle marker for live location
-          const liveMarker = createLiveLocationMarker([latitude, longitude]).addTo(map);
-          liveLocationMarkerRef.current = liveMarker;
-          setGpsActive(true);
-
-          // Keep a persistent live blue location marker (do NOT add a regular saved marker)
-          const waypointId = 'current-location';
-          setCurrentLocationWaypointId(waypointId);
-          // Create blue live marker and store separately
-          try {
-            if (liveLocationMarkerRef.current) {
-              liveLocationMarkerRef.current.remove();
-              liveLocationMarkerRef.current = null;
-            }
-            const liveMarker = createLiveLocationMarker([latitude, longitude]).addTo(map);
-            liveLocationMarkerRef.current = liveMarker;
-          } catch (e) {
-            console.error('Error creating live location marker:', e);
-          }
-          // Do not modify `waypoints` array here (keeps saved points visible)
-          // Do not auto-select the current location; WaypointDetails will show live coords when open and no selection
-
-          // Start watching position for live updates
-          watchPositionIdRef.current = navigator.geolocation.watchPosition(
-            (position) => {
-              const { latitude: newLat, longitude: newLng, accuracy: newAccuracy } = position.coords;
-
-              // Update coordinates
-              setCoordinates({
-                lat: newLat.toFixed(6),
-                lng: newLng.toFixed(6),
-                accuracy: newAccuracy ? Math.round(newAccuracy) : null,
-                elevation: position.coords.altitude ? Math.round(position.coords.altitude) : null
-              });
-
-              // If accuracy becomes low, show a lightweight snackbar warning (non-blocking)
-              if (typeof newAccuracy === 'number' && !Number.isNaN(newAccuracy) && newAccuracy > 100) {
-                setSnackbar({ open: true, message: `Low GPS accuracy: ±${Math.round(newAccuracy)}m — location may be imprecise`, severity: 'warning' });
-              }
-
-              // Update live location marker position
-              if (liveLocationMarkerRef.current) {
-                liveLocationMarkerRef.current.setLatLng([newLat, newLng]);
-              } else if (mapRef.current) {
-                // Recreate marker if it was removed
-                const liveMarker = createLiveLocationMarker([newLat, newLng]).addTo(mapRef.current);
-                liveLocationMarkerRef.current = liveMarker;
-              }
-              // On first watch update on mobile ensure centering at desired zoom
-              if (isMobile && gpsActive) {
-                setTimeout(() => {
-                  try { mapRef.current.invalidateSize(); } catch (e) { }
-                  try { mapRef.current.setView([newLat, newLng], 15, { animate: false }); } catch (e) { }
-                }, 120);
-              }
-
-              // Live marker is managed separately; update it here
-              if (liveLocationMarkerRef.current) {
-                liveLocationMarkerRef.current.setLatLng([newLat, newLng]);
-              }
-
-              // If WaypointDetails is open and there's no selection, update the details to show live coords
-              if (waypointDetailsOpen && !selectedWaypointId) {
-                setWaypointData(prev => ({
-                  ...prev,
-                  lat: newLat.toFixed(6),
-                  lng: newLng.toFixed(6),
-                  notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}`
-                }));
-              }
-
-              // Update any waypoint that is flagged to follow live GPS (or matches currentLocationWaypointId)
-              const liveId = currentLocationWaypointRef.current || 'current-location';
-              setWaypoints(prev => prev.map(wp => {
-                if (wp.followsLive || wp.id === liveId) {
-                  return { ...wp, lat: newLat, lng: newLng, notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}` };
-                }
-                return wp;
-              }));
-
-              // Also update the marker position for the live-following waypoint if present
-              try {
-                const liveWaypointId = currentLocationWaypointRef.current;
-                if (liveWaypointId && markersRef.current[liveWaypointId]) {
-                  markersRef.current[liveWaypointId].setLatLng([newLat, newLng]);
-                }
-              } catch (e) { }
-
-              // If the live-following waypoint is selected, update details live
-              if (selectedWaypointId && selectedWaypointId === currentLocationWaypointRef.current) {
-                setWaypointData(prev => ({
-                  ...prev,
-                  lat: newLat.toFixed(6),
-                  lng: newLng.toFixed(6),
-                  notes: `Accuracy: ${newAccuracy ? Math.round(newAccuracy) + 'm' : 'N/A'}`
-                }));
-              }
-            },
-            (error) => {
-              console.log('Watch position error:', error);
-              setGpsActive(false);
-              // Remove live location marker if GPS is lost
-              if (liveLocationMarkerRef.current) {
-                liveLocationMarkerRef.current.remove();
-                liveLocationMarkerRef.current = null;
-              }
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 12000, // Increased timeout for better reliability
-              maximumAge: 1000 // Update every second
-            }
-          );
-        },
-        (error) => {
-          // If geolocation fails, show GPS warning dialog and notify user
-          console.log('Geolocation error:', error);
-          setGpsActive(false);
-          showSnackbar('Unable to access device location. Please allow GPS access and try again.', 'error');
-          // Keep map on India center, don't navigate anywhere
-          setGpsWarningOpen(true);
-        },
-        {
-          enableHighAccuracy: true, // Use high accuracy for better location
-          timeout: 12000, // Increased timeout 
-          maximumAge: 0 // Don't use cached location, get fresh one
-        }
-      );
-    } else {
-      // Geolocation not available - show GPS warning dialog
-      setGpsWarningOpen(true);
-    }
+    // Initial tracking on mount (Foreground only)
+    startForegroundTracking();
 
     // Create custom control container for all map controls (search, locate, zoom)
     const MapControlsContainer = L.Control.extend({
@@ -2817,8 +2864,17 @@ function App() {
     // Cleanup function to remove map instance when component unmounts
     return () => {
       // Stop watching position
-      if (watchPositionIdRef.current !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchPositionIdRef.current);
+      // Stop watching position
+      if (watchPositionIdRef.current !== null) {
+        if (typeof watchPositionIdRef.current === 'string') {
+          // Native watcher (string ID)
+          import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
+            BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
+          }).catch(e => console.error(e));
+        } else if (navigator.geolocation) {
+          // Web watcher (number ID)
+          navigator.geolocation.clearWatch(watchPositionIdRef.current);
+        }
         watchPositionIdRef.current = null;
         setGpsActive(false);
       }
@@ -3382,9 +3438,11 @@ function App() {
           sx={{
             flexGrow: 1,
             p: 0,
-            height: '100vh',
+            height: '100%',
+            minHeight: '100vh',
             overflow: 'hidden',
             marginTop: { xs: '4rem', sm: '3.5rem' },
+            paddingBottom: 'env(safe-area-inset-bottom)',
             width: '100%',
             position: 'relative',
           }}

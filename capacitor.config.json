@@ -1,0 +1,16 @@
+{
+  "appId": "com.terraqua.gis",
+  "appName": "SurveyZest",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "StatusBar": {
+      "overlay": false,
+      "backgroundColor": "#000000",
+      "style": "DARK"
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

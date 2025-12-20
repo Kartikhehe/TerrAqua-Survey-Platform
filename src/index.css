@@ -25,6 +25,9 @@ body {
   font-size: 1rem;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height for better mobile support */
 }
 
 html, body, #root {
