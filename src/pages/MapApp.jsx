@@ -74,7 +74,7 @@ function App() {
   useEffect(() => { currentLocationWaypointRef.current = currentLocationWaypointId; }, [currentLocationWaypointId]);
   const [selectedWaypointId, setSelectedWaypointId] = useState(null);
   const [waypoints, setWaypoints] = useState([]); // Array of { id, lat, lng, name, notes, image }
-  const [waypointData, setWaypointData] = useState({ name: '', lat: '', lng: '', notes: '', image: null });
+  const [waypointData, setWaypointData] = useState({ name: '', lat: '', lng: '', notes: '', images: [] });
   const [savedPointsOpen, setSavedPointsOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [dbWaypointIds, setDbWaypointIds] = useState({}); // Map local waypoint IDs to database IDs
@@ -287,7 +287,7 @@ function App() {
       const stillVisible = Object.keys(markersRef.current).includes(selectedWaypointId);
       if (!stillVisible) {
         setSelectedWaypointId(null);
-        setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+        setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
       }
     }
     // ensure selected overlay is updated
@@ -308,7 +308,7 @@ function App() {
     // 4. Clear other relevant UI states
     setDbWaypointIds({});
     setSelectedWaypointId(null);
-    setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+    setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
     updateSelectedMarkerOverlay(null);
     setCurrentLocationWaypointId(null);
 
@@ -428,7 +428,7 @@ function App() {
             lat,
             lng,
             notes: '',
-            image: null,
+            images: [],
             project_id: project.id,
             project_name: project.name
           };
@@ -582,6 +582,8 @@ function App() {
     }
 
     // Request background location permission on Android (dynamic import to avoid build errors)
+    // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
+    /*
     try {
       // Check if we're on a native platform
       const { Capacitor } = await import('@capacitor/core');
@@ -620,6 +622,7 @@ function App() {
       // Capacitor not available (web build), continue normally
       console.log('Running on web, skipping native permission request');
     }
+    */
 
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
@@ -702,7 +705,7 @@ function App() {
           lng: parseFloat(wp.longitude),
           name: wp.name || `Point ${idx + 1}`,
           notes: wp.notes || '',
-          image: wp.image_url || null,
+          images: wp.images || [] || null,
           project_id: wp.project_id || project.id,
           project_name: wp.project_name || project.name,
         });
@@ -830,10 +833,13 @@ function App() {
     if (watchPositionIdRef.current !== null) {
       if (typeof watchPositionIdRef.current === 'string') {
         // Native watcher (string ID)
+        // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
+        /*
         try {
           const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
           await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
         } catch (e) { console.error('Error stopping native watcher:', e); }
+        */
       } else if (navigator.geolocation) {
         // Web watcher (number ID)
         navigator.geolocation.clearWatch(watchPositionIdRef.current);
@@ -883,6 +889,8 @@ function App() {
   };
 
   // Start heavy-duty background tracking (Native Plugin) - For Active Surveys
+  // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
+  /*
   const startNativeBackgroundTracking = async () => {
     await stopLocationWatcher(); // Clear existing
 
@@ -922,6 +930,7 @@ function App() {
       startForegroundTracking();
     }
   };
+  */
 
   // GPS Tracking Functions (using GPSTracker class)
   const startGPSTracking = async (projectId) => {
@@ -1084,7 +1093,7 @@ function App() {
           lng: parseFloat(saved.longitude),
           name: saved.name,
           notes: saved.notes,
-          image: saved.image_url,
+          images: saved.images || [],
           project_id: saved.project_id,
           project_name: saved.project_name,
           followsLive: false
@@ -1123,7 +1132,7 @@ function App() {
       lat: lat.toFixed(6),
       lng: lng.toFixed(6),
       notes: `Captured live at ${new Date().toLocaleString()}`,
-      image: null,
+      images: [],
       project_id: activeProject.id,
       project_name: activeProject.name,
     };
@@ -1131,7 +1140,7 @@ function App() {
       const saved = await waypointsAPI.create(newWp);
       // Add to map and local list
       const waypointId = `waypoint-${Date.now()}`;
-      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, image: saved.image_url, project_id: saved.project_id, project_name: saved.project_name };
+      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, images: saved.images || [], project_id: saved.project_id, project_name: saved.project_name };
       setWaypoints(prev => [...prev, waypoint]);
       // create marker
       const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
@@ -1193,7 +1202,7 @@ function App() {
       lat: parseFloat(lat).toFixed(6),
       lng: parseFloat(lng).toFixed(6),
       notes: `${finalName} for project ${projectToUse.name || ''}`,
-      image: null,
+      images: [],
       project_id: projectToUse.id,
       project_name: projectToUse.name || null,
     };
@@ -1203,7 +1212,7 @@ function App() {
       const saved = await waypointsAPI.create(newWp);
       // Add to map and local list
       const waypointId = `waypoint-${Date.now()}`;
-      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, image: saved.image_url, project_id: saved.project_id, project_name: saved.project_name };
+      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, images: saved.images || [], project_id: saved.project_id, project_name: saved.project_name };
       setWaypoints(prev => [...prev, waypoint]);
       // create marker
       if (map) {
@@ -1315,7 +1324,7 @@ function App() {
 
         // Reset when turning off survey
         setSelectedWaypointId(null);
-        setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+        setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
         updateSelectedMarkerOverlay(null);
       }
     } else if (item === 'Start Survey') {
@@ -1384,19 +1393,6 @@ function App() {
     }
 
     try {
-      // Validate image if a file object was provided in waypointData.image (skip if it's already a URL)
-      const imageCandidate = waypointData.image;
-      if (imageCandidate && typeof imageCandidate !== 'string') {
-        if (!imageCandidate.type || !imageCandidate.type.startsWith('image/')) {
-          setSnackbar({ open: true, message: 'Only image files are allowed', severity: 'error' });
-          return;
-        }
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        if (imageCandidate.size > maxSize) {
-          setSnackbar({ open: true, message: 'Image is too large. Max 10MB allowed', severity: 'error' });
-          return;
-        }
-      }
       const waypoint = waypoints.find(wp => wp.id === selectedWaypointId);
       if (!waypoint) return;
 
@@ -1429,7 +1425,7 @@ function App() {
         lat: waypointData.lat,
         lng: waypointData.lng,
         notes: waypointData.notes || '',
-        image: waypointData.image || null,
+        images: waypointData.images || [], // Send images array
         project_id: (Object.prototype.hasOwnProperty.call(waypointData, 'project_id')) ? waypointData.project_id : (isProjectMode && activeProject ? activeProject.id : null),
         project_name: (Object.prototype.hasOwnProperty.call(waypointData, 'project_name')) ? waypointData.project_name : (isProjectMode && activeProject ? activeProject.name : null),
       };
@@ -1485,7 +1481,7 @@ function App() {
       if (isMobile) {
         setWaypointDetailsOpen(false);
         setSelectedWaypointId(null);
-        setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+        setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
         updateSelectedMarkerOverlay(null);
       }
 
@@ -1547,7 +1543,7 @@ function App() {
 
       // Clear selection
       setSelectedWaypointId(null);
-      setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+      setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
       updateSelectedMarkerOverlay(null);
 
       // Close waypoint details on mobile after delete
@@ -1734,7 +1730,7 @@ function App() {
       lat: (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat),
       lng: (typeof waypoint.lng === 'number' ? waypoint.lng.toFixed(6) : waypoint.lng),
       notes: waypoint.notes || '',
-      image: waypoint.image || null,
+      images: waypoint.images || [] || null,
       project_id: waypoint.project_id || null,
       project_name: waypoint.project_name || null,
       followsLive: waypoint.followsLive || false,
@@ -1786,12 +1782,12 @@ function App() {
       });
       // Add to local waypoints and refresh markers; select new point
       const waypointId = `waypoint-${Date.now()}`;
-      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, image: saved.image_url, project_id: saved.project_id, project_name: saved.project_name };
+      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, images: saved.images || [], project_id: saved.project_id, project_name: saved.project_name };
       setWaypoints(prev => [...prev, waypoint]);
       setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
       // Select the newly added waypoint and open details
       setSelectedWaypointId(waypointId);
-      setWaypointData({ name: saved.name, lat: parseFloat(saved.latitude).toFixed(6), lng: parseFloat(saved.longitude).toFixed(6), notes: saved.notes || '', image: saved.image_url || null, project_id: saved.project_id, project_name: saved.project_name });
+      setWaypointData({ name: saved.name, lat: parseFloat(saved.latitude).toFixed(6), lng: parseFloat(saved.longitude).toFixed(6), notes: saved.notes || '', images: saved.images || [] || null, project_id: saved.project_id, project_name: saved.project_name });
       setWaypointDetailsOpen(true);
       // Refresh markers to include new project point
       setTimeout(() => refreshMapMarkers(), 10);
@@ -1825,7 +1821,7 @@ function App() {
           lat: mapCenter.lat.toFixed(6),
           lng: mapCenter.lng.toFixed(6),
           notes: 'User-defined default location',
-          image: null
+          images: []
         };
 
         const savedWaypoint = await waypointsAPI.create(newDefaultWaypoint);
@@ -1867,7 +1863,7 @@ function App() {
         // Update waypoint data in case it changed in database
         setWaypoints(prev => prev.map(wp =>
           wp.id === waypointId
-            ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', image: waypoint.image || null }
+            ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', images: waypoint.images || [] || null }
             : wp
         ));
       } else {
@@ -1881,7 +1877,7 @@ function App() {
           lng: waypoint.lng,
           name: waypoint.name,
           notes: waypoint.notes || '',
-          image: waypoint.image || null
+          images: waypoint.images || [] || null
         }]);
 
         // Create marker (default L.marker)
@@ -1930,7 +1926,7 @@ function App() {
           lat: waypoint.lat.toFixed(6),
           lng: waypoint.lng.toFixed(6),
           notes: waypoint.notes || '',
-          image: waypoint.image || null
+          images: waypoint.images || [] || null
         });
       }, 150);
     } catch (error) {
@@ -2054,7 +2050,7 @@ function App() {
       lng: defaultLocation.lng,
       name: 'Default Location',
       notes: 'GPS unavailable - using default location',
-      image: null
+      images: []
     };
 
     // Add to waypoints array
@@ -2078,7 +2074,7 @@ function App() {
       lat: defaultLocation.lat.toFixed(6),
       lng: defaultLocation.lng.toFixed(6),
       notes: 'GPS unavailable - using default location',
-      image: null
+      images: []
     });
   };
 
@@ -2418,62 +2414,155 @@ function App() {
   }, []);
 
   const handleImageUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    // Client-side validation: only accept images and size <= 10MB
-    const maxBytes = 10 * 1024 * 1024;
-    if (!file.type || !file.type.startsWith('image/')) {
-      setSnackbar({ open: true, message: 'Only image files allowed', severity: 'error' });
-      event.target.value = '';
-      return;
-    }
-    if (file.size > maxBytes) {
-      setSnackbar({ open: true, message: 'Image too large. Max size is 10MB', severity: 'error' });
-      event.target.value = '';
-      return;
-    }
-    // Prevent multiple uploads
-    if (imageUploading) return;
-    setImageUploading(true);
-    let attempt = 0;
-    const maxAttempts = 2;
+    const action = event.target.dataset?.action || 'add';
+    console.log('[handleImageUpload] Action:', action, 'Files:', event.target.files?.length);
 
-    try {
-      // Try upload with a small retry mechanism for transient network errors
-      let uploadResult = null;
-      while (attempt < maxAttempts) {
-        try {
-          uploadResult = await uploadAPI.uploadImage(file);
-          break;
-        } catch (err) {
-          attempt += 1;
-          console.warn(`Upload attempt ${attempt} failed:`, err);
-          // If we've reached max attempts, rethrow to outer catch
-          if (attempt >= maxAttempts) throw err;
-          // Wait briefly before retrying
-          await new Promise((res) => setTimeout(res, 700));
+    if (action === 'delete') {
+      // Handle image deletion
+      const index = parseInt(event.target.dataset.index);
+      const publicId = event.target.dataset.publicId;
+
+      try {
+        // Delete from Cloudinary
+        if (publicId) {
+          await uploadAPI.deleteImage(publicId);
+        }
+
+        // Remove from local state
+        const updatedImages = (waypointData.images || []).filter((_, i) => i !== index);
+        setWaypointData(prev => ({
+          ...prev,
+          images: updatedImages
+        }));
+
+        // Also update the waypoints array so it persists when switching waypoints
+        if (selectedWaypointId) {
+          setWaypoints(prev => prev.map(wp =>
+            wp.id === selectedWaypointId
+              ? { ...wp, images: updatedImages }
+              : wp
+          ));
+        }
+
+        setSnackbar({ open: true, message: 'Image deleted successfully', severity: 'success' });
+      } catch (error) {
+        console.error('Error deleting image:', error);
+        setSnackbar({ open: true, message: 'Failed to delete image', severity: 'error' });
+      }
+    } else if (action === 'add') {
+      // Handle image upload (multiple files)
+      const files = Array.from(event.target.files || []);
+      console.log('[handleImageUpload] Files to upload:', files.length, files);
+
+      if (files.length === 0) {
+        console.log('[handleImageUpload] No files selected');
+        return;
+      }
+
+      // Check if adding these files would exceed the limit
+      const currentCount = waypointData.images?.length || 0;
+      const maxImages = 10;
+      console.log('[handleImageUpload] Current images:', currentCount, 'Max:', maxImages);
+
+      if (currentCount + files.length > maxImages) {
+        setSnackbar({ open: true, message: `Maximum ${maxImages} images allowed`, severity: 'warning' });
+        return;
+      }
+
+      // Validate each file
+      const maxBytes = 10 * 1024 * 1024;
+      for (const file of files) {
+        if (!file.type || !file.type.startsWith('image/')) {
+          setSnackbar({ open: true, message: 'Only image files allowed', severity: 'error' });
+          return;
+        }
+        if (file.size > maxBytes) {
+          setSnackbar({ open: true, message: `Image "${file.name}" is too large. Max size is 10MB`, severity: 'error' });
+          return;
         }
       }
 
-      // Update waypoint data with Cloudinary URL
-      setWaypointData(prev => ({ ...prev, image: uploadResult.image_url }));
-      setSnackbar({ open: true, message: 'Image uploaded successfully', severity: 'success' });
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      if (error && error.message && error.message.toLowerCase().includes('authentication')) {
-        setLoginPromptOpen(true);
-        setSnackbar({ open: true, message: 'Please login to upload images', severity: 'error' });
-      } else if (error && error.message && error.message.toLowerCase().includes('networkerror')) {
-        setSnackbar({ open: true, message: 'Network error: Unable to reach upload server', severity: 'error' });
-      } else {
-        setSnackbar({ open: true, message: 'Failed to upload image. Please try again.', severity: 'error' });
+      // Prevent multiple uploads
+      if (imageUploading) {
+        console.log('[handleImageUpload] Upload already in progress');
+        return;
       }
-    }
-    finally {
-      setImageUploading(false);
-      // Reset file input value so same file can be uploaded again if needed
-      const input = document.getElementById('image-upload');
-      if (input) input.value = '';
+      setImageUploading(true);
+      console.log('[handleImageUpload] Starting upload...');
+
+      try {
+        // Compress images before upload
+        const imageCompression = (await import('browser-image-compression')).default;
+        const compressionOptions = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+          fileType: 'image/jpeg'
+        };
+
+        const compressedFiles = await Promise.all(
+          files.map(async (file) => {
+            try {
+              console.log(`[Compression] Original size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+              const compressed = await imageCompression(file, compressionOptions);
+              console.log(`[Compression] Compressed size: ${(compressed.size / 1024 / 1024).toFixed(2)}MB`);
+              return compressed;
+            } catch (err) {
+              console.warn(`[Compression] Failed to compress ${file.name}, using original:`, err);
+              return file;
+            }
+          })
+        );
+
+        // Get device info for watermark
+        const deviceInfo = {
+          deviceName: navigator.userAgent.includes('Mobile')
+            ? `${navigator.platform} Mobile`
+            : navigator.platform,
+          browser: navigator.userAgent.split(' ').slice(-1)[0],
+          userName: user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown User'),
+          location: {
+            lat: waypointData.lat || 'N/A',
+            lng: waypointData.lng || 'N/A'
+          }
+        };
+
+        // Upload all images with device info
+        const result = await uploadAPI.uploadMultipleImages(compressedFiles, deviceInfo);
+        console.log('[handleImageUpload] Upload successful:', result);
+
+        // Add to existing images
+        const updatedImages = [...(waypointData.images || []), ...result.images];
+        setWaypointData(prev => ({
+          ...prev,
+          images: updatedImages
+        }));
+
+        // Also update the waypoints array so it persists when switching waypoints
+        if (selectedWaypointId) {
+          setWaypoints(prev => prev.map(wp =>
+            wp.id === selectedWaypointId
+              ? { ...wp, images: updatedImages }
+              : wp
+          ));
+        }
+
+        setSnackbar({ open: true, message: `${result.count} image(s) uploaded successfully`, severity: 'success' });
+      } catch (error) {
+        console.error('[handleImageUpload] Error uploading images:', error);
+        console.error('[handleImageUpload] Error details:', error.message, error.stack);
+        if (error && error.message && error.message.toLowerCase().includes('authentication')) {
+          setLoginPromptOpen(true);
+          setSnackbar({ open: true, message: 'Please login to upload images', severity: 'error' });
+        } else if (error && error.message && error.message.toLowerCase().includes('networkerror')) {
+          setSnackbar({ open: true, message: 'Network error: Unable to reach upload server', severity: 'error' });
+        } else {
+          setSnackbar({ open: true, message: `Failed to upload images: ${error.message}`, severity: 'error' });
+        }
+      } finally {
+        setImageUploading(false);
+        console.log('[handleImageUpload] Upload process complete');
+      }
     }
   };
 
@@ -2514,7 +2603,7 @@ function App() {
             // set waypointData from the loaded waypoint in state if available
             const wp = waypoints.find(w => w.id === localId);
             if (wp) {
-              setWaypointData({ name: wp.name, lat: (typeof wp.lat === 'number' ? wp.lat.toFixed(6) : wp.lat), lng: (typeof wp.lng === 'number' ? wp.lng.toFixed(6) : wp.lng), notes: wp.notes || '', image: wp.image || null, project_id: wp.project_id || null, project_name: wp.project_name || null });
+              setWaypointData({ name: wp.name, lat: (typeof wp.lat === 'number' ? wp.lat.toFixed(6) : wp.lat), lng: (typeof wp.lng === 'number' ? wp.lng.toFixed(6) : wp.lng), notes: wp.notes || '', images: wp.images || [], project_id: wp.project_id || null, project_name: wp.project_name || null });
             }
           }, 150);
         }
@@ -2731,7 +2820,7 @@ function App() {
                     lng: longitude,
                     name: 'My Location',
                     notes: '',
-                    image: null
+                    images: []
                   };
 
                   // Add to waypoints array
@@ -2763,7 +2852,7 @@ function App() {
                     lat: latitude.toFixed(6),
                     lng: longitude.toFixed(6),
                     notes: '',
-                    image: null
+                    images: []
                   });
 
                   setTimeout(() => {
@@ -2868,9 +2957,12 @@ function App() {
       if (watchPositionIdRef.current !== null) {
         if (typeof watchPositionIdRef.current === 'string') {
           // Native watcher (string ID)
+          // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
+          /*
           import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
             BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
           }).catch(e => console.error(e));
+          */
         } else if (navigator.geolocation) {
           // Web watcher (number ID)
           navigator.geolocation.clearWatch(watchPositionIdRef.current);
@@ -3083,7 +3175,7 @@ function App() {
           lng: latlng.lng,
           name: `Point ${currentCount + 1}`,
           notes: '',
-          image: null,
+          images: [],
           project_id: projectIdForNew,
           project_name: projectIdForNew ? activeProject?.name : null,
           createdDuringProject: isProjectMode ? true : false,
@@ -3138,7 +3230,7 @@ function App() {
               lat: latlng.lat.toFixed(6),
               lng: latlng.lng.toFixed(6),
               notes: '',
-              image: null,
+              images: [],
               project_id: updatedWaypoint.project_id || null,
               project_name: updatedWaypoint.project_name || null
             });
@@ -3516,7 +3608,7 @@ function App() {
                   onClose={() => {
                     setWaypointDetailsOpen(false);
                     setSelectedWaypointId(null);
-                    setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                    setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
                     setLocationSelectionActive(false);
                     updateSelectedMarkerOverlay(null);
                   }}
@@ -3544,7 +3636,7 @@ function App() {
                     onClose={() => {
                       setWaypointDetailsOpen(false);
                       setSelectedWaypointId(null);
-                      setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                      setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
                       setLocationSelectionActive(false);
                       updateSelectedMarkerOverlay(null);
                     }}
@@ -3585,7 +3677,7 @@ function App() {
                     onClose={() => {
                       setWaypointDetailsOpen(false);
                       setSelectedWaypointId(null);
-                      setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                      setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
                       setLocationSelectionActive(false);
                       updateSelectedMarkerOverlay(null);
                     }}
@@ -3628,7 +3720,7 @@ function App() {
               onClose={() => {
                 setWaypointDetailsOpen(false);
                 setSelectedWaypointId(null);
-                setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
                 setLocationSelectionActive(false); // Deactivate location selection when closing
                 updateSelectedMarkerOverlay(null);
                 // Remove route when closing waypoint details
@@ -3664,7 +3756,7 @@ function App() {
               setWaypointData={setWaypointData}
               onClose={() => {
                 setSelectedWaypointId(null);
-                setWaypointData({ name: '', lat: '', lng: '', notes: '', image: null });
+                setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
                 setLocationSelectionActive(false); // Deactivate location selection when closing
                 updateSelectedMarkerOverlay(null);
               }}
@@ -3707,7 +3799,7 @@ function App() {
                 lng: waypoint.lng,
                 name: waypoint.name,
                 notes: waypoint.notes || '',
-                image: waypoint.image || null,
+                images: waypoint.images || [] || null,
                 project_id: waypoint.project_id || null,
                 project_name: waypoint.project_name || null
               }]);
@@ -3918,7 +4010,7 @@ function App() {
                       lng: lngNum,
                       name: `Point ${(waypoints.filter(w => w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1}`,
                       notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
-                      image: null,
+                      images: [],
                       project_id: activeProject?.id || null,
                       project_name: activeProject?.name || null,
                       followsLive: true,
@@ -3945,7 +4037,7 @@ function App() {
                         lat: latNum,
                         lng: lngNum,
                         notes: newWp.notes || '',
-                        image: null,
+                        images: [],
                         project_id: newWp.project_id,
                         project_name: newWp.project_name,
                       };
@@ -3970,7 +4062,7 @@ function App() {
                       lat: latNum.toFixed(6),
                       lng: lngNum.toFixed(6),
                       notes: newWp.notes,
-                      image: null,
+                      images: [],
                       project_id: newWp.project_id,
                       project_name: newWp.project_name,
                       followsLive: true
@@ -4033,7 +4125,7 @@ function App() {
                     lng: lngNum,
                     name: `Point ${(waypoints.filter(w => w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1}`,
                     notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
-                    image: null,
+                    images: [],
                     project_id: activeProject?.id || null,
                     project_name: activeProject?.name || null,
                     followsLive: true,
@@ -4057,7 +4149,7 @@ function App() {
                       lat: latNum,
                       lng: lngNum,
                       notes: newWp.notes || '',
-                      image: null,
+                      images: [],
                       project_id: newWp.project_id,
                       project_name: newWp.project_name,
                     };
@@ -4081,7 +4173,7 @@ function App() {
                     lat: latNum.toFixed(6),
                     lng: lngNum.toFixed(6),
                     notes: newWp.notes,
-                    image: null,
+                    images: [],
                     project_id: newWp.project_id,
                     project_name: newWp.project_name,
                     followsLive: true

@@ -19,6 +19,8 @@ import {
 import { CloudUpload, Save, Delete, Close, ArrowOutwardOutlined as ArrowOutwardOutlinedIcon, MyLocation as MyLocationIcon, LocationSearching as LocationSearchingIcon, LocationOn as LocationOnIcon, KeyboardArrowDown } from '@mui/icons-material';
 import React, { useState } from 'react';
 import { CircularProgress } from '@mui/material';
+import ImageGallery from './ImageGallery';
+import ImageViewerDialog from './ImageViewerDialog';
 
 // Default location to use when GPS is unavailable
 const DEFAULT_LOCATION = {
@@ -51,6 +53,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const handleNavigateClick = (event) => {
     setAnchorEl(event.currentTarget);
@@ -154,9 +158,43 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
     }
   };
 
-  // Determine whether to set the capture attribute (open camera) on touch/mobile devices
-  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-  const captureAttr = isTouchDevice ? 'environment' : undefined;
+  // Image gallery handlers
+  const handleImageClick = (index) => {
+    setSelectedImageIndex(index);
+    setImageViewerOpen(true);
+  };
+
+  const handleImageDelete = async (index, image) => {
+    if (onImageUpload) {
+      // Pass delete event to parent with image info
+      const event = {
+        target: {
+          files: [],
+          dataset: {
+            action: 'delete',
+            index: index,
+            publicId: image.public_id,
+          }
+        }
+      };
+      onImageUpload(event);
+    }
+  };
+
+  const handleImageAdd = (files) => {
+    if (onImageUpload && files.length > 0) {
+      // Create a synthetic event for multiple files
+      const event = {
+        target: {
+          files: files,
+          dataset: {
+            action: 'add',
+          }
+        }
+      };
+      onImageUpload(event);
+    }
+  };
 
   return (
     <>
@@ -425,55 +463,14 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             </IconButton>
           </Box>
 
-          <Box>
-            <input
-              accept="image/*"
-              style={{ display: 'none' }}
-              id="image-upload"
-              type="file"
-              capture={captureAttr}
-              onChange={onImageUpload}
-              disabled={imageUploading}
-            />
-            <label htmlFor="image-upload">
-              <Button
-                variant="outlined"
-                component="span"
-                startIcon={imageUploading ? <CircularProgress color="inherit" size={16} /> : <CloudUpload />}
-                fullWidth
-                disabled={imageUploading}
-                sx={{
-                  py: 1.5,
-                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                  borderColor: theme.palette.divider,
-                  color: theme.palette.text.secondary,
-                  textTransform: 'none',
-                  '&:hover': {
-                    backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
-                    borderColor: '#9E9E9E',
-                  },
-                }}
-              >
-                {imageUploading ? 'Uploading image...' : (waypointData.image ? 'Change Image' : 'Upload Image')}
-              </Button>
-            </label>
-            {waypointData.image && (
-              <Box
-                component="img"
-                src={waypointData.image}
-                alt="Uploaded"
-                sx={{
-                  width: '100%',
-                  maxHeight: 200,
-                  objectFit: 'cover',
-                  borderRadius: 2,
-                  mt: 1.5,
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                }}
-              />
-            )}
-          </Box>
+          <ImageGallery
+            images={waypointData.images || []}
+            onImageClick={handleImageClick}
+            onImageDelete={handleImageDelete}
+            onImageAdd={handleImageAdd}
+            maxImages={10}
+            disabled={imageUploading}
+          />
 
           <TextField
             label="Notes"
@@ -763,6 +760,14 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Image Viewer Dialog */}
+      <ImageViewerDialog
+        open={imageViewerOpen}
+        onClose={() => setImageViewerOpen(false)}
+        images={waypointData.images || []}
+        initialIndex={selectedImageIndex}
+      />
     </>
   );
 });

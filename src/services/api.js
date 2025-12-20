@@ -79,7 +79,8 @@ export const waypointsAPI = {
         latitude: parseFloat(waypoint.lat),
         longitude: parseFloat(waypoint.lng),
         notes: waypoint.notes || '',
-        image_url: waypoint.image || null,
+        image_url: waypoint.image || null, // Backward compatibility
+        images: waypoint.images || [], // New format
         project_id: waypoint.project_id || null,
         project_name: waypoint.project_name || null,
       }),
@@ -107,7 +108,8 @@ export const waypointsAPI = {
         latitude: parseFloat(waypoint.lat),
         longitude: parseFloat(waypoint.lng),
         notes: waypoint.notes || '',
-        image_url: waypoint.image || null,
+        image_url: waypoint.image || null, // Backward compatibility
+        images: waypoint.images || [], // New format
         project_id: waypoint.project_id || null,
         project_name: waypoint.project_name || null,
       }),
@@ -192,6 +194,69 @@ export const uploadAPI = {
       if (response.status === 401) throw new Error('Authentication required');
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Failed to upload image');
+    }
+    return response.json();
+  },
+
+  uploadMultipleImages: async (files, deviceInfo = {}) => {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('images', file);
+    });
+
+    // Add device info for watermarking
+    if (deviceInfo) {
+      formData.append('deviceInfo', JSON.stringify(deviceInfo));
+    }
+
+    const headers = {};
+    const token = getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const uploadUrl = `${API_BASE_URL}/upload/multiple`;
+    let credentialsMode = 'include';
+    try {
+      const backendOrigin = new URL(API_BASE_URL).origin;
+      const frontendOrigin = typeof window !== 'undefined' && window.location.origin;
+      if (frontendOrigin && backendOrigin !== frontendOrigin) {
+        credentialsMode = 'omit';
+      }
+    } catch (err) {
+      credentialsMode = 'include';
+    }
+
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData,
+      credentials: credentialsMode,
+      mode: 'cors',
+      headers: headers,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to upload images');
+    }
+    return response.json();
+  },
+
+  deleteImage: async (publicId) => {
+    const headers = getAuthHeaders();
+    const encodedPublicId = encodeURIComponent(publicId);
+
+    const response = await fetch(`${API_BASE_URL}/upload/image/${encodedPublicId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: headers,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Authentication required');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to delete image');
     }
     return response.json();
   },

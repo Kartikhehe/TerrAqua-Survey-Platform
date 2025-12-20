@@ -2,14 +2,24 @@
 
 A web application for tracking and managing waypoints with coordinate data, images, and notes.
 
+## 🎯 Latest Features (2025-12-20)
+
+- ✅ **Multiple Images Per Waypoint** - Upload up to 10 images per waypoint with gallery view
+  - See [MULTIPLE_IMAGES.md](./MULTIPLE_IMAGES.md) for details
+- ✅ **Real-time GPS Tracking** - PostGIS-based path tracking
+  - See [POSTGIS_GPS_TRACKING_GUIDE.md](./POSTGIS_GPS_TRACKING_GUIDE.md)
+- ✅ **Project Management** - Create and manage survey projects
+- ✅ **Android APK Support** - Native mobile app with Capacitor
+
 ## Features
 
 - Interactive map with waypoint marking
 - Real-time coordinate tracking
-- Image upload to Cloudinary
-- PostgreSQL database for persistent storage
-- View saved waypoints
-- Export functionality
+- **Multiple image upload** per waypoint (up to 10 images)
+- PostgreSQL database with PostGIS for persistent storage
+- View saved waypoints with image galleries
+- Export functionality (KML, GeoJSON)
+- Project-based survey management
 
 ## Prerequisites
 
@@ -357,7 +367,9 @@ Navigation and Tracking App/
 
 ### Upload
 
-- `POST /api/upload` - Upload an image to Cloudinary (multipart/form-data with 'image' field)
+- `POST /api/upload` - Upload a single image to Cloudinary (multipart/form-data with 'image' field)
+- `POST /api/upload/multiple` - Upload multiple images (up to 10) to Cloudinary (multipart/form-data with 'images' field)
+- `DELETE /api/upload/image/:publicId` - Delete a single image from Cloudinary
 
 ## Troubleshooting
 
