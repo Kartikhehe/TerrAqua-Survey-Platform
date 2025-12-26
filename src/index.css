@@ -5,19 +5,22 @@
 }
 
 html {
-  font-size: 14px; /* Base font size for rem calculations (87.5% of 16px) */
+  font-size: 14px;
+  /* Base font size for rem calculations (87.5% of 16px) */
 }
 
 /* Responsive base font size */
 @media (max-width: 600px) {
   html {
-    font-size: 12.25px; /* 87.5% of 14px */
+    font-size: 12.25px;
+    /* 87.5% of 14px */
   }
 }
 
 @media (min-width: 1200px) {
   html {
-    font-size: 15.75px; /* 87.5% of 18px */
+    font-size: 15.75px;
+    /* 87.5% of 18px */
   }
 }
 
@@ -27,20 +30,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
   position: relative;
   height: 100vh;
-  height: 100dvh; /* Use dynamic viewport height for better mobile support */
+  height: 100dvh;
+  /* Use dynamic viewport height for better mobile support */
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
-  overflow: hidden;
   /* Background color will be set by theme */
 }
 
 /* Theme colors */
 :root {
-  --primary-green: #4CAF50;
-  --light-green: #81C784;
+  --primary-green: #0891B2;
+  --light-green: #22D3EE;
   --grey-button: #9E9E9E;
   --grey-button-hover: #757575;
   --grey-text: #616161;
@@ -48,4 +53,3 @@ html, body, #root {
   --white: #ffffff;
   --border-grey: #e0e0e0;
 }
-

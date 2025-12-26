@@ -21,7 +21,7 @@ function CustomSnackbar({ open, message, severity, onClose }) {
         variant="filled"
         sx={{
           borderRadius: { xs: '0.5625rem', sm: '0.65625rem', md: '0.75rem' },
-          backgroundColor: severity === 'success' ? '#4CAF50' : severity === 'error' ? '#f44336' : severity === 'info' ? '#2196F3' : '#616161',
+          backgroundColor: severity === 'success' ? '#0891B2' : severity === 'error' ? '#f44336' : severity === 'info' ? '#2196F3' : '#616161',
           color: '#fff',
           fontWeight: 500,
           boxShadow: '0 0.1875rem 0.5625rem rgba(0, 0, 0, 0.15)',

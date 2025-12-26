@@ -319,7 +319,7 @@ function StartSurveyDialog({ open, onClose, onStartNew, onContinue, onShowSnackb
                         borderBottom: `1px solid ${theme.palette.divider}`
                       }}
                     >
-                      <FolderIcon sx={{ mr: 2, color: '#4CAF50' }} />
+                      <FolderIcon sx={{ mr: 2, color: '#0891B2' }} />
                       <Box sx={{ flexGrow: 1 }}>
                         <Typography variant="body1" fontWeight={500}>{p.name}</Typography>
                         <Typography variant="caption" color="text.secondary">{new Date(p.created_at).toLocaleString()}</Typography>

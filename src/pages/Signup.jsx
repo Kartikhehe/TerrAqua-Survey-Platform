@@ -34,7 +34,7 @@ export default function SignupPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    
+
     // Client-side validation
     if (!email || !password || !fullName) {
       setError("Please fill in all fields");
@@ -47,7 +47,6 @@ export default function SignupPage() {
     }
 
     try {
-      // 1. Signup → backend sets cookies
       const res = await authAPI.signup(email, password, fullName);
 
       if (!res.ok) {
@@ -57,21 +56,32 @@ export default function SignupPage() {
 
       const signupData = await res.json();
 
-      // 2. Fetch user info
+      // Check if email verification is required
+      if (signupData.requiresVerification) {
+        // Check if console fallback is active (domain not verified)
+        if (signupData.consoleFallback) {
+          // Show alert about console fallback
+          setError('⚠️ Email service not fully configured. Please contact the administrator to get your verification code from the server logs.');
+          return;
+        }
+
+        // Redirect to OTP verification page
+        navigate('/verify-otp', { state: { email: signupData.email || email } });
+        return;
+      }
+
+      // Old flow (if OTP is disabled) - fetch user info and login
       const userRes = await authAPI.getCurrentUser();
 
       if (!userRes.ok) {
-        // If signup succeeded but we can't get user, use signup response
         if (signupData.user) {
           login(signupData.user);
           return;
         }
         throw new Error("Failed to fetch user info");
       }
-      
-      const userData = await userRes.json();
 
-      // 3. Update AuthProvider state → triggers redirect automatically
+      const userData = await userRes.json();
       login(userData);
     } catch (err) {
       console.error('Signup error:', err);
@@ -89,7 +99,6 @@ export default function SignupPage() {
         alignItems: "center",
         bgcolor: 'background.default',
         position: "relative",
-        overflow: "hidden",
         p: 2,
       }}
     >
@@ -123,12 +132,12 @@ export default function SignupPage() {
               width: 64,
               height: 64,
               borderRadius: "16px",
-              background: `linear-gradient(135deg, #4CAF50, #388E3C)`,
+              background: `linear-gradient(135deg, #0891B2, #0E7490)`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               mb: 2,
-              boxShadow: `0 8px 20px rgba(76, 175, 80, 0.4)`,
+              boxShadow: `0 8px 20px rgba(8, 145, 178, 0.4)`,
             }}
           >
             <PersonAddIcon sx={{ fontSize: 32, color: "white" }} />
@@ -201,11 +210,11 @@ export default function SignupPage() {
                   transition: "all 0.3s ease",
                   "&:hover": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.14)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.14)`,
                   },
                   "&.Mui-focused": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.26)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.26)`,
                   },
                 },
               }}
@@ -241,11 +250,11 @@ export default function SignupPage() {
                   transition: "all 0.3s ease",
                   "&:hover": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.14)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.14)`,
                   },
                   "&.Mui-focused": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.26)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.26)`,
                   },
                 },
               }}
@@ -281,11 +290,11 @@ export default function SignupPage() {
                   transition: "all 0.3s ease",
                   "&:hover": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.14)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.14)`,
                   },
                   "&.Mui-focused": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.26)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.26)`,
                   },
                 },
               }}
@@ -303,8 +312,8 @@ export default function SignupPage() {
               fontSize: 16,
               borderRadius: "12px",
               textTransform: "none",
-              background: `linear-gradient(135deg, #4CAF50, #388E3C)`,
-              boxShadow: `0 8px 20px rgba(76, 175, 80, 0.59)`,
+              background: `linear-gradient(135deg, #0891B2, #0E7490)`,
+              boxShadow: `0 8px 20px rgba(8, 145, 178, 0.59)`,
               transition: "all 0.3s ease",
               position: "relative",
               overflow: "hidden",
@@ -321,7 +330,7 @@ export default function SignupPage() {
               },
               "&:hover": {
                 transform: "translateY(-2px)",
-                boxShadow: `0 12px 30px rgba(76, 175, 80, 0.8)`,
+                boxShadow: `0 12px 30px rgba(8, 145, 178, 0.8)`,
                 "&::before": {
                   left: "100%",
                 },
@@ -353,12 +362,12 @@ export default function SignupPage() {
                 navigate('/login');
               }}
               sx={{
-                color: "#4CAF50",
+                color: "#0891B2",
                 textDecoration: "none",
                 fontWeight: 600,
                 transition: "all 0.2s ease",
                 "&:hover": {
-                  color: "#388E3C",
+                  color: "#0E7490",
                 },
               }}
             >

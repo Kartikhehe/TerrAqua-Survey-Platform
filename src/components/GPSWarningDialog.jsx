@@ -10,12 +10,34 @@ import {
 } from '@mui/material';
 import { LocationOff as LocationOffIcon } from '@mui/icons-material';
 
-function GPSWarningDialog({ open, onClose, onContinue, projectOngoing = false }) {
+function GPSWarningDialog({ open, onClose, onContinue, onRetry, requireGPS = false }) {
   const theme = useTheme();
 
   const handleContinue = () => {
+    if (requireGPS) {
+      // Don't allow continue if GPS is required
+      return;
+    }
     if (onContinue) {
       onContinue();
+    }
+    onClose();
+  };
+
+  const handleRetry = () => {
+    if (onRetry) {
+      onRetry();
+    }
+    // Don't close if GPS is required - let retry attempt handle it
+    if (!requireGPS) {
+      onClose();
+    }
+  };
+
+  const handleDialogClose = (event, reason) => {
+    // Prevent closing by clicking outside or pressing ESC if GPS is required
+    if (requireGPS && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+      return;
     }
     onClose();
   };
@@ -23,7 +45,8 @@ function GPSWarningDialog({ open, onClose, onContinue, projectOngoing = false })
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleDialogClose}
+      disableEscapeKeyDown={requireGPS}
       PaperProps={{
         sx: {
           borderRadius: { xs: '0.75rem', sm: '1rem' },
@@ -68,24 +91,17 @@ function GPSWarningDialog({ open, onClose, onContinue, projectOngoing = false })
         <Typography variant="body1" sx={{
           color: theme.palette.text.secondary,
           mb: { xs: 1.5, sm: 2 },
-          fontSize: { xs: '1.125rem', sm: '1.15rem' }, // Matched to sidebar mobile size
+          fontSize: { xs: '1.125rem', sm: '1.15rem' },
           lineHeight: 1.5
         }}>
-          GPS not detected. Make sure it is turned on.
+          {requireGPS
+            ? 'GPS is required to start a survey. Please enable location services and allow location access for this website.'
+            : 'Please enable location services and allow location access for this website. Low GPS accuracy may also affect detection.'}
         </Typography>
-        {!projectOngoing && (
-          <Typography variant="body2" sx={{
-            color: theme.palette.text.secondary,
-            opacity: 0.8,
-            fontSize: { xs: '0.9rem', sm: '0.95rem' }
-          }}>
-            The app will use the default location instead.
-          </Typography>
-        )}
       </DialogContent>
       <DialogActions sx={{ p: { xs: 2, sm: 2.5 }, pt: { xs: 0.5, sm: 1 }, gap: { xs: 1, sm: 1.5 } }}>
         <Button
-          onClick={onClose}
+          onClick={handleRetry}
           sx={{
             color: theme.palette.text.secondary,
             fontSize: { xs: '1rem', sm: '1rem' },
@@ -94,21 +110,29 @@ function GPSWarningDialog({ open, onClose, onContinue, projectOngoing = false })
             },
           }}
         >
-          Cancel
+          Retry
         </Button>
         <Button
           onClick={handleContinue}
           variant="contained"
+          disabled={requireGPS}
           sx={{
-            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-            color: 'white',
+            background: requireGPS
+              ? theme.palette.action.disabledBackground
+              : `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+            color: requireGPS ? theme.palette.action.disabled : 'white',
             fontSize: { xs: '1rem', sm: '1rem' },
             '&:hover': {
-              background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
+              background: requireGPS
+                ? theme.palette.action.disabledBackground
+                : `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
             },
+            '&.Mui-disabled': {
+              color: theme.palette.action.disabled,
+            }
           }}
         >
-          {projectOngoing ? 'Continue' : 'Continue with Default Location'}
+          Continue
         </Button>
       </DialogActions>
     </Dialog>

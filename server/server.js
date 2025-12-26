@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger.js';
 import waypointsRoutes from './routes/waypoints.js';
 import projectsRoutes from './routes/projects.js';
 import uploadRoutes from './routes/upload.js';
@@ -119,6 +121,42 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     tags: [Health]
+ *     summary: Health check endpoint
+ *     description: Check if the API server is running
+ *     responses:
+ *       200:
+ *         description: Server is running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: OK
+ *                 message:
+ *                   type: string
+ *                   example: Server is running
+ */
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'TerrAqua API Docs',
+  customfavIcon: '/favicon.ico'
+}));
+
+// Swagger JSON endpoint
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -132,13 +170,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  // Start the auto-pause background job
-  try {
-    startAutoPauseJob();
-  } catch (err) {
-    console.error('Failed to start auto-pause job:', err?.message || err);
-  }
-});
+// Only start the server if not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    // Start the auto-pause background job
+    try {
+      startAutoPauseJob();
+    } catch (err) {
+      console.error('Failed to start auto-pause job:', err?.message || err);
+    }
+  });
+}
 
+// Export for Vercel serverless
+export default app;

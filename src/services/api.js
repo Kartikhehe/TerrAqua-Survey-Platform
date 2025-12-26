@@ -322,7 +322,7 @@ export const authAPI = {
   },
 
   logout: async () => {
-    setAuthToken(null); // Clear token from localStorage
+    localStorage.removeItem('authToken'); // Clear token from localStorage immediately
     console.log('[API] Logout request to:', `${AUTH_BASE_URL}/logout`);
     try {
       const response = await fetch(`${AUTH_BASE_URL}/logout`, {
@@ -344,6 +344,104 @@ export const authAPI = {
       credentials: 'include',
       headers: getAuthHeaders(),
     });
+  },
+
+  verifyOtp: async (email, otp) => {
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, otp }),
+      });
+
+      // If verification successful, store token from response
+      if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          setAuthToken(data.token);
+        }
+        return {
+          ok: true,
+          json: async () => data,
+          status: response.status,
+        };
+      }
+      return response;
+    } catch (error) {
+      console.error('[API] Verify OTP failed:', error);
+      throw error;
+    }
+  },
+
+  resendOtp: async (email) => {
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/resend-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email }),
+      });
+      return response;
+    } catch (error) {
+      console.error('[API] Resend OTP failed:', error);
+      throw error;
+    }
+  },
+
+  forgotPassword: async (email) => {
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email }),
+      });
+      return response;
+    } catch (error) {
+      console.error('[API] Forgot password failed:', error);
+      throw error;
+    }
+  },
+
+  verifyResetOtp: async (email, otp) => {
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/verify-reset-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, otp }),
+      });
+      return response;
+    } catch (error) {
+      console.error('[API] Verify reset OTP failed:', error);
+      throw error;
+    }
+  },
+
+  resetPassword: async (resetToken, password) => {
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ resetToken, password }),
+      });
+      return response;
+    } catch (error) {
+      console.error('[API] Reset password failed:', error);
+      throw error;
+    }
   },
 };
 

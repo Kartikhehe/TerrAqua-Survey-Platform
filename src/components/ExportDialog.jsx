@@ -17,9 +17,13 @@ import {
   TextField,
   InputAdornment,
   Divider,
+  CircularProgress,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from '@mui/material';
-import { Close, Download, Map, ExpandMore, Search, FolderOpen } from '@mui/icons-material';
-import { useState, useEffect } from 'react';
+import { Close, Download, Map, ExpandMore, Search, FolderOpen, SortOutlined, SortByAlphaRounded, SwapVertRounded } from '@mui/icons-material';
+import { useState, useEffect, useMemo } from 'react';
 import { waypointsAPI, projectsAPI } from '../services/api';
 
 function ExportDialog({ open, onClose, onShowSnackbar }) {
@@ -29,6 +33,8 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
   const [individualPoints, setIndividualPoints] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState('newest');
+  const [sortMenuAnchor, setSortMenuAnchor] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -253,14 +259,60 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
     }
   };
 
-  const filteredProjects = projects.filter(project =>
-    project.project_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.waypoints.some(wp => wp.name?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Process data with search and sort
+  const processedData = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
 
-  const filteredIndividualPoints = individualPoints.filter(wp =>
-    wp.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    // 1. Filter and sort individual points
+    let filteredSingles = individualPoints.filter(wp =>
+      !q || wp.name?.toLowerCase().includes(q)
+    );
+
+    filteredSingles.sort((a, b) => {
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+
+      switch (sortOption) {
+        case 'newest': return dateB - dateA;
+        case 'oldest': return dateA - dateB;
+        case 'az': return nameA.localeCompare(nameB);
+        case 'za': return nameB.localeCompare(nameA);
+        default: return 0;
+      }
+    });
+
+    // 2. Filter and sort projects
+    let filteredProjects = projects.map(project => {
+      const matchingWaypoints = project.waypoints.filter(wp =>
+        !q || wp.name?.toLowerCase().includes(q) || project.project_name?.toLowerCase().includes(q)
+      );
+
+      return {
+        ...project,
+        waypoints: matchingWaypoints
+      };
+    }).filter(project => project.waypoints.length > 0);
+
+    filteredProjects.sort((a, b) => {
+      const nameA = (a.project_name || '').toLowerCase();
+      const nameB = (b.project_name || '').toLowerCase();
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+
+      switch (sortOption) {
+        case 'newest': return dateB - dateA;
+        case 'oldest': return dateA - dateB;
+        case 'az': return nameA.localeCompare(nameB);
+        case 'za': return nameB.localeCompare(nameA);
+        default: return 0;
+      }
+    });
+
+    return { projects: filteredProjects, singles: filteredSingles };
+  }, [projects, individualPoints, searchQuery, sortOption]);
+
 
   return (
     <Dialog
@@ -294,8 +346,8 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography
             sx={{
-              fontSize: { xs: '0.75rem', sm: '0.825rem', md: '0.9rem' },
-              fontWeight: 600,
+              fontSize: { xs: '0.95rem', sm: '1.05rem', md: '1.15rem' },
+              fontWeight: 700,
               color: theme.palette.text.primary,
             }}
           >
@@ -327,7 +379,7 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
               sx={{
                 color: theme.palette.text.secondary,
                 mb: { xs: 0.75, sm: 1 },
-                fontSize: { xs: '0.85rem', sm: '0.875rem', md: '1rem' },
+                fontSize: { xs: '1rem', sm: '1.05rem', md: '1.1rem' },
               }}
             >
               Choose an export format:
@@ -341,14 +393,14 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
               sx={{
                 py: { xs: 1.5, sm: 2 },
                 borderRadius: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
-                backgroundColor: '#4CAF50',
+                backgroundColor: '#0891B2',
                 textTransform: 'none',
-                fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
+                fontSize: { xs: '1rem', sm: '1.05rem', md: '1.15rem' },
                 fontWeight: 500,
-                boxShadow: '0 0.125rem 0.5rem rgba(76, 175, 80, 0.3)',
+                boxShadow: '0 0.125rem 0.5rem rgba(8, 145, 178, 0.3)',
                 '&:hover': {
-                  backgroundColor: '#45a049',
-                  boxShadow: '0 0.25rem 0.75rem rgba(76, 175, 80, 0.4)',
+                  backgroundColor: '#0E7490',
+                  boxShadow: '0 0.25rem 0.75rem rgba(8, 145, 178, 0.4)',
                 },
               }}
             >
@@ -367,10 +419,10 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
                 color: theme.palette.text.primary,
                 backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
                 textTransform: 'none',
-                fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
-                fontWeight: 500,
+                fontSize: { xs: '1rem', sm: '1.05rem', md: '1.15rem' },
+                fontWeight: 600,
                 '&:hover': {
-                  borderColor: '#4CAF50',
+                  borderColor: '#0891B2',
                   backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
                 },
               }}
@@ -380,36 +432,70 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              placeholder="Search waypoints..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              size="small"
-              fullWidth
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search sx={{ color: theme.palette.text.secondary }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                placeholder="Search waypoints..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                size="small"
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search sx={{ color: theme.palette.text.secondary }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '0.75rem',
+                    backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                  },
+                }}
+              />
+              <IconButton
+                onClick={(e) => setSortMenuAnchor(e.currentTarget)}
+                sx={{
+                  border: `1px solid ${theme.palette.divider}`,
                   borderRadius: '0.75rem',
-                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
-                },
-              }}
-            />
+                  backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5'
+                }}
+              >
+                <SortOutlined />
+              </IconButton>
+              <Menu
+                anchorEl={sortMenuAnchor}
+                open={Boolean(sortMenuAnchor)}
+                onClose={() => setSortMenuAnchor(null)}
+              >
+                <MenuItem onClick={() => { setSortOption('newest'); setSortMenuAnchor(null); }} selected={sortOption === 'newest'}>
+                  <ListItemIcon><SwapVertRounded fontSize="small" /></ListItemIcon>
+                  <ListItemText>Newest First</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { setSortOption('oldest'); setSortMenuAnchor(null); }} selected={sortOption === 'oldest'}>
+                  <ListItemIcon><SwapVertRounded fontSize="small" /></ListItemIcon>
+                  <ListItemText>Oldest First</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { setSortOption('az'); setSortMenuAnchor(null); }} selected={sortOption === 'az'}>
+                  <ListItemIcon><SortByAlphaRounded fontSize="small" /></ListItemIcon>
+                  <ListItemText>Name (A-Z)</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { setSortOption('za'); setSortMenuAnchor(null); }} selected={sortOption === 'za'}>
+                  <ListItemIcon><SortByAlphaRounded fontSize="small" /></ListItemIcon>
+                  <ListItemText>Name (Z-A)</ListItemText>
+                </MenuItem>
+              </Menu>
+            </Box>
 
             <Box sx={{ maxHeight: '50vh', overflow: 'auto' }}>
               {/* Individual Points */}
-              {filteredIndividualPoints.length > 0 && (
+              {processedData.singles.length > 0 && (
                 <>
-                  <Typography variant="subtitle2" sx={{ mb: 1, color: theme.palette.text.secondary }}>
-                    Individual Points ({filteredIndividualPoints.length})
+                  <Typography variant="subtitle2" sx={{ mb: 1, color: theme.palette.text.secondary, mt: 1, fontSize: '0.9rem' }}>
+                    Individual Points ({processedData.singles.length})
                   </Typography>
                   <List dense>
-                    {filteredIndividualPoints.map(wp => (
+                    {processedData.singles.map(wp => (
                       <ListItem
                         key={`wp-${wp.id}`}
                         button
@@ -429,6 +515,17 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
                         <ListItemText
                           primary={wp.name || 'Unnamed Point'}
                           secondary={`${parseFloat(wp.latitude).toFixed(6)}, ${parseFloat(wp.longitude).toFixed(6)}`}
+                          primaryTypographyProps={{
+                            sx: {
+                              fontSize: { xs: '1.05rem', sm: '1.1rem' },
+                              fontWeight: 600
+                            }
+                          }}
+                          secondaryTypographyProps={{
+                            sx: {
+                              fontSize: { xs: '0.9rem', sm: '0.95rem' }
+                            }
+                          }}
                         />
                       </ListItem>
                     ))}
@@ -438,7 +535,7 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
               )}
 
               {/* Projects */}
-              {filteredProjects.map(project => (
+              {processedData.projects.map(project => (
                 <Accordion
                   key={project.id}
                   sx={{
@@ -473,7 +570,7 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
                         sx={{ mr: 1 }}
                       />
                       <FolderOpen sx={{ mr: 1, color: theme.palette.primary.main }} />
-                      <Typography variant="subtitle2">
+                      <Typography variant="subtitle2" sx={{ fontSize: { xs: '1.05rem', sm: '1.1rem' }, fontWeight: 700 }}>
                         {project.project_name} ({project.waypoints.length})
                       </Typography>
                     </Box>
@@ -499,6 +596,17 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
                           <ListItemText
                             primary={wp.name || 'Unnamed Point'}
                             secondary={`${parseFloat(wp.latitude).toFixed(6)}, ${parseFloat(wp.longitude).toFixed(6)}`}
+                            primaryTypographyProps={{
+                              sx: {
+                                fontSize: { xs: '1.05rem', sm: '1.1rem' },
+                                fontWeight: 600
+                              }
+                            }}
+                            secondaryTypographyProps={{
+                              sx: {
+                                fontSize: { xs: '0.9rem', sm: '0.95rem' }
+                              }
+                            }}
                           />
                         </ListItem>
                       ))}
@@ -507,11 +615,16 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
                 </Accordion>
               ))}
 
-              {filteredProjects.length === 0 && filteredIndividualPoints.length === 0 && (
-                <Typography variant="body2" sx={{ textAlign: 'center', color: theme.palette.text.secondary, py: 4 }}>
+              {loading ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2 }}>
+                  <CircularProgress size={40} sx={{ color: '#0891B2' }} />
+                  <Typography sx={{ color: 'text.secondary', fontSize: '1rem' }}>Loading data points...</Typography>
+                </Box>
+              ) : (processedData.projects.length === 0 && processedData.singles.length === 0) ? (
+                <Typography variant="body2" sx={{ textAlign: 'center', color: theme.palette.text.secondary, py: 4, fontSize: '1rem' }}>
                   No waypoints found
                 </Typography>
-              )}
+              ) : null}
             </Box>
 
             <Button
@@ -522,12 +635,12 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
               sx={{
                 py: 1.5,
                 borderRadius: '0.75rem',
-                backgroundColor: '#4CAF50',
+                backgroundColor: '#0891B2',
                 textTransform: 'none',
-                fontSize: '1rem',
-                fontWeight: 600,
+                fontSize: { xs: '1.05rem', sm: '1.1rem' },
+                fontWeight: 700,
                 '&:hover': {
-                  backgroundColor: '#45a049',
+                  backgroundColor: '#0E7490',
                 },
               }}
             >

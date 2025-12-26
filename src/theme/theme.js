@@ -2,14 +2,14 @@ import { createTheme } from '@mui/material/styles';
 
 export const createAppTheme = (mode) => {
   const isDark = mode === 'dark';
-  
+
   return createTheme({
     palette: {
       mode: mode,
       primary: {
-        main: '#4CAF50',
-        light: '#81C784',
-        dark: '#388E3C',
+        main: '#0891B2', // Cyan-600
+        light: '#22D3EE', // Cyan-400
+        dark: '#0E7490', // Cyan-700
       },
       secondary: {
         main: '#FFC107',
@@ -25,7 +25,7 @@ export const createAppTheme = (mode) => {
       divider: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
       action: {
         hover: isDark ? 'rgba(255, 255, 255, 0.08)' : '#f5f5f5',
-        selected: isDark ? 'rgba(76, 175, 80, 0.16)' : '#E8F5E9',
+        selected: isDark ? 'rgba(8, 145, 178, 0.16)' : '#ECFEFF',
       },
     },
     components: {

@@ -56,7 +56,7 @@ export class GPSTracker {
             // Create polyline for visualization (dotted line)
             console.log('[GPSTracker] 🎨 Creating dotted polyline...');
             this.polyline = L.polyline([], {
-                color: '#4CAF50',
+                color: '#0891B2',
                 weight: 5,
                 opacity: 0.9,
                 dashArray: '1, 15', // True dotted look (short dots, wide gaps)

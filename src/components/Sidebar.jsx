@@ -42,7 +42,7 @@ import { useNavigate } from 'react-router-dom';
 const drawerWidth = { xs: '18rem', sm: '14.21875rem', md: '15.3125rem' };
 const drawerCollapsedWidth = { xs: '3.0625rem', sm: '3.5rem' };
 
-function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHybridMode, onToggleSatelliteHybrid, darkMode, onToggleDarkMode, onSetDefaultLocation }) {
+function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHybridMode, onToggleSatelliteHybrid, darkMode, onToggleDarkMode }) {
   const theme = useTheme();
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -90,12 +90,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
     handleSettingsClose();
   };
 
-  const handleSetDefaultLocation = () => {
-    if (onSetDefaultLocation) {
-      onSetDefaultLocation();
-    }
-    handleSettingsClose();
-  };
+
 
   const menuItems = [
     { text: 'Single Point Capture', icon: <LocationOnOutlinedIcon />, action: () => onMenuItemClick('Single Point Capture') },
@@ -232,19 +227,19 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                       backgroundColor: theme.palette.action.selected,
                       '&:hover': {
                         backgroundColor: theme.palette.mode === 'dark'
-                          ? 'rgba(76, 175, 80, 0.24)'
-                          : '#C8E6C9',
+                          ? 'rgba(8, 145, 178, 0.24)'
+                          : '#ECFEFF',
                       },
                     },
                   }}
                 >
                   <ListItemIcon
                     sx={{
-                      color: sidebarOpen ? '#4CAF50' : theme.palette.text.secondary,
+                      color: sidebarOpen ? '#0891B2' : theme.palette.text.secondary,
                       minWidth: sidebarOpen ? { xs: '2.75rem', sm: '2.1875rem' } : 'auto',
                       justifyContent: 'center',
                       '& .Mui-selected': {
-                        color: '#4CAF50',
+                        color: '#0891B2',
                       },
                       '& .MuiSvgIcon-root': {
                         fontSize: { xs: '1.75rem', sm: '1.25rem' },
@@ -384,7 +379,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                   <LightMode sx={{ fontSize: '1.09375rem', color: 'text.secondary' }} />
                 )}
                 <Typography sx={{ color: 'text.primary', fontSize: '0.85rem' }}>
-                  {isDark ? 'Dark Mode' : 'Light Mode'}
+                  {isDark ? 'Light Mode' : 'Dark Mode'}
                 </Typography>
               </Box>
               <Switch
@@ -393,24 +388,16 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                 size="small"
                 sx={{
                   '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#4CAF50',
+                    color: '#0891B2',
                   },
                   '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: '#4CAF50',
+                    backgroundColor: '#0891B2',
                   },
                 }}
               />
             </Box>
           </MenuItem>
-          <Divider />
-          <MenuItem onClick={handleSetDefaultLocation} sx={{ py: 1.1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.3125 }}>
-              <LocationOnIcon sx={{ fontSize: '1.09375rem', color: 'text.secondary' }} />
-              <Typography sx={{ color: 'text.primary', fontSize: '0.85rem' }}>
-                Set Default Location
-              </Typography>
-            </Box>
-          </MenuItem>
+
         </Menu>
       </Drawer>
     </>

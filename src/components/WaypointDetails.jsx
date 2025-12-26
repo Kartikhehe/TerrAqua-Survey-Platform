@@ -362,7 +362,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                   borderColor: theme.palette.text.secondary,
                 },
                 '&.Mui-focused fieldset': {
-                  borderColor: '#4CAF50',
+                  borderColor: '#0891B2',
                 },
               },
             }}
@@ -390,7 +390,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                     borderColor: theme.palette.text.secondary,
                   },
                   '&.Mui-focused fieldset': {
-                    borderColor: '#4CAF50',
+                    borderColor: '#0891B2',
                   },
                   '& input': {
                     fontSize: { xs: '1rem', sm: '0.875rem' },
@@ -425,7 +425,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                     borderColor: theme.palette.text.secondary,
                   },
                   '&.Mui-focused fieldset': {
-                    borderColor: '#4CAF50',
+                    borderColor: '#0891B2',
                   },
                   '& input': {
                     fontSize: { xs: '1rem', sm: '0.875rem' },
@@ -490,7 +490,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                   borderColor: theme.palette.text.secondary,
                 },
                 '&.Mui-focused fieldset': {
-                  borderColor: '#4CAF50',
+                  borderColor: '#0891B2',
                 },
                 '& textarea': {
                   fontSize: { xs: '1rem', sm: '0.875rem' },
@@ -512,13 +512,13 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                   flex: { xs: 2, sm: 1 }, // 50% on mobile, equal on desktop
                   py: { xs: 1.25, sm: 1.5 },
                   borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                  backgroundColor: '#4CAF50',
+                  backgroundColor: '#0891B2',
                   textTransform: 'none',
                   fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
-                  boxShadow: '0 0.109375rem 0.4375rem rgba(76, 175, 80, 0.3)',
+                  boxShadow: '0 0.109375rem 0.4375rem rgba(8, 145, 178, 0.3)',
                   '&:hover': {
-                    backgroundColor: '#45a049',
-                    boxShadow: '0 0.25rem 0.75rem rgba(76, 175, 80, 0.4)',
+                    backgroundColor: '#0E7490',
+                    boxShadow: '0 0.25rem 0.75rem rgba(8, 145, 178, 0.4)',
                   },
                 }}
               >
@@ -694,7 +694,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
-                    <LocationOnIcon sx={{ color: '#4CAF50', fontSize: 20 }} />
+                    <LocationOnIcon sx={{ color: '#0891B2', fontSize: 20 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary={waypoint.name}

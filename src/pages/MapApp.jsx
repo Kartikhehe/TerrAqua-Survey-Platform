@@ -87,10 +87,12 @@ function App() {
   const [savedWaypointsList, setSavedWaypointsList] = useState([]); // List of all saved waypoints for navigation
   const [loginPromptOpen, setLoginPromptOpen] = useState(false); // Login prompt dialog state
   const [gpsWarningOpen, setGpsWarningOpen] = useState(false); // GPS warning dialog state
+  const [gpsWarningShown, setGpsWarningShown] = useState(false); // Track if GPS warning has been shown
+  const [gpsRequiredForSurvey, setGpsRequiredForSurvey] = useState(false); // Track if GPS is required for current operation
   const [gpsActive, setGpsActive] = useState(false); // Whether device GPS watch is active
   const [locationSelectionActive, setLocationSelectionActive] = useState(false); // Location selection mode state
   const [pinModeActive, setPinModeActive] = useState(false); // pin behavior: allow adding non-project waypoint during survey
-  const [defaultLocation, setDefaultLocation] = useState({ lat: 26.516654, lng: 80.231507 }); // Default location from database
+
   const [startSurveyDialogOpen, setStartSurveyDialogOpen] = useState(false);
   const [activeProject, setActiveProject] = useState(null); // { id, name }
   const [projectRecording, setProjectRecording] = useState(false);
@@ -111,6 +113,7 @@ function App() {
   const [endProjectDialogOpen, setEndProjectDialogOpen] = useState(false); // Confirmation dialog for ending project
   const [exitProjectWarningOpen, setExitProjectWarningOpen] = useState(false); // Warning dialog for restricted actions during project
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
+  const [defaultLocation, setDefaultLocation] = useState(INDIA_CENTER);
 
   // GPS Tracking (using GPSTracker class)
   const gpsTrackerRef = useRef(null); // Reference to GPSTracker instance
@@ -137,6 +140,101 @@ function App() {
   const labelLayerRef = useRef(null); // Reference to label layer for satellite hybrid view
   const locateHandlerRef = useRef(null); // Reference to locate handler function
   const fileInputRef = useRef(null); // Reference to file input for import
+
+  // --- Map Action Handlers (Search & Locate) ---
+  const handleMapSearch = (query) => {
+    if (query && query.trim()) {
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const { lat, lon } = data[0];
+            const map = mapRef.current;
+            if (map) {
+              map.setView([parseFloat(lat), parseFloat(lon)], 13);
+              showSnackbar(`Found: ${data[0].display_name}`, 'success');
+            }
+          } else {
+            showSnackbar('Location not found. Please try a different search term.', 'error');
+          }
+        })
+        .catch(error => {
+          console.error('Search error:', error);
+          showSnackbar('Search failed. Please try again.', 'error');
+        });
+    }
+  };
+
+  const handleMapLocate = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const accuracy = position.coords.accuracy || 0;
+          const map = mapRef.current;
+
+          if (map) {
+            map.setView([latitude, longitude], 15);
+
+            // Activate survey mode if not already active to allow waypoint insertion
+            setSinglePointCaptureActive(prev => (!prev ? true : prev));
+            setPreviewModeActive(false);
+
+            // Brief delay to ensure state updates if we were in a different mode
+            setTimeout(() => {
+              const waypointId = `waypoint-${Date.now()}`;
+              const latlng = [latitude, longitude];
+
+              const newWaypoint = {
+                id: waypointId,
+                lat: latitude,
+                lng: longitude,
+                name: 'My Location',
+                notes: '',
+                images: []
+              };
+
+              // Add to state and refs
+              setWaypoints(prev => [...prev, newWaypoint]);
+
+              const marker = L.marker(latlng).addTo(map);
+              marker.on('click', (e) => {
+                e.originalEvent?.stopPropagation?.();
+                handleSelectWaypoint(waypointId);
+              });
+              markersRef.current[waypointId] = marker;
+
+              setCoordinates({
+                lat: latitude.toFixed(6),
+                lng: longitude.toFixed(6),
+                accuracy: accuracy.toFixed(1),
+                elevation: position.coords.altitude ? position.coords.altitude.toFixed(1) : null
+              });
+
+              setSelectedWaypointId(waypointId);
+              setWaypointData({
+                name: 'My Location',
+                lat: latitude.toFixed(6),
+                lng: longitude.toFixed(6),
+                notes: '',
+                images: []
+              });
+              setWaypointDetailsOpen(true);
+
+              showSnackbar(`Location found! Accuracy: ${Math.round(accuracy)}m`, 'success');
+            }, 200);
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          showSnackbar('Unable to get your location. Please check GPS settings.', 'error');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } else {
+      showSnackbar('Geolocation is not supported by your browser', 'error');
+    }
+  };
   const liveCoordsRef = useRef(null); // Measure live coordinates card height (mobile)
   const waypointDetailsRef = useRef(null); // Measure waypoint details card height (mobile)
   const [mapDynamicHeight, setMapDynamicHeight] = useState(null);
@@ -377,7 +475,7 @@ function App() {
     // Remove previously-staged single-point captures so only project points remain visible
     removePinCapturedPoints();
     setWaypointDetailsOpen(true);
-    setSinglePointCaptureActive(true);
+    setSinglePointCaptureActive(false);
     setProjectRecording(true);
     setStartSurveyDialogOpen(false);
     showSnackbar(`Started project: ${project.name}`, 'success');
@@ -481,7 +579,7 @@ function App() {
     // Remove previously-staged single-point captures so only project points remain visible
     removePinCapturedPoints();
     setWaypointDetailsOpen(true);
-    setSinglePointCaptureActive(true);
+    setSinglePointCaptureActive(false);
     setProjectRecording(true);
     setStartSurveyDialogOpen(false);
     showSnackbar(`Loaded project: ${project.name}`, 'info');
@@ -703,7 +801,7 @@ function App() {
           lng: parseFloat(wp.longitude),
           name: wp.name || `Point ${idx + 1}`,
           notes: wp.notes || '',
-          images: wp.images || [] || null,
+          images: wp.images || [],
           project_id: wp.project_id || project.id,
           project_name: wp.project_name || project.name,
         });
@@ -874,12 +972,18 @@ function App() {
         },
         (err) => {
           console.error('Foreground init error:', err);
-          setGpsWarningOpen(true);
+          if (!gpsWarningShown) {
+            setGpsWarningOpen(true);
+            setGpsWarningShown(true);
+          }
         },
         { enableHighAccuracy: true, timeout: 12000 }
       );
     } else {
-      setGpsWarningOpen(true);
+      if (!gpsWarningShown) {
+        setGpsWarningOpen(true);
+        setGpsWarningShown(true);
+      }
     }
   };
 
@@ -1309,14 +1413,18 @@ function App() {
     }
 
     if (item === 'Single Point Capture') {
-      const willBeActive = !singlePointCaptureActive;
-      setSinglePointCaptureActive(willBeActive);
-      setPreviewModeActive(false);
+      // If waypoints exist (e.g. viewing saved points), force activation (reset & start)
+      // Otherwise toggle based on current state
+      const shouldActivate = !singlePointCaptureActive || waypoints.length > 0;
 
-      if (willBeActive) {
+      if (shouldActivate) {
+        setSinglePointCaptureActive(true);
+        setPreviewModeActive(false);
         // Trigger reset when activating
         resetMapAndState();
-
+      } else {
+        setSinglePointCaptureActive(false);
+        setPreviewModeActive(false);
         // Reset when turning off survey
         setSelectedWaypointId(null);
         setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
@@ -1498,12 +1606,7 @@ function App() {
       return;
     }
 
-    // Prevent deletion of "Default Location"
-    const waypoint = waypoints.find(wp => wp.id === selectedWaypointId);
-    if (waypoint && waypoint.name && waypoint.name.trim().toLowerCase() === 'default location') {
-      showSnackbar('Cannot delete "Default Location"', 'error');
-      return;
-    }
+
 
     try {
       const dbId = dbWaypointIds[selectedWaypointId];
@@ -1688,8 +1791,10 @@ function App() {
         if (marker && mapRef.current) {
           const latlng = marker.getLatLng();
           // Only add overlay for survey waypoints (not navigation or current location)
-          const wp = waypoints.find(wp => wp.id === waypointId);
-          const isSurveyWaypoint = wp && wp.id !== currentLocationWaypointId && (!isProjectMode || (activeProject && String(wp.project_id) === String(activeProject.id)));
+          // Use ref to avoid stale closure issues
+          const wp = waypointsRef.current.find(wp => wp.id === waypointId);
+          const isSurveyWaypoint = wp && wp.id !== currentLocationWaypointRef.current && (!isProjectModeRef.current || (activeProjectRef.current && String(wp.project_id) === String(activeProjectRef.current.id)));
+
           if (isSurveyWaypoint) {
             const redOverlay = createSurveyMarker(latlng).addTo(mapRef.current);
             selectedMarkerOverlayRef.current = redOverlay;
@@ -1707,7 +1812,8 @@ function App() {
   };
 
   const handleSelectWaypoint = (waypointId) => {
-    const waypoint = waypoints.find(wp => wp.id === waypointId);
+    // Use ref to avoid stale closure issues with waypoints state
+    const waypoint = waypointsRef.current.find(wp => wp.id === waypointId);
     if (!waypoint) return;
 
     // Set selected waypoint
@@ -1725,7 +1831,7 @@ function App() {
       lat: (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat),
       lng: (typeof waypoint.lng === 'number' ? waypoint.lng.toFixed(6) : waypoint.lng),
       notes: waypoint.notes || '',
-      images: waypoint.images || [] || null,
+      images: waypoint.images || [],
       project_id: waypoint.project_id || null,
       project_name: waypoint.project_name || null,
       followsLive: waypoint.followsLive || false,
@@ -1735,7 +1841,7 @@ function App() {
       const map = mapRef.current;
       const marker = markersRef.current[waypointId];
       if (marker && map) {
-        try { map && map.setView && map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14)); } catch (e) { console.error('Error centering map on marker:', e); }
+        try { map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14)); } catch (e) { console.error('Error centering map on marker:', e); }
       }
     } catch (e) { }
   };
@@ -1795,147 +1901,16 @@ function App() {
     }
   };
 
-  // Handler for "Set Default Location" button
-  // This simply finds "Default Location" and calls the same handler as saved waypoints
-  const handleSetDefaultLocation = async () => {
-    if (!isAuthenticated) {
-      setLoginPromptOpen(true);
-      return;
-    }
-
-    try {
-      // Fetch "Default Location" from database
-      const existingWaypoints = await waypointsAPI.getAll();
-      let defaultWaypoint = existingWaypoints.find(wp => wp.name && wp.name.trim().toLowerCase() === 'default location');
-
-      // If "Default Location" doesn't exist, create it at current map center
-      if (!defaultWaypoint && mapRef.current) {
-        const mapCenter = mapRef.current.getCenter();
-        const newDefaultWaypoint = {
-          name: 'Default Location',
-          lat: mapCenter.lat.toFixed(6),
-          lng: mapCenter.lng.toFixed(6),
-          notes: 'User-defined default location',
-          images: []
-        };
-
-        const savedWaypoint = await waypointsAPI.create(newDefaultWaypoint);
-        defaultWaypoint = savedWaypoint;
-      }
-
-      if (!defaultWaypoint) {
-        showSnackbar('Failed to load or create default location', 'error');
-        return;
-      }
-
-      // Convert database format to waypoint format (same as saved waypoints)
-      const waypoint = {
-        id: defaultWaypoint.id,
-        lat: parseFloat(defaultWaypoint.latitude),
-        lng: parseFloat(defaultWaypoint.longitude),
-        name: defaultWaypoint.name,
-        notes: defaultWaypoint.notes || '',
-        image: defaultWaypoint.image_url || null
-      };
-
-      // Now use the EXACT same code as onSelectWaypoint from saved waypoints
-      if (!mapRef.current) return;
-
-      const map = mapRef.current;
-      const mapContainer = map.getContainer();
-
-      // Check if waypoint already exists (by database ID)
-      const existingEntry = Object.entries(dbWaypointIds).find(
-        ([localId, dbId]) => dbId === waypoint.id
-      );
-
-      let waypointId;
-
-      if (existingEntry) {
-        // Waypoint already exists, use existing local ID
-        waypointId = existingEntry[0];
-
-        // Update waypoint data in case it changed in database
-        setWaypoints(prev => prev.map(wp =>
-          wp.id === waypointId
-            ? { ...wp, name: waypoint.name, notes: waypoint.notes || '', images: waypoint.images || [] || null }
-            : wp
-        ));
-      } else {
-        // Create new waypoint ID
-        waypointId = `waypoint-${Date.now()}`;
-
-        // Add to waypoints array
-        setWaypoints(prev => [...prev, {
-          id: waypointId,
-          lat: waypoint.lat,
-          lng: waypoint.lng,
-          name: waypoint.name,
-          notes: waypoint.notes || '',
-          images: waypoint.images || [] || null
-        }]);
-
-        // Create marker (default L.marker)
-        const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-
-        // Add click handler
-        marker.on('click', function () {
-          handleSelectWaypoint(waypointId);
-        });
-
-        markersRef.current[waypointId] = marker;
-
-        // Store database ID mapping (waypoint.id is the database ID)
-        setDbWaypointIds(prev => ({ ...prev, [waypointId]: waypoint.id }));
-      }
-
-      // Activate survey mode if not already active
-      if (!singlePointCaptureActive) {
-        setSinglePointCaptureActive(true);
-        setPreviewModeActive(false);
-      }
-
-      // Update coordinates to show the waypoint location
-      setCoordinates({
-        lat: waypoint.lat.toFixed(6),
-        lng: waypoint.lng.toFixed(6)
-      });
-
-      // Select the waypoint and open details
-      // Use setTimeout to ensure survey mode is activated and state is updated first
-      setTimeout(() => {
-        // Center map on waypoint
-        try { map && map.setView && map.setView([waypoint.lat, waypoint.lng], 13); } catch (e) { console.error('Error centering map on waypoint:', e); }
-
-        // Get current waypoints to ensure we have the latest state
-        setWaypoints(currentWaypoints => {
-          return currentWaypoints;
-        });
-
-        // Set selected waypoint
-        setSelectedWaypointId(waypointId);
-
-        // Set waypoint data for editing with all database information
-        setWaypointData({
-          name: waypoint.name,
-          lat: waypoint.lat.toFixed(6),
-          lng: waypoint.lng.toFixed(6),
-          notes: waypoint.notes || '',
-          images: waypoint.images || [] || null
-        });
-      }, 150);
-    } catch (error) {
-      console.error('Error loading default location:', error);
-      showSnackbar(error.message || 'Failed to load default location. Please try again.', 'error');
-    }
-  };
-
   // Toggle satellite hybrid view
   const handleToggleSatelliteHybrid = () => {
     if (!mapRef.current) return;
 
     const map = mapRef.current;
     const newMode = !satelliteHybridMode;
+
+    // Save current map state (zoom and center)
+    const currentZoom = map.getZoom();
+    const currentCenter = map.getCenter();
 
     // Show loading state
     showSnackbar(newMode ? 'Switching to satellite view...' : 'Switching to map view...', 'info');
@@ -1966,14 +1941,13 @@ function App() {
 
       if (newMode) {
         // Satellite hybrid mode: Use Esri World Imagery with labels
-        // Using a more reliable tile server configuration
         const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           attribution: '',
           maxZoom: 19,
           minZoom: 1,
           tileSize: 256,
           zoomOffset: 0,
-          errorTileUrl: '', // Prevent error tiles from showing
+          errorTileUrl: '',
           crossOrigin: true
         });
 
@@ -1981,7 +1955,10 @@ function App() {
         satelliteLayer.addTo(map);
         tileLayerRef.current = satelliteLayer;
 
-        // Add label layer with slight delay to ensure satellite loads first
+        // Restore view immediately after adding satellite layer
+        map.setView(currentCenter, currentZoom, { animate: false });
+
+        // Add label layer with slight delay
         setTimeout(() => {
           if (!mapRef.current) return;
 
@@ -1989,7 +1966,7 @@ function App() {
             attribution: '',
             maxZoom: 19,
             minZoom: 1,
-            opacity: 0.7, // Semi-transparent labels over satellite
+            opacity: 0.7,
             tileSize: 256,
             zoomOffset: 0,
             errorTileUrl: '',
@@ -2017,61 +1994,16 @@ function App() {
         tileLayer.addTo(map);
         tileLayerRef.current = tileLayer;
 
+        // Restore view immediately after adding tile layer
+        map.setView(currentCenter, currentZoom, { animate: false });
+
         showSnackbar('Map view enabled', 'success');
       }
     }, 50);
   };
 
   // Helper function to navigate to default location
-  const goToDefaultLocation = () => {
-    const map = mapRef.current;
-    if (!map) return;
 
-    // Set view to default location
-    try { map && map.setView && map.setView([defaultLocation.lat, defaultLocation.lng], 15); } catch (e) { console.error('Error calling map.setView in goToDefaultLocation:', e); }
-
-    // Update coordinates with default location
-    setCoordinates({
-      lat: defaultLocation.lat.toFixed(6),
-      lng: defaultLocation.lng.toFixed(6),
-      accuracy: null
-    });
-
-    // Create a default location marker
-    const waypointId = `default-location-${Date.now()}`;
-    const defaultLocationWaypoint = {
-      id: waypointId,
-      lat: defaultLocation.lat,
-      lng: defaultLocation.lng,
-      name: 'Default Location',
-      notes: 'GPS unavailable - using default location',
-      images: []
-    };
-
-    // Add to waypoints array
-    setWaypoints([defaultLocationWaypoint]);
-    setCurrentLocationWaypointId(waypointId);
-
-    // Create marker (default L.marker)
-    const marker = L.marker([defaultLocation.lat, defaultLocation.lng]).addTo(map);
-
-    // Add click handler to select waypoint
-    marker.on('click', function () {
-      handleSelectWaypoint(waypointId);
-    });
-
-    markersRef.current[waypointId] = marker;
-
-    // Select this waypoint by default
-    setSelectedWaypointId(waypointId);
-    setWaypointData({
-      name: 'Default Location',
-      lat: defaultLocation.lat.toFixed(6),
-      lng: defaultLocation.lng.toFixed(6),
-      notes: 'GPS unavailable - using default location',
-      images: []
-    });
-  };
 
 
   // Fetch route from OpenRouteService
@@ -2213,7 +2145,7 @@ function App() {
 
         // Create polyline for the route
         const polyline = L.polyline(routeCoordinates, {
-          color: '#4CAF50',
+          color: '#0891B2',
           weight: 4,
           opacity: 0.8,
           dashArray: '10, 5',
@@ -2577,39 +2509,14 @@ function App() {
   }, [waypoints, selectedWaypointId]);
 
   // Handler when GPS warning's continue is clicked
-  const handleGpsWarningContinue = async () => {
-    // If a project is ongoing, load its points and center on the last point
-    if (isProjectMode && activeProject && activeProject.id) {
-      try {
-        const detail = await projectsAPI.getById(activeProject.id);
-        if (detail && detail.waypoints && detail.waypoints.length > 0) {
-          // Load project waypoints into state and map
-          loadProjectWaypointsToMap(detail, activeProject);
-          // Center map on the last waypoint
-          const last = detail.waypoints[detail.waypoints.length - 1];
-          const lat = parseFloat(last.latitude);
-          const lng = parseFloat(last.longitude);
-          try { mapRef.current && mapRef.current.panTo([lat, lng]); } catch (e) { }
-          // Select the last project waypoint by its generated local id
-          const localId = `project-${activeProject.id}-${last.id}`;
-          setTimeout(() => {
-            setSelectedWaypointId(localId);
-            setWaypointDetailsOpen(true);
-            // set waypointData from the loaded waypoint in state if available
-            const wp = waypoints.find(w => w.id === localId);
-            if (wp) {
-              setWaypointData({ name: wp.name, lat: (typeof wp.lat === 'number' ? wp.lat.toFixed(6) : wp.lat), lng: (typeof wp.lng === 'number' ? wp.lng.toFixed(6) : wp.lng), notes: wp.notes || '', images: wp.images || [], project_id: wp.project_id || null, project_name: wp.project_name || null });
-            }
-          }, 150);
-        }
-      } catch (err) {
-        console.error('Error loading project for GPS-warning continue:', err);
-      }
-      return;
-    }
+  const handleGpsWarningContinue = () => {
+    // User chose to continue without GPS. Do nothing, just close dialog (handled by caller onClose)
+    console.log('User continued without GPS');
+  };
 
-    // Otherwise fall back to default location behavior
-    goToDefaultLocation();
+  const handleGpsWarningRetry = () => {
+    // Retry GPS detection
+    startForegroundTracking();
   };
 
   useEffect(() => {
@@ -2678,218 +2585,6 @@ function App() {
 
     // Initial tracking on mount (Foreground only)
     startForegroundTracking();
-
-    // Create custom control container for all map controls (search, locate, zoom)
-    const MapControlsContainer = L.Control.extend({
-      onAdd: function (map) {
-        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control map-controls-container');
-        const isSmallScreen = window.innerWidth < 600;
-        container.style.marginTop = isSmallScreen ? '60px' : '72px'; // Just below navbar (56px mobile / 64px desktop) + spacing
-        container.style.marginRight = '10px';
-        container.style.borderRadius = '12px';
-        container.style.overflow = 'hidden';
-        container.style.boxShadow = darkMode
-          ? '0 2px 8px rgba(0, 0, 0, 0.5)'
-          : '0 2px 8px rgba(0, 0, 0, 0.15)';
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.gap = '0';
-
-        // Search button
-        const searchButton = L.DomUtil.create('a', 'leaflet-control-search', container);
-        searchButton.href = '#';
-        searchButton.title = 'Search Location';
-        const buttonSize = isSmallScreen ? '2.5rem' : '2.125rem';
-        const iconSize = isSmallScreen ? '1.25rem' : '1.125rem';
-        searchButton.style.cssText = `
-          width: ${buttonSize};
-          height: ${buttonSize};
-          line-height: ${buttonSize};
-          text-align: center;
-          display: block;
-          background-color: ${darkMode ? '#1e1e1e' : '#fff'};
-          color: ${darkMode ? '#fff' : '#333'};
-          text-decoration: none;
-          border: none;
-          border-bottom: 1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : '#e0e0e0'};
-        `;
-
-        // Add Search icon as SVG
-        const searchIcon = `
-          <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: ${isSmallScreen ? '0.75rem' : '0.5rem'};">
-            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="#4CAF50"/>
-          </svg>
-        `;
-        searchButton.innerHTML = searchIcon;
-
-        L.DomEvent.disableClickPropagation(searchButton);
-        L.DomEvent.on(searchButton, 'click', L.DomEvent.stop);
-        L.DomEvent.on(searchButton, 'click', () => {
-          const query = prompt('Enter location to search:');
-          if (query && query.trim()) {
-            // Use Nominatim (OpenStreetMap geocoding service)
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
-              .then(response => response.json())
-              .then(data => {
-                if (data && data.length > 0) {
-                  const { lat, lon } = data[0];
-                  try { map && map.setView && map.setView([parseFloat(lat), parseFloat(lon)], 13); } catch (e) { console.error('Error calling map.setView on search result:', e); }
-                  setTimeout(() => {
-                    setSnackbar({ open: true, message: `Found: ${data[0].display_name}`, severity: 'success' });
-                  }, 0);
-                } else {
-                  setTimeout(() => {
-                    setSnackbar({ open: true, message: 'Location not found. Please try a different search term.', severity: 'error' });
-                  }, 0);
-                }
-              })
-              .catch(error => {
-                console.error('Search error:', error);
-                setTimeout(() => {
-                  setSnackbar({ open: true, message: 'Search failed. Please try again.', severity: 'error' });
-                }, 0);
-              });
-          }
-        });
-
-        // Locate button
-        const locateButton = L.DomUtil.create('a', 'leaflet-control-locate', container);
-        locateButton.href = '#';
-        locateButton.title = 'Locate Me';
-        locateButton.style.cssText = `
-          width: ${buttonSize};
-          height: ${buttonSize};
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: ${darkMode ? '#1e1e1e' : '#fff'};
-          color: ${darkMode ? '#fff' : '#333'};
-          text-decoration: none;
-          border: none;
-        `;
-
-        // Add Material-UI MyLocation icon as SVG
-        const locateIconSize = isSmallScreen ? '1.5rem' : '1.09375rem';
-        const locateIcon = `
-          <svg width="${locateIconSize}" height="${locateIconSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" fill="#4CAF50"/>
-          </svg>
-        `;
-        locateButton.innerHTML = locateIcon;
-
-        L.DomEvent.disableClickPropagation(locateButton);
-        L.DomEvent.on(locateButton, 'click', L.DomEvent.stop);
-
-        // Store the locate handler in a ref so it can access latest state
-        locateHandlerRef.current = () => {
-          if (navigator.geolocation) {
-            locateButton.style.opacity = '0.6';
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                const { latitude, longitude } = position.coords;
-                const accuracy = position.coords.accuracy || 0;
-
-                // Center map on location
-                try { map && map.setView && map.setView([latitude, longitude], 15); } catch (e) { console.error('Error setting view from locate handler:', e); }
-                locateButton.style.opacity = '1';
-
-                // Activate survey mode if not already active
-                setSinglePointCaptureActive(prev => {
-                  if (!prev) {
-                    return true;
-                  }
-                  return prev;
-                });
-                setPreviewModeActive(false);
-
-                // Wait a bit for survey mode to activate, then create waypoint
-                setTimeout(() => {
-                  const waypointId = `waypoint-${Date.now()}`;
-                  const latlng = [latitude, longitude];
-
-                  // Create waypoint with "My Location" as name
-
-                  const newWaypoint = {
-                    id: waypointId,
-                    lat: latitude,
-                    lng: longitude,
-                    name: 'My Location',
-                    notes: '',
-                    images: []
-                  };
-
-                  // Add to waypoints array
-                  setWaypoints(prev => {
-                    const updated = [...prev, newWaypoint];
-                    return updated;
-                  });
-
-                  // Add marker to map (default L.marker)
-                  const marker = L.marker(latlng).addTo(map);
-
-                  // Add click handler to select waypoint
-                  marker.on('click', function () {
-                    handleSelectWaypoint(waypointId);
-                  });
-
-                  markersRef.current[waypointId] = marker;
-
-                  // Update coordinates
-                  setCoordinates({
-                    lat: latitude.toFixed(6),
-                    lng: longitude.toFixed(6)
-                  });
-
-                  // Select the waypoint and open details
-                  setSelectedWaypointId(waypointId);
-                  setWaypointData({
-                    name: 'My Location',
-                    lat: latitude.toFixed(6),
-                    lng: longitude.toFixed(6),
-                    notes: '',
-                    images: []
-                  });
-
-                  setTimeout(() => {
-                    setSnackbar({ open: true, message: `Location found! Accuracy: ${Math.round(accuracy)}m`, severity: 'success' });
-                  }, 0);
-                }, 200);
-              },
-              (error) => {
-                locateButton.style.opacity = '1';
-                console.error('Geolocation error:', error);
-                // Show GPS warning dialog
-                setGpsWarningOpen(true);
-              },
-              {
-                enableHighAccuracy: true, // Request most accurate location
-                timeout: 10000,
-                maximumAge: 0
-              }
-            );
-          } else {
-            // Geolocation not supported - show GPS warning dialog
-            setGpsWarningOpen(true);
-          }
-        };
-
-        L.DomEvent.on(locateButton, 'click', (e) => {
-          e.preventDefault();
-          if (locateHandlerRef.current) {
-            locateHandlerRef.current();
-          }
-        });
-
-        return container;
-      },
-      onRemove: function (map) {
-        // Cleanup if needed
-      }
-    });
-
-    // Add custom controls container to map (search + locate)
-    const mapControlsContainer = new MapControlsContainer({ position: 'topright' });
-    mapControlsContainer.addTo(map);
 
     // Add drag-and-drop handlers for GeoJSON and KML files
     const mapContainer = map.getContainer();
@@ -2974,7 +2669,8 @@ function App() {
       mapContainer.removeEventListener('drop', handleDrop);
       map.remove();
     };
-  }, [darkMode, satelliteHybridMode]);
+  }, [darkMode]); // Removed satelliteHybridMode - map should not reinitialize when switching layers
+
 
   // Update tile layer when dark mode changes (only if not in satellite hybrid mode)
   useEffect(() => {
@@ -3469,9 +3165,11 @@ function App() {
           isMobile={isMobile}
           darkMode={darkMode}
           onToggleDarkMode={handleToggleDarkMode}
-          onSetDefaultLocation={handleSetDefaultLocation}
           onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
           satelliteHybridMode={satelliteHybridMode}
+          onSidebarToggle={handleSidebarToggle}
+          onSearch={handleMapSearch}
+          onLocate={handleMapLocate}
         />
         <Sidebar
           sidebarOpen={sidebarOpen}
@@ -3482,7 +3180,6 @@ function App() {
           onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
           darkMode={darkMode}
           onToggleDarkMode={handleToggleDarkMode}
-          onSetDefaultLocation={handleSetDefaultLocation}
         />
         <StartSurveyDialog
           open={startSurveyDialogOpen}
@@ -3491,33 +3188,6 @@ function App() {
           onContinue={handleStartSurveyContinue}
           onShowSnackbar={showSnackbar}
         />
-        {isMobile && (
-          <IconButton
-            onClick={handleSidebarToggle}
-            sx={{
-              position: 'fixed',
-              top: '4.5rem',
-              left: '0.75rem',
-              width: '3.5rem',
-              height: '3.5rem',
-              zIndex: theme.zIndex.drawer + 15,
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-              boxShadow: theme.palette.mode === 'dark'
-                ? '0 2px 8px rgba(0,0,0,0.45)'
-                : '0 2px 8px rgba(0,0,0,0.15)',
-              '&:hover': {
-                backgroundColor: theme.palette.action.hover,
-              },
-              '& .MuiSvgIcon-root': {
-                fontSize: '1.75rem',
-              },
-            }}
-            size="medium"
-          >
-            <MenuIcon />
-          </IconButton>
-        )}
         <Box
           component="main"
           sx={{
@@ -3778,48 +3448,63 @@ function App() {
             onSelectWaypoint={(waypoint) => {
               // Clear current map/state before showing the selected saved point
               resetMapAndState();
+              setSinglePointCaptureActive(false);
+              setIsProjectMode(false); // Ensure we're out of project mode when viewing a saved point
 
               const waypointId = `saved-${waypoint.id}`;
+              const latFormatted = (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat);
+              const lngFormatted = (typeof waypoint.lng === 'number' ? waypoint.lng.toFixed(6) : waypoint.lng);
 
-              // We don't check alreadyExists because we just cleared everything!
-              // But if we want to support multiple saved points later, we should revisit.
-              // For now, "view saved point" implies viewing just that one (or adding it to empty map).
-
-              // Add to map
-              setWaypoints([{
+              // 1. Prepare waypoint data
+              const newWaypoint = {
                 id: waypointId,
                 lat: waypoint.lat,
                 lng: waypoint.lng,
                 name: waypoint.name,
                 notes: waypoint.notes || '',
-                images: waypoint.images || [] || null,
+                images: waypoint.images || [],
                 project_id: waypoint.project_id || null,
                 project_name: waypoint.project_name || null
-              }]);
+              };
+
+              // 2. Set all necessary states to open details panel and show point
+              setWaypoints([newWaypoint]);
               setDbWaypointIds({ [waypointId]: waypoint.id });
+              setSelectedWaypointId(waypointId);
+              setWaypointData({
+                name: waypoint.name,
+                lat: latFormatted,
+                lng: lngFormatted,
+                notes: waypoint.notes || '',
+                images: waypoint.images || [],
+                project_id: waypoint.project_id || null,
+                project_name: waypoint.project_name || null
+              });
+              setWaypointDetailsOpen(true);
 
-              // Activate survey mode if not already active
-              if (!singlePointCaptureActive) {
-                setSinglePointCaptureActive(true);
-                setPreviewModeActive(false);
-              }
-
-              // Update coordinates to show the waypoint location
+              // Update coordinates for the live display bar
               setCoordinates({
-                lat: waypoint.lat.toFixed(6),
-                lng: waypoint.lng.toFixed(6)
+                lat: latFormatted,
+                lng: lngFormatted
               });
 
+              // 3. Update map view and markers
               setTimeout(() => {
                 const map = mapRef.current;
                 if (!map) return;
 
-                const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
-                marker.on('click', function () { handleSelectWaypoint(waypointId); });
-                markersRef.current[waypointId] = marker;
-                marker.fire('click');
+                const latlng = [waypoint.lat, waypoint.lng];
+                map.setView(latlng, 15);
 
-                map.setView([waypoint.lat, waypoint.lng], 15);
+                const marker = L.marker(latlng).addTo(map);
+                marker.on('click', (e) => {
+                  e.originalEvent?.stopPropagation?.();
+                  handleSelectWaypoint(waypointId);
+                });
+                markersRef.current[waypointId] = marker;
+
+                // Sync the selected overlay (red circle)
+                updateSelectedMarkerOverlay(waypointId);
               }, 100);
 
               setSavedPointsOpen(false);
@@ -3880,7 +3565,8 @@ function App() {
             open={gpsWarningOpen}
             onClose={() => setGpsWarningOpen(false)}
             onContinue={handleGpsWarningContinue}
-            projectOngoing={isProjectMode && activeProject && activeProject.id}
+            onRetry={handleGpsWarningRetry}
+            requireGPS={gpsRequiredForSurvey}
           />
 
           {/* Hidden file input for importing GeoJSON/KML files */}
@@ -3971,7 +3657,7 @@ function App() {
                   <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? '120px' : '180px' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
                   <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
                   {isMobile && (
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? 'green' : 'red', ml: 1 }} />
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? '#0891B2' : 'red', ml: 1 }} />
                   )}
                 </Box>
               </Box>
@@ -4064,7 +3750,7 @@ function App() {
                     <AddLocation />
                   </IconButton>
 
-                  <IconButton aria-label="start" title="Start" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#45a049' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                  <IconButton aria-label="start" title="Start" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#0891B2', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#0E7490' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
                     <PlayArrowOutlinedIcon />
                   </IconButton>
 
@@ -4182,7 +3868,7 @@ function App() {
                   <AddLocation />
                 </IconButton>
 
-                <IconButton aria-label="start" title="Start" sx={{ display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#4CAF50', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#45a049' }, '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                <IconButton aria-label="start" title="Start" sx={{ display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#0891B2', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#0E7490' }, '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
                   <PlayArrowOutlinedIcon />
                 </IconButton>
 

@@ -32,7 +32,7 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    
+
     // Client-side validation
     if (!email || !password) {
       setError("Please fill in all fields");
@@ -45,6 +45,13 @@ export default function LoginPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: 'Login failed' }));
+
+        // Check if user needs to verify email
+        if (data.requiresVerification) {
+          navigate('/verify-otp', { state: { email: data.email || email } });
+          return;
+        }
+
         throw new Error(data.error || data.message || "Login failed");
       }
 
@@ -61,7 +68,7 @@ export default function LoginPage() {
         }
         throw new Error("Failed to fetch user info");
       }
-      
+
       const userData = await userRes.json();
 
       // 3. Update AuthProvider state → triggers redirect automatically
@@ -82,7 +89,6 @@ export default function LoginPage() {
         alignItems: "center",
         bgcolor: 'background.default',
         position: "relative",
-        overflow: "hidden",
         p: 2,
       }}
     >
@@ -116,12 +122,12 @@ export default function LoginPage() {
               width: 64,
               height: 64,
               borderRadius: "16px",
-              background: `linear-gradient(135deg, #4CAF50, #388E3C)`,
+              background: `linear-gradient(135deg, #0891B2, #0E7490)`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               mb: 2,
-              boxShadow: `0 8px 20px rgba(76, 175, 80, 0.4)`,
+              boxShadow: `0 8px 20px rgba(8, 145, 178, 0.4)`,
             }}
           >
             <LoginIcon sx={{ fontSize: 32, color: "white" }} />
@@ -195,11 +201,11 @@ export default function LoginPage() {
                   transition: "all 0.3s ease",
                   "&:hover": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.14)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.14)`,
                   },
                   "&.Mui-focused": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.26)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.26)`,
                   },
                 },
               }}
@@ -235,15 +241,40 @@ export default function LoginPage() {
                   transition: "all 0.3s ease",
                   "&:hover": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.14)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.14)`,
                   },
                   "&.Mui-focused": {
                     bgcolor: 'background.paper',
-                    boxShadow: `0 4px 12px rgba(76, 175, 80, 0.26)`,
+                    boxShadow: `0 4px 12px rgba(8, 145, 178, 0.26)`,
                   },
                 },
               }}
             />
+          </Box>
+
+          {/* Forgot Password Link */}
+          <Box sx={{ mb: 3, textAlign: 'right' }}>
+            <Link
+              component="a"
+              href="/forgot-password"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/forgot-password');
+              }}
+              sx={{
+                color: '#0891B2',
+                textDecoration: 'none',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  color: '#0E7490',
+                  textDecoration: 'underline',
+                },
+              }}
+            >
+              Forgot Password?
+            </Link>
           </Box>
 
           {/* Submit Button */}
@@ -257,8 +288,8 @@ export default function LoginPage() {
               fontSize: 16,
               borderRadius: "12px",
               textTransform: "none",
-              background: `linear-gradient(135deg, #4CAF50, #388E3C)`,
-              boxShadow: `0 8px 20px rgba(76, 175, 80, 0.59)`,
+              background: `linear-gradient(135deg, #0891B2, #0E7490)`,
+              boxShadow: `0 8px 20px rgba(8, 145, 178, 0.59)`,
               transition: "all 0.3s ease",
               position: "relative",
               overflow: "hidden",
@@ -275,7 +306,7 @@ export default function LoginPage() {
               },
               "&:hover": {
                 transform: "translateY(-2px)",
-                boxShadow: `0 12px 30px rgba(76, 175, 80, 0.8)`,
+                boxShadow: `0 12px 30px rgba(8, 145, 178, 0.8)`,
                 "&::before": {
                   left: "100%",
                 },
@@ -307,12 +338,12 @@ export default function LoginPage() {
                 navigate('/signup');
               }}
               sx={{
-                color: "#4CAF50",
+                color: "#0891B2",
                 textDecoration: "none",
                 fontWeight: 600,
                 transition: "all 0.2s ease",
                 "&:hover": {
-                  color: "#388E3C",
+                  color: "#0E7490",
                 },
               }}
             >

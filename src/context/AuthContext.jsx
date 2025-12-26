@@ -11,10 +11,19 @@ export const AuthProvider = ({ children }) => {
   // Check if user is authenticated on mount
   useEffect(() => {
     const checkAuth = async () => {
+      // If no token in localStorage, don't even try to validate with backend
+      // This prevents "zombie" logins from lingering httpOnly cookies after explicit logout
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await authAPI.getCurrentUser();
         if (!response.ok) {
-          // Not authenticated
+          // Not authenticated or token invalid
+          localStorage.removeItem('authToken'); // Clean up invalid token
           setUser(null);
           setIsAuthenticated(false);
           return;
@@ -24,6 +33,7 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
       } catch (error) {
         // Silently fail - user is not authenticated
+        localStorage.removeItem('authToken'); // Clean up potentially invalid token if error implies auth failure
         setUser(null);
         setIsAuthenticated(false);
       } finally {
@@ -44,6 +54,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Ensure token is cleared even if API call fails
+      localStorage.removeItem('authToken');
       setUser(null);
       setIsAuthenticated(false);
     }

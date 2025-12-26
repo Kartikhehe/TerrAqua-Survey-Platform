@@ -73,7 +73,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
                 sx={{
                   fontSize: '0.95rem',
                   fontWeight: 600,
-                  color: '#4CAF50',
+                  color: '#0891B2',
                   fontFamily: 'monospace',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -89,7 +89,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
                 sx={{
                   fontSize: '0.95rem',
                   fontWeight: 600,
-                  color: '#4CAF50',
+                  color: '#0891B2',
                   fontFamily: 'monospace',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -151,7 +151,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
                   sx={{
                     fontSize: { sm: '0.74375rem', md: '0.7875rem' },
                     fontWeight: 500,
-                    color: '#4CAF50',
+                    color: '#0891B2',
                     fontFamily: 'monospace',
                     wordBreak: 'break-all',
                   }}
@@ -178,7 +178,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
                   sx={{
                     fontSize: { sm: '0.74375rem', md: '0.7875rem' },
                     fontWeight: 500,
-                    color: '#4CAF50',
+                    color: '#0891B2',
                     fontFamily: 'monospace',
                     wordBreak: 'break-all',
                   }}
@@ -206,7 +206,7 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
                     sx={{
                       fontSize: { sm: '0.74375rem', md: '0.7875rem' },
                       fontWeight: 500,
-                      color: '#4CAF50',
+                      color: '#0891B2',
                       fontFamily: 'monospace',
                     }}
                   >

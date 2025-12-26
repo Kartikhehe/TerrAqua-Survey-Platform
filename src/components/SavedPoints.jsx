@@ -93,7 +93,9 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
         lng: parseFloat(waypoint.longitude),
         name: waypoint.name,
         notes: waypoint.notes || '',
-        image: waypoint.image_url || null,
+        images: waypoint.images || (waypoint.image_url ? [{ url: waypoint.image_url, public_id: 'legacy' }] : []),
+        project_id: waypoint.project_id,
+        project_name: waypoint.project_name
       });
     }
     onClose();
@@ -373,7 +375,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
         <DialogContent sx={{ p: 0, maxHeight: { xs: '55vh', sm: '60vh' }, overflow: 'auto' }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 3, sm: 4 } }}>
-              <CircularProgress sx={{ color: '#4CAF50' }} />
+              <CircularProgress sx={{ color: '#0891B2' }} />
             </Box>
           ) : error ? (
             <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
@@ -420,7 +422,7 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: { xs: '2.5rem', sm: '2.5rem' }, height: { xs: '2.5rem', sm: '2.5rem' }, mr: { xs: 1.5, sm: 2 } }}>
-                          <FolderIcon sx={{ color: '#4CAF50', fontSize: { xs: '1.75rem', sm: '1.5rem' } }} />
+                          <FolderIcon sx={{ color: '#0891B2', fontSize: { xs: '1.75rem', sm: '1.5rem' } }} />
                         </Box>
                         <ListItemText
                           primary={`${p.project_name} (${p.items.length})`}
