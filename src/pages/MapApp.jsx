@@ -582,9 +582,8 @@ function App() {
     }
 
     // Request background location permission on Android (dynamic import to avoid build errors)
-    // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
-    /*
-    try {
+    // Request background location permission on Android (dynamic import to avoid build errors)
+    /* try {
       // Check if we're on a native platform
       const { Capacitor } = await import('@capacitor/core');
 
@@ -621,8 +620,7 @@ function App() {
     } catch (error) {
       // Capacitor not available (web build), continue normally
       console.log('Running on web, skipping native permission request');
-    }
-    */
+    } */
 
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
@@ -833,13 +831,10 @@ function App() {
     if (watchPositionIdRef.current !== null) {
       if (typeof watchPositionIdRef.current === 'string') {
         // Native watcher (string ID)
-        // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
-        /*
         try {
-          const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
-          await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
+          /* const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+          await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current }); */
         } catch (e) { console.error('Error stopping native watcher:', e); }
-        */
       } else if (navigator.geolocation) {
         // Web watcher (number ID)
         navigator.geolocation.clearWatch(watchPositionIdRef.current);
@@ -889,13 +884,11 @@ function App() {
   };
 
   // Start heavy-duty background tracking (Native Plugin) - For Active Surveys
-  // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
-  /*
   const startNativeBackgroundTracking = async () => {
     await stopLocationWatcher(); // Clear existing
 
     try {
-      const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+      /* const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
 
       // Check permissions gently
       try {
@@ -923,14 +916,16 @@ function App() {
         }
       );
       watchPositionIdRef.current = watcherId;
-      console.log('Native Background Tracking active:', watcherId);
+      console.log('Native Background Tracking active:', watcherId); */
+
+      // Fallback for dev mode
+      startForegroundTracking();
 
     } catch (e) {
       console.error('Failed to start native background tracking, falling back to foreground:', e);
       startForegroundTracking();
     }
   };
-  */
 
   // GPS Tracking Functions (using GPSTracker class)
   const startGPSTracking = async (projectId) => {
@@ -939,11 +934,11 @@ function App() {
 
       // If Native, switch to Background Tracking Mode
       try {
-        const { Capacitor } = await import('@capacitor/core');
+        /* const { Capacitor } = await import('@capacitor/core');
         if (Capacitor.isNativePlatform()) {
           console.log('[GPS] Switching to Native Background Mode');
           await startNativeBackgroundTracking();
-        }
+        } */
       } catch (e) { }
 
       console.log('[GPS] Map ref:', mapRef.current);
@@ -980,11 +975,11 @@ function App() {
 
         // If Native, revert to Foreground Tracking Mode
         try {
-          const { Capacitor } = await import('@capacitor/core');
+          /* const { Capacitor } = await import('@capacitor/core');
           if (Capacitor.isNativePlatform()) {
             console.log('[GPS] Reverting to Foreground Mode');
             await startForegroundTracking();
-          }
+          } */
         } catch (e) { }
 
         return result;
@@ -2957,12 +2952,10 @@ function App() {
       if (watchPositionIdRef.current !== null) {
         if (typeof watchPositionIdRef.current === 'string') {
           // Native watcher (string ID)
-          // COMMENTED OUT FOR WEB DEVELOPMENT - UNCOMMENT FOR ANDROID APK BUILD
-          /*
-          import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
+          // Native watcher (string ID)
+          /* import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
             BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
-          }).catch(e => console.error(e));
-          */
+          }).catch(e => console.error(e)); */
         } else if (navigator.geolocation) {
           // Web watcher (number ID)
           navigator.geolocation.clearWatch(watchPositionIdRef.current);

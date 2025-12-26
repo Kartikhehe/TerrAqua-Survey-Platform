@@ -2,15 +2,21 @@
 const getApiBaseUrl = () => {
   // Check if we're in a deployed environment (Vercel)
   if (import.meta.env.VITE_API_BASE_URL) {
+    console.log('[API] Using configured VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
     return import.meta.env.VITE_API_BASE_URL;
   }
 
   // Default to deployed backend
+  console.log('[API] No VITE_API_BASE_URL found, using default production URL');
   return 'https://terr-aqua-survey-platform-backend.vercel.app';
 };
 
 const API_BASE_URL = `${getApiBaseUrl()}/api`;
 const AUTH_BASE_URL = `${getApiBaseUrl()}/auth`;
+
+console.log('[API] Initialized with Base URL:', getApiBaseUrl());
+console.log('[API] API URL:', API_BASE_URL);
+console.log('[API] Auth URL:', AUTH_BASE_URL);
 
 // Helper function to get auth token from localStorage
 const getAuthToken = () => {
@@ -284,41 +290,52 @@ export const authAPI = {
   },
 
   login: async (email, password) => {
-    const response = await fetch(`${AUTH_BASE_URL}/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({ email, password }),
-    });
+    console.log('[API] Login request to:', `${AUTH_BASE_URL}/login`);
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
 
-    // If login successful, store token from response
-    if (response.ok) {
-      const data = await response.json();
-      if (data.token) {
-        setAuthToken(data.token);
+      // If login successful, store token from response
+      if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          setAuthToken(data.token);
+        }
+        // Return a new response with the data
+        return {
+          ok: true,
+          json: async () => data,
+          status: response.status,
+        };
       }
-      // Return a new response with the data
-      return {
-        ok: true,
-        json: async () => data,
-        status: response.status,
-      };
+      return response;
+    } catch (error) {
+      console.error('[API] Login failed. URL:', `${AUTH_BASE_URL}/login`, 'Error:', error);
+      throw error;
     }
-
-    return response;
   },
 
   logout: async () => {
     setAuthToken(null); // Clear token from localStorage
-    const response = await fetch(`${AUTH_BASE_URL}/logout`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to logout');
-    return response.json();
+    console.log('[API] Logout request to:', `${AUTH_BASE_URL}/logout`);
+    try {
+      const response = await fetch(`${AUTH_BASE_URL}/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error('Failed to logout');
+      return response.json();
+    } catch (error) {
+      console.error('[API] Logout failed. URL:', `${AUTH_BASE_URL}/logout`, 'Error:', error);
+      throw error;
+    }
   },
 
   getCurrentUser: async () => {
