@@ -35,6 +35,7 @@ import {
   LocationOn as LocationOnIcon,
   TextSnippetOutlined as TextSnippetIcon,
   ChangeCircleOutlined as ChangeCircleIcon,
+  SquareFoot as SquareFootIcon,
 } from '@mui/icons-material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import { useAuth } from '../context/AuthContext';
@@ -110,6 +111,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
       }
     },
     { text: 'Import File', icon: <InputOutlinedIcon />, action: () => onMenuItemClick('Import File') },
+    { text: 'Measure', icon: <SquareFootIcon />, action: () => onMenuItemClick('Measure') },
     { text: 'User Guide', icon: <TextSnippetIcon />, action: () => navigate('/guide') },
   ];
 

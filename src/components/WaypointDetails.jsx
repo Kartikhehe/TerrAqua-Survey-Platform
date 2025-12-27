@@ -437,6 +437,22 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 },
               }}
             />
+            {((selectedWaypointId && waypointData.elevation) || (!selectedWaypointId && currentLocation?.elevation)) && (
+              <TextField
+                label="Elevation"
+                value={selectedWaypointId ? (waypointData.elevation !== null ? `${waypointData.elevation}m` : 'N/A') : (currentLocation?.elevation !== null ? `${currentLocation?.elevation}m` : 'N/A')}
+                size="small"
+                InputProps={{ readOnly: true }}
+                sx={{
+                  width: '80px',
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
+                    borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                    '& input': { fontSize: { xs: '0.9rem', sm: '0.8rem' }, textAlign: 'center' }
+                  }
+                }}
+              />
+            )}
             <IconButton
               onClick={onToggleLocationSelection}
               // Disable unless we are creating a brand new point (no selected ID)

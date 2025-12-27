@@ -89,6 +89,7 @@ export const waypointsAPI = {
         images: waypoint.images || [], // New format
         project_id: waypoint.project_id || null,
         project_name: waypoint.project_name || null,
+        elevation: waypoint.elevation || null,
       }),
     });
     if (!response.ok) {
@@ -118,6 +119,7 @@ export const waypointsAPI = {
         images: waypoint.images || [], // New format
         project_id: waypoint.project_id || null,
         project_name: waypoint.project_name || null,
+        elevation: waypoint.elevation || null,
       }),
     });
     if (!response.ok) {

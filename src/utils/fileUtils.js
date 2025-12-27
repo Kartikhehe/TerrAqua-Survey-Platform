@@ -10,11 +10,12 @@ export const parseGeoJSON = (text) => {
             return geoJSON.features
                 .filter(feature => feature.type === 'Feature' && feature.geometry && feature.geometry.type === 'Point')
                 .map(feature => {
-                    const [lng, lat] = feature.geometry.coordinates;
+                    const [lng, lat, elevation] = feature.geometry.coordinates;
                     const props = feature.properties || {};
                     return {
                         lat,
                         lng,
+                        elevation: elevation !== undefined ? elevation : (props.elevation || null),
                         name: props.name || 'Imported Point',
                         notes: props.notes || props.description || '',
                         image: props.image_url || null
@@ -62,10 +63,12 @@ export const parseKML = (text) => {
                     if (!isNaN(lat) && !isNaN(lng)) {
                         const name = nameElement ? nameElement.textContent.trim() : 'Imported Point';
                         const notes = descriptionElement ? descriptionElement.textContent.trim() : '';
+                        const elevation = coords.length >= 3 ? parseFloat(coords[2]) : null;
 
                         waypoints.push({
                             lat,
                             lng,
+                            elevation: isNaN(elevation) ? null : elevation,
                             name,
                             notes,
                             image: null

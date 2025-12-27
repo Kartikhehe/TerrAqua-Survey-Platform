@@ -1,8 +1,11 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import * as turf from '@turf/turf'
 import '../App.css'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-rotate/dist/leaflet-rotate.js';
+import 'leaflet-draw/dist/leaflet.draw.css';
+import 'leaflet-draw';
 import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
@@ -38,6 +41,7 @@ import SavedPoints from '../components/SavedPoints';
 import StartSurveyDialog from '../components/StartSurveyDialog';
 import ExportDialog from '../components/ExportDialog';
 import CRSConverterDialog from '../components/CRSConverterDialog';
+import MeasureToolbar from '../components/MeasureToolbar';
 import CustomSnackbar from '../components/Snackbar';
 import { waypointsAPI, uploadAPI, projectsAPI, tracksAPI } from '../services/api';
 import { createAppTheme } from '../theme/theme.js';
@@ -115,6 +119,11 @@ function App() {
   const [exitProjectWarningOpen, setExitProjectWarningOpen] = useState(false); // Warning dialog for restricted actions during project
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(true); // Satellite hybrid view mode
   const [crsConverterOpen, setCrsConverterOpen] = useState(false); // CRS Converter dialog state
+  const [measureActive, setMeasureActive] = useState(false);
+  const [hasMeasureSelection, setHasMeasureSelection] = useState(false);
+  const measurementLabelsRef = useRef(new L.LayerGroup());
+  const drawControlRef = useRef(null);
+  const drawnItemsRef = useRef(null);
   const [defaultLocation, setDefaultLocation] = useState(INDIA_CENTER);
 
   // GPS Tracking (using GPSTracker class)
@@ -522,7 +531,8 @@ function App() {
             lat: lat,
             lng: lng,
             notes: '',
-            project_id: project.id
+            project_id: project.id,
+            elevation: coordinates.elevation || null
           });
 
           // Add to local state
@@ -534,7 +544,8 @@ function App() {
             notes: '',
             images: [],
             project_id: project.id,
-            project_name: project.name
+            project_name: project.name,
+            elevation: saved.elevation || coordinates.elevation || null
           };
 
           setWaypoints(prev => [...prev, waypoint]);
@@ -810,6 +821,7 @@ function App() {
           images: wp.images || [],
           project_id: wp.project_id || project.id,
           project_name: wp.project_name || project.name,
+          elevation: wp.elevation
         });
         newDbMapping[localId] = wp.id;
         if (map) {
@@ -911,7 +923,13 @@ function App() {
     const liveId = currentLocationWaypointRef.current || 'current-location';
     setWaypoints(prev => prev.map(wp => {
       if (wp.followsLive || wp.id === liveId) {
-        return { ...wp, lat: latitude, lng: longitude, notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}` };
+        return {
+          ...wp,
+          lat: latitude,
+          lng: longitude,
+          elevation: altitude ? Math.round(altitude) : wp.elevation,
+          notes: `Accuracy: ${accuracy ? Math.round(accuracy) + 'm' : 'N/A'}`
+        };
       }
       return wp;
     }));
@@ -1189,7 +1207,8 @@ function App() {
           lng: lngToSave.toFixed(6),
           notes: `Captured live at ${new Date().toLocaleString()}`,
           project_id: activeProject.id,
-          project_name: activeProject.name
+          project_name: activeProject.name,
+          elevation: coordinates.elevation || liveWp.elevation || null
         });
         // Update existing local waypoint to reflect saved DB values and turn off followsLive
         setWaypoints(prev => prev.map(wp => wp.id === selectedWaypointId ? ({
@@ -1201,7 +1220,8 @@ function App() {
           images: saved.images || [],
           project_id: saved.project_id,
           project_name: saved.project_name,
-          followsLive: false
+          followsLive: false,
+          elevation: saved.elevation || coordinates.elevation || null
         }) : wp));
         setDbWaypointIds(prev => ({ ...prev, [selectedWaypointId]: saved.id }));
         // Stop following live GPS for this waypoint now that it's pinned
@@ -1240,12 +1260,23 @@ function App() {
       images: [],
       project_id: activeProject.id,
       project_name: activeProject.name,
+      elevation: coordinates.elevation || null
     };
     try {
       const saved = await waypointsAPI.create(newWp);
       // Add to map and local list
       const waypointId = `waypoint-${Date.now()}`;
-      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, images: saved.images || [], project_id: saved.project_id, project_name: saved.project_name };
+      const waypoint = {
+        id: waypointId,
+        lat: parseFloat(saved.latitude),
+        lng: parseFloat(saved.longitude),
+        name: saved.name,
+        notes: saved.notes,
+        images: saved.images || [],
+        project_id: saved.project_id,
+        project_name: saved.project_name,
+        elevation: saved.elevation || coordinates.elevation || null
+      };
       setWaypoints(prev => [...prev, waypoint]);
       // create marker
       const marker = L.marker([waypoint.lat, waypoint.lng]).addTo(map);
@@ -1310,6 +1341,7 @@ function App() {
       images: [],
       project_id: projectToUse.id,
       project_name: projectToUse.name || null,
+      elevation: coordinates?.elevation || null,
     };
 
     try {
@@ -1317,7 +1349,17 @@ function App() {
       const saved = await waypointsAPI.create(newWp);
       // Add to map and local list
       const waypointId = `waypoint-${Date.now()}`;
-      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, images: saved.images || [], project_id: saved.project_id, project_name: saved.project_name };
+      const waypoint = {
+        id: waypointId,
+        lat: parseFloat(saved.latitude),
+        lng: parseFloat(saved.longitude),
+        name: saved.name,
+        notes: saved.notes,
+        images: saved.images || [],
+        project_id: saved.project_id,
+        project_name: saved.project_name,
+        elevation: saved.elevation || coordinates?.elevation || null
+      };
       setWaypoints(prev => [...prev, waypoint]);
       // create marker
       if (map) {
@@ -1452,6 +1494,16 @@ function App() {
       setExportDialogOpen(true);
     } else if (item === 'CRS Converter') {
       setCrsConverterOpen(true);
+    } else if (item === 'Measure') {
+      setMeasureActive(true);
+      // Clear previous measurements when starting fresh
+      if (drawnItemsRef.current) {
+        drawnItemsRef.current.clearLayers();
+      }
+      if (measurementLabelsRef.current) {
+        measurementLabelsRef.current.clearLayers();
+      }
+      setHasMeasureSelection(false);
     } else if (item === 'Import File') {
       // Trigger file input click
       if (fileInputRef.current) {
@@ -1464,6 +1516,39 @@ function App() {
     if (isMobile) {
       setSidebarOpen(false);
     }
+  };
+
+  const handleStartMeasureArea = () => {
+    if (!mapRef.current) return;
+    setSinglePointCaptureActive(false);
+    setLocationSelectionActive(false);
+    const polygonHandler = new L.Draw.Polygon(mapRef.current, {
+      shapeOptions: {
+        color: '#0891B2',
+        fillOpacity: 0.2,
+        weight: 3
+      }
+    });
+    polygonHandler.enable();
+  };
+
+  const handleStartMeasureDistance = () => {
+    if (!mapRef.current) return;
+    setSinglePointCaptureActive(false);
+    setLocationSelectionActive(false);
+    const polylineHandler = new L.Draw.Polyline(mapRef.current, {
+      shapeOptions: {
+        color: '#0891B2',
+        weight: 3
+      }
+    });
+    polylineHandler.enable();
+  };
+
+  const handleClearMeasure = () => {
+    if (drawnItemsRef.current) drawnItemsRef.current.clearLayers();
+    if (measurementLabelsRef.current) measurementLabelsRef.current.clearLayers();
+    setHasMeasureSelection(false);
   };
 
   // Handle file selection from file input
@@ -1888,10 +1973,21 @@ function App() {
         notes: `Captured live at ${new Date().toLocaleString()}`,
         project_id: activeProject.id,
         project_name: activeProject.name,
+        elevation: coordinates.elevation || null,
       });
       // Add to local waypoints and refresh markers; select new point
       const waypointId = `waypoint-${Date.now()}`;
-      const waypoint = { id: waypointId, lat: parseFloat(saved.latitude), lng: parseFloat(saved.longitude), name: saved.name, notes: saved.notes, images: saved.images || [], project_id: saved.project_id, project_name: saved.project_name };
+      const waypoint = {
+        id: waypointId,
+        lat: parseFloat(saved.latitude),
+        lng: parseFloat(saved.longitude),
+        name: saved.name,
+        notes: saved.notes,
+        images: saved.images || [],
+        project_id: saved.project_id,
+        project_name: saved.project_name,
+        elevation: saved.elevation
+      };
       setWaypoints(prev => [...prev, waypoint]);
       setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
       // Select the newly added waypoint and open details
@@ -2595,6 +2691,64 @@ function App() {
       tileLayerRef.current = tileLayer;
     }
 
+    // Add drawn items layer for measurements
+    drawnItemsRef.current = new L.FeatureGroup();
+    drawnItemsRef.current.addTo(map);
+
+    measurementLabelsRef.current = new L.LayerGroup();
+    measurementLabelsRef.current.addTo(map);
+
+    // Handle Leaflet Draw events
+    const handleDrawCreated = (e) => {
+      const type = e.layerType;
+      const layer = e.layer;
+
+      console.log(`[Measure] Created: ${type}`);
+
+      if (type === 'polygon' || type === 'polyline') {
+        drawnItemsRef.current.clearLayers();
+        measurementLabelsRef.current.clearLayers();
+        drawnItemsRef.current.addLayer(layer);
+        setHasMeasureSelection(true);
+
+        const geojson = layer.toGeoJSON();
+        let label = '';
+        let centerCoords;
+
+        if (type === 'polygon') {
+          const area = turf.area(geojson);
+          label = `${area.toFixed(2)} sq m`;
+          // Centroid is usually better for visual center
+          const centroid = turf.centroid(geojson);
+          centerCoords = [centroid.geometry.coordinates[1], centroid.geometry.coordinates[0]];
+        } else if (type === 'polyline') {
+          const totalLength = turf.length(geojson, { units: 'kilometers' });
+          const midpoint = turf.along(geojson, totalLength / 2);
+          label = totalLength > 1
+            ? `${(totalLength).toFixed(2)} km`
+            : `${(totalLength * 1000).toFixed(2)} m`;
+          centerCoords = [midpoint.geometry.coordinates[1], midpoint.geometry.coordinates[0]];
+        }
+
+        if (label && centerCoords) {
+          console.log(`[Measure] Adding label: ${label} at ${centerCoords}`);
+          const labelMarker = L.marker(centerCoords, {
+            icon: L.divIcon({
+              className: 'measurement-label',
+              html: `<div class="measurement-label-content">${label}</div>`,
+              iconSize: [200, 40],
+              iconAnchor: [100, 20]
+            }),
+            zIndexOffset: 1000,
+            interactive: false
+          });
+          measurementLabelsRef.current.addLayer(labelMarker);
+        }
+      }
+    };
+
+    map.on(L.Draw.Event.CREATED, handleDrawCreated);
+
     // Initial tracking on mount (Foreground only)
     startForegroundTracking();
 
@@ -2877,6 +3031,7 @@ function App() {
           name: `Point ${currentCount + 1}`,
           notes: '',
           images: [],
+          elevation: coordinates.elevation,
           project_id: projectIdForNew,
           project_name: projectIdForNew ? activeProject?.name : null,
           createdDuringProject: isProjectMode ? true : false,
@@ -3164,530 +3319,664 @@ function App() {
   }, [selectedWaypointId, waypoints]);
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{
-        display: 'flex',
-        height: '100vh',
-        overflow: 'hidden',
-        backgroundColor: theme.palette.background.default
-      }}>
-        <Navbar
-          sidebarOpen={sidebarOpen}
+    <>
+      {measureActive && (
+        <MeasureToolbar
           isMobile={isMobile}
-          darkMode={darkMode}
-          onToggleDarkMode={handleToggleDarkMode}
-          onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
-          satelliteHybridMode={satelliteHybridMode}
-          onSidebarToggle={handleSidebarToggle}
-          onSearch={handleMapSearch}
-          onLocate={handleMapLocate}
-        />
-        <Sidebar
-          sidebarOpen={sidebarOpen}
-          onToggle={handleSidebarToggle}
-          isMobile={isMobile}
-          onMenuItemClick={handleMenuItemClick}
-          satelliteHybridMode={satelliteHybridMode}
-          onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
-          darkMode={darkMode}
-          onToggleDarkMode={handleToggleDarkMode}
-        />
-        <StartSurveyDialog
-          open={startSurveyDialogOpen}
-          onClose={() => setStartSurveyDialogOpen(false)}
-          onStartNew={handleStartSurveyNew}
-          onContinue={handleStartSurveyContinue}
-          onShowSnackbar={showSnackbar}
-        />
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            p: 0,
-            height: '100%',
-            minHeight: '100vh',
-            overflow: 'hidden',
-            marginTop: { xs: '4rem', sm: '3.5rem' },
-            paddingBottom: 'env(safe-area-inset-bottom)',
-            width: '100%',
-            position: 'relative',
+          onStartMeasureArea={handleStartMeasureArea}
+          onStartMeasureDistance={handleStartMeasureDistance}
+          onClearMeasure={handleClearMeasure}
+          onClose={() => {
+            setMeasureActive(false);
+            handleClearMeasure();
           }}
-        >
+          hasSelection={hasMeasureSelection}
+          mapDynamicHeight={mapDynamicHeight}
+        />
+      )}
+
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{
+          display: 'flex',
+          height: '100vh',
+          overflow: 'hidden',
+          backgroundColor: theme.palette.background.default
+        }}>
+          <Navbar
+            sidebarOpen={sidebarOpen}
+            isMobile={isMobile}
+            darkMode={darkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+            onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
+            satelliteHybridMode={satelliteHybridMode}
+            onSidebarToggle={handleSidebarToggle}
+            onSearch={handleMapSearch}
+            onLocate={handleMapLocate}
+          />
+          <Sidebar
+            sidebarOpen={sidebarOpen}
+            onToggle={handleSidebarToggle}
+            isMobile={isMobile}
+            onMenuItemClick={handleMenuItemClick}
+            satelliteHybridMode={satelliteHybridMode}
+            onToggleSatelliteHybrid={handleToggleSatelliteHybrid}
+            darkMode={darkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+          />
+          <StartSurveyDialog
+            open={startSurveyDialogOpen}
+            onClose={() => setStartSurveyDialogOpen(false)}
+            onStartNew={handleStartSurveyNew}
+            onContinue={handleStartSurveyContinue}
+            onShowSnackbar={showSnackbar}
+          />
           <Box
+            component="main"
             sx={{
-              position: 'relative',
-              width: '100%',
-              height: isMobile && mapDynamicHeight ? `${mapDynamicHeight}px` : '100%',
+              flexGrow: 1,
+              p: 0,
+              height: '100%',
+              minHeight: '100vh',
               overflow: 'hidden',
+              marginTop: { xs: '4rem', sm: '3.5rem' },
+              paddingBottom: 'env(safe-area-inset-bottom)',
+              width: '100%',
+              position: 'relative',
             }}
           >
             <Box
-              id="map"
               sx={{
-                position: 'absolute',
-                inset: 0,
+                position: 'relative',
                 width: '100%',
-                height: '100%',
+                height: isMobile && mapDynamicHeight ? `${mapDynamicHeight}px` : '100%',
+                overflow: 'hidden',
               }}
-            />
-
-            {/* Center crosshair for touch devices - relative to map area */}
-            {!hasCursor && (
+            >
               <Box
+                id="map"
                 sx={{
                   position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '1px',
-                  height: { xs: '24px', sm: '30px' },
-                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
-                  zIndex: theme.zIndex.drawer + 1,
-                  pointerEvents: 'none',
-                  '&::before': {
-                    content: '""',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                }}
+              />
+
+              {/* Center crosshair for touch devices - relative to map area */}
+              {!hasCursor && (
+                <Box
+                  sx={{
                     position: 'absolute',
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    width: { xs: '24px', sm: '30px' },
-                    height: '1px',
+                    width: '1px',
+                    height: { xs: '24px', sm: '30px' },
                     backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
+                    zIndex: theme.zIndex.drawer + 1,
+                    pointerEvents: 'none',
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: { xs: '24px', sm: '30px' },
+                      height: '1px',
+                      backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
+                    }
+                  }}
+                />
+              )}
+            </Box>
+
+            {/* Live Coordinates card - hide on mobile when waypoint details open */}
+            {(!isMobile || !waypointDetailsOpen) && (
+              <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
+            )}
+
+            {(singlePointCaptureActive || isProjectMode) && (
+              <>
+                {/* Waypoint Selector - horizontal scrollable tabs */}
+                <WaypointSelector
+                  waypoints={selectorWaypoints}
+                  selectedWaypointId={selectedWaypointId}
+                  onSelectWaypoint={handleSelectWaypoint}
+                />
+
+                {/* Waypoint Details - Bottom Sheet for mobile, fixed card for desktop */}
+                {isMobile ? (
+                  // Mobile: Bottom Sheet with snap points
+                  <BottomSheet
+                    ref={bottomSheetRef}
+                    isOpen={(isProjectMode || selectedWaypointId) && waypointDetailsOpen}
+                    onClose={() => {
+                      setWaypointDetailsOpen(false);
+                      setSelectedWaypointId(null);
+                      setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
+                      setLocationSelectionActive(false);
+                      updateSelectedMarkerOverlay(null);
+                    }}
+                    waypointName={waypointData.name}
+                    onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
+                    onDelete={handleDeleteWaypoint}
+                    onImageUpload={handleImageUpload}
+                    imageUploading={imageUploading}
+                    canSave={(function () {
+                      if (!isProjectMode) return true;
+                      if (!selectedWaypointId) return true;
+                      const wp = waypoints.find(w => w.id === selectedWaypointId);
+                      if (!wp) return false;
+                      const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
+                      const isCurrent = selectedWaypointId === currentLocationWaypointId;
+                      const isPinCreated = wp.createdDuringProject && !wp.project_id;
+                      return !!(isProjectPoint || isCurrent || isPinCreated);
+                    })()}
+                    onExpansionChange={setBottomSheetExpanded}
+                  >
+                    <WaypointDetails
+                      selectedWaypointId={selectedWaypointId}
+                      waypointData={waypointData}
+                      setWaypointData={setWaypointData}
+                      onClose={() => {
+                        setWaypointDetailsOpen(false);
+                        setSelectedWaypointId(null);
+                        setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
+                        setLocationSelectionActive(false);
+                        updateSelectedMarkerOverlay(null);
+                      }}
+                      onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
+                      locationSelectionActive={locationSelectionActive}
+                      onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+                      onDelete={handleDeleteWaypoint}
+                      onImageUpload={handleImageUpload}
+                      imageUploading={imageUploading}
+                      savedWaypoints={savedWaypointsList}
+                      onNavigate={handleNavigate}
+                      sidebarOpen={sidebarOpen}
+                      isProjectMode={isProjectMode}
+                      activeProjectId={activeProject?.id}
+                      currentLocationId={currentLocationWaypointId}
+                      currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng, elevation: coordinates.elevation } : null}
+                      canSaveDuringProject={(function () {
+                        if (!isProjectMode) return true;
+                        if (!selectedWaypointId) return true;
+                        const wp = waypoints.find(w => w.id === selectedWaypointId);
+                        if (!wp) return false;
+                        const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
+                        const isCurrent = selectedWaypointId === currentLocationWaypointId;
+                        const isPinCreated = wp.createdDuringProject && !wp.project_id;
+                        return !!(isProjectPoint || isCurrent || isPinCreated);
+                      })()}
+                      onCollapseBottomSheet={() => bottomSheetRef.current?.collapse()}
+                      ref={waypointDetailsRef}
+                    />
+                  </BottomSheet>
+                ) : (
+                  // Desktop: Original fixed card
+                  (isProjectMode || selectedWaypointId) && waypointDetailsOpen && (
+                    <WaypointDetails
+                      selectedWaypointId={selectedWaypointId}
+                      waypointData={waypointData}
+                      setWaypointData={setWaypointData}
+                      onClose={() => {
+                        setWaypointDetailsOpen(false);
+                        setSelectedWaypointId(null);
+                        setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
+                        setLocationSelectionActive(false);
+                        updateSelectedMarkerOverlay(null);
+                      }}
+                      onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
+                      locationSelectionActive={locationSelectionActive}
+                      onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+                      onDelete={handleDeleteWaypoint}
+                      onImageUpload={handleImageUpload}
+                      imageUploading={imageUploading}
+                      savedWaypoints={savedWaypointsList}
+                      onNavigate={handleNavigate}
+                      sidebarOpen={sidebarOpen}
+                      isProjectMode={isProjectMode}
+                      activeProjectId={activeProject?.id}
+                      currentLocationId={currentLocationWaypointId}
+                      currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng, elevation: coordinates.elevation } : null}
+                      canSaveDuringProject={(function () {
+                        if (!isProjectMode) return true;
+                        if (!selectedWaypointId) return true;
+                        const wp = waypoints.find(w => w.id === selectedWaypointId);
+                        if (!wp) return false;
+                        const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
+                        const isCurrent = selectedWaypointId === currentLocationWaypointId;
+                        const isPinCreated = wp.createdDuringProject && !wp.project_id;
+                        return !!(isProjectPoint || isCurrent || isPinCreated);
+                      })()}
+                      ref={waypointDetailsRef}
+                    />
+                  )
+                )}
+              </>
+            )}
+
+            {/* Desktop waypoint details - fixed position */}
+            {(isProjectMode || selectedWaypointId) && waypointDetailsOpen && !isMobile && (
+              <WaypointDetails
+                selectedWaypointId={selectedWaypointId}
+                waypointData={waypointData}
+                setWaypointData={setWaypointData}
+                onClose={() => {
+                  setWaypointDetailsOpen(false);
+                  setSelectedWaypointId(null);
+                  setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
+                  setLocationSelectionActive(false); // Deactivate location selection when closing
+                  updateSelectedMarkerOverlay(null);
+                  // Remove route when closing waypoint details
+                  if (routePolylineRef.current) {
+                    routePolylineRef.current.remove();
+                    routePolylineRef.current = null;
+                  }
+                  // Remove navigation start marker
+                  if (navigationStartMarkerRef.current) {
+                    navigationStartMarkerRef.current.remove();
+                    navigationStartMarkerRef.current = null;
                   }
                 }}
+                onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
+                locationSelectionActive={locationSelectionActive}
+                onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+                onDelete={handleDeleteWaypoint}
+                onImageUpload={handleImageUpload}
+                imageUploading={imageUploading}
+                savedWaypoints={savedWaypointsList}
+                onNavigate={handleNavigate}
+                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng, elevation: coordinates.elevation } : null}
+                sidebarOpen={sidebarOpen}
+                isProjectMode={isProjectMode}
               />
             )}
-          </Box>
 
-          {/* Live Coordinates card - hide on mobile when waypoint details open */}
-          {(!isMobile || !waypointDetailsOpen) && (
-            <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
-          )}
-
-          {(singlePointCaptureActive || isProjectMode) && (
-            <>
-              {/* Waypoint Selector - horizontal scrollable tabs */}
-              <WaypointSelector
-                waypoints={selectorWaypoints}
+            {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
+            {selectedWaypointId && !singlePointCaptureActive && currentLocationWaypointId === selectedWaypointId && (
+              <WaypointDetails
                 selectedWaypointId={selectedWaypointId}
-                onSelectWaypoint={handleSelectWaypoint}
+                waypointData={waypointData}
+                setWaypointData={setWaypointData}
+                onClose={() => {
+                  setSelectedWaypointId(null);
+                  setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
+                  setLocationSelectionActive(false); // Deactivate location selection when closing
+                  updateSelectedMarkerOverlay(null);
+                }}
+                onSave={handleSaveWaypoint}
+                locationSelectionActive={locationSelectionActive}
+                onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
+                onDelete={() => {
+                  // Don't allow deleting the current location marker
+                  showSnackbar('Cannot delete current location marker', 'info');
+                }}
+                onImageUpload={handleImageUpload}
+                imageUploading={imageUploading}
+                savedWaypoints={savedWaypointsList}
+                onNavigate={handleNavigate}
+                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng, elevation: coordinates.elevation } : null}
+                sidebarOpen={sidebarOpen}
+                isProjectMode={isProjectMode}
               />
+            )}
 
-              {/* Waypoint Details - Bottom Sheet for mobile, fixed card for desktop */}
-              {isMobile ? (
-                // Mobile: Bottom Sheet with snap points
-                <BottomSheet
-                  ref={bottomSheetRef}
-                  isOpen={(isProjectMode || selectedWaypointId) && waypointDetailsOpen}
-                  onClose={() => {
-                    setWaypointDetailsOpen(false);
-                    setSelectedWaypointId(null);
-                    setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
-                    setLocationSelectionActive(false);
-                    updateSelectedMarkerOverlay(null);
-                  }}
-                  waypointName={waypointData.name}
-                  onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
-                  onDelete={handleDeleteWaypoint}
-                  onImageUpload={handleImageUpload}
-                  imageUploading={imageUploading}
-                  canSave={(function () {
-                    if (!isProjectMode) return true;
-                    if (!selectedWaypointId) return true;
-                    const wp = waypoints.find(w => w.id === selectedWaypointId);
-                    if (!wp) return false;
-                    const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
-                    const isCurrent = selectedWaypointId === currentLocationWaypointId;
-                    const isPinCreated = wp.createdDuringProject && !wp.project_id;
-                    return !!(isProjectPoint || isCurrent || isPinCreated);
-                  })()}
-                  onExpansionChange={setBottomSheetExpanded}
-                >
-                  <WaypointDetails
-                    selectedWaypointId={selectedWaypointId}
-                    waypointData={waypointData}
-                    setWaypointData={setWaypointData}
-                    onClose={() => {
-                      setWaypointDetailsOpen(false);
-                      setSelectedWaypointId(null);
-                      setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
-                      setLocationSelectionActive(false);
-                      updateSelectedMarkerOverlay(null);
-                    }}
-                    onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
-                    locationSelectionActive={locationSelectionActive}
-                    onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-                    onDelete={handleDeleteWaypoint}
-                    onImageUpload={handleImageUpload}
-                    imageUploading={imageUploading}
-                    savedWaypoints={savedWaypointsList}
-                    onNavigate={handleNavigate}
-                    sidebarOpen={sidebarOpen}
-                    isProjectMode={isProjectMode}
-                    activeProjectId={activeProject?.id}
-                    currentLocationId={currentLocationWaypointId}
-                    currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-                    canSaveDuringProject={(function () {
-                      if (!isProjectMode) return true;
-                      if (!selectedWaypointId) return true;
-                      const wp = waypoints.find(w => w.id === selectedWaypointId);
-                      if (!wp) return false;
-                      const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
-                      const isCurrent = selectedWaypointId === currentLocationWaypointId;
-                      const isPinCreated = wp.createdDuringProject && !wp.project_id;
-                      return !!(isProjectPoint || isCurrent || isPinCreated);
-                    })()}
-                    onCollapseBottomSheet={() => bottomSheetRef.current?.collapse()}
-                    ref={waypointDetailsRef}
-                  />
-                </BottomSheet>
-              ) : (
-                // Desktop: Original fixed card
-                (isProjectMode || selectedWaypointId) && waypointDetailsOpen && (
-                  <WaypointDetails
-                    selectedWaypointId={selectedWaypointId}
-                    waypointData={waypointData}
-                    setWaypointData={setWaypointData}
-                    onClose={() => {
-                      setWaypointDetailsOpen(false);
-                      setSelectedWaypointId(null);
-                      setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
-                      setLocationSelectionActive(false);
-                      updateSelectedMarkerOverlay(null);
-                    }}
-                    onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
-                    locationSelectionActive={locationSelectionActive}
-                    onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-                    onDelete={handleDeleteWaypoint}
-                    onImageUpload={handleImageUpload}
-                    imageUploading={imageUploading}
-                    savedWaypoints={savedWaypointsList}
-                    onNavigate={handleNavigate}
-                    sidebarOpen={sidebarOpen}
-                    isProjectMode={isProjectMode}
-                    activeProjectId={activeProject?.id}
-                    currentLocationId={currentLocationWaypointId}
-                    currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-                    canSaveDuringProject={(function () {
-                      if (!isProjectMode) return true;
-                      if (!selectedWaypointId) return true;
-                      const wp = waypoints.find(w => w.id === selectedWaypointId);
-                      if (!wp) return false;
-                      const isProjectPoint = wp.project_id && activeProject && String(wp.project_id) === String(activeProject.id);
-                      const isCurrent = selectedWaypointId === currentLocationWaypointId;
-                      const isPinCreated = wp.createdDuringProject && !wp.project_id;
-                      return !!(isProjectPoint || isCurrent || isPinCreated);
-                    })()}
-                    ref={waypointDetailsRef}
-                  />
-                )
-              )}
-            </>
-          )}
+            {/* Saved Points Dialog */}
+            <SavedPoints
+              open={savedPointsOpen}
+              onClose={() => setSavedPointsOpen(false)}
+              onShowSnackbar={showSnackbar}
+              onSelectWaypoint={(waypoint) => {
+                // Clear current map/state before showing the selected saved point
+                resetMapAndState();
+                setSinglePointCaptureActive(false);
+                setIsProjectMode(false); // Ensure we're out of project mode when viewing a saved point
 
-          {/* Desktop waypoint details - fixed position */}
-          {(isProjectMode || selectedWaypointId) && waypointDetailsOpen && !isMobile && (
-            <WaypointDetails
-              selectedWaypointId={selectedWaypointId}
-              waypointData={waypointData}
-              setWaypointData={setWaypointData}
-              onClose={() => {
-                setWaypointDetailsOpen(false);
-                setSelectedWaypointId(null);
-                setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
-                setLocationSelectionActive(false); // Deactivate location selection when closing
-                updateSelectedMarkerOverlay(null);
-                // Remove route when closing waypoint details
-                if (routePolylineRef.current) {
-                  routePolylineRef.current.remove();
-                  routePolylineRef.current = null;
-                }
-                // Remove navigation start marker
-                if (navigationStartMarkerRef.current) {
-                  navigationStartMarkerRef.current.remove();
-                  navigationStartMarkerRef.current = null;
-                }
-              }}
-              onSave={selectedWaypointId ? handleSaveWaypoint : saveCurrentLocationAsProjectPoint}
-              locationSelectionActive={locationSelectionActive}
-              onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-              onDelete={handleDeleteWaypoint}
-              onImageUpload={handleImageUpload}
-              imageUploading={imageUploading}
-              savedWaypoints={savedWaypointsList}
-              onNavigate={handleNavigate}
-              currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-              sidebarOpen={sidebarOpen}
-              isProjectMode={isProjectMode}
-            />
-          )}
+                const waypointId = `saved-${waypoint.id}`;
+                const latFormatted = (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat);
+                const lngFormatted = (typeof waypoint.lng === 'number' ? waypoint.lng.toFixed(6) : waypoint.lng);
 
-          {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
-          {selectedWaypointId && !singlePointCaptureActive && currentLocationWaypointId === selectedWaypointId && (
-            <WaypointDetails
-              selectedWaypointId={selectedWaypointId}
-              waypointData={waypointData}
-              setWaypointData={setWaypointData}
-              onClose={() => {
-                setSelectedWaypointId(null);
-                setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
-                setLocationSelectionActive(false); // Deactivate location selection when closing
-                updateSelectedMarkerOverlay(null);
-              }}
-              onSave={handleSaveWaypoint}
-              locationSelectionActive={locationSelectionActive}
-              onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-              onDelete={() => {
-                // Don't allow deleting the current location marker
-                showSnackbar('Cannot delete current location marker', 'info');
-              }}
-              onImageUpload={handleImageUpload}
-              imageUploading={imageUploading}
-              savedWaypoints={savedWaypointsList}
-              onNavigate={handleNavigate}
-              currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-              sidebarOpen={sidebarOpen}
-              isProjectMode={isProjectMode}
-            />
-          )}
+                // 1. Prepare waypoint data
+                const newWaypoint = {
+                  id: waypointId,
+                  lat: waypoint.lat,
+                  lng: waypoint.lng,
+                  name: waypoint.name,
+                  notes: waypoint.notes || '',
+                  images: waypoint.images || [],
+                  project_id: waypoint.project_id || null,
+                  project_name: waypoint.project_name || null
+                };
 
-          {/* Saved Points Dialog */}
-          <SavedPoints
-            open={savedPointsOpen}
-            onClose={() => setSavedPointsOpen(false)}
-            onShowSnackbar={showSnackbar}
-            onSelectWaypoint={(waypoint) => {
-              // Clear current map/state before showing the selected saved point
-              resetMapAndState();
-              setSinglePointCaptureActive(false);
-              setIsProjectMode(false); // Ensure we're out of project mode when viewing a saved point
-
-              const waypointId = `saved-${waypoint.id}`;
-              const latFormatted = (typeof waypoint.lat === 'number' ? waypoint.lat.toFixed(6) : waypoint.lat);
-              const lngFormatted = (typeof waypoint.lng === 'number' ? waypoint.lng.toFixed(6) : waypoint.lng);
-
-              // 1. Prepare waypoint data
-              const newWaypoint = {
-                id: waypointId,
-                lat: waypoint.lat,
-                lng: waypoint.lng,
-                name: waypoint.name,
-                notes: waypoint.notes || '',
-                images: waypoint.images || [],
-                project_id: waypoint.project_id || null,
-                project_name: waypoint.project_name || null
-              };
-
-              // 2. Set all necessary states to open details panel and show point
-              setWaypoints([newWaypoint]);
-              setDbWaypointIds({ [waypointId]: waypoint.id });
-              setSelectedWaypointId(waypointId);
-              setWaypointData({
-                name: waypoint.name,
-                lat: latFormatted,
-                lng: lngFormatted,
-                notes: waypoint.notes || '',
-                images: waypoint.images || [],
-                project_id: waypoint.project_id || null,
-                project_name: waypoint.project_name || null
-              });
-              setWaypointDetailsOpen(true);
-
-              // Update coordinates for the live display bar
-              setCoordinates({
-                lat: latFormatted,
-                lng: lngFormatted
-              });
-
-              // 3. Update map view and markers
-              setTimeout(() => {
-                const map = mapRef.current;
-                if (!map) return;
-
-                const latlng = [waypoint.lat, waypoint.lng];
-                map.setView(latlng, 15);
-
-                const marker = L.marker(latlng).addTo(map);
-                marker.on('click', (e) => {
-                  e.originalEvent?.stopPropagation?.();
-                  handleSelectWaypoint(waypointId);
+                // 2. Set all necessary states to open details panel and show point
+                setWaypoints([newWaypoint]);
+                setDbWaypointIds({ [waypointId]: waypoint.id });
+                setSelectedWaypointId(waypointId);
+                setWaypointData({
+                  name: waypoint.name,
+                  lat: latFormatted,
+                  lng: lngFormatted,
+                  notes: waypoint.notes || '',
+                  images: waypoint.images || [],
+                  project_id: waypoint.project_id || null,
+                  project_name: waypoint.project_name || null
                 });
-                markersRef.current[waypointId] = marker;
+                setWaypointDetailsOpen(true);
 
-                // Sync the selected overlay (red circle)
-                updateSelectedMarkerOverlay(waypointId);
-              }, 100);
+                // Update coordinates for the live display bar
+                setCoordinates({
+                  lat: latFormatted,
+                  lng: lngFormatted
+                });
 
-              setSavedPointsOpen(false);
-            }}
-            onPreviewProject={(project) => {
-              if (isProjectMode) {
-                if (String(activeProject?.id) === String(project.project_id)) {
-                  showSnackbar('Project is already active', 'info');
+                // 3. Update map view and markers
+                setTimeout(() => {
+                  const map = mapRef.current;
+                  if (!map) return;
+
+                  const latlng = [waypoint.lat, waypoint.lng];
+                  map.setView(latlng, 15);
+
+                  const marker = L.marker(latlng).addTo(map);
+                  marker.on('click', (e) => {
+                    e.originalEvent?.stopPropagation?.();
+                    handleSelectWaypoint(waypointId);
+                  });
+                  markersRef.current[waypointId] = marker;
+
+                  // Sync the selected overlay (red circle)
+                  updateSelectedMarkerOverlay(waypointId);
+                }, 100);
+
+                setSavedPointsOpen(false);
+              }}
+              onPreviewProject={(project) => {
+                if (isProjectMode) {
+                  if (String(activeProject?.id) === String(project.project_id)) {
+                    showSnackbar('Project is already active', 'info');
+                    return;
+                  }
+                  showSnackbar('Please exit current project to preview another project', 'warning');
                   return;
                 }
-                showSnackbar('Please exit current project to preview another project', 'warning');
-                return;
-              }
 
-              if (project.items && project.items.length > 0) {
-                // Clear existing waypoints (except the live blue marker which is separate)
-                resetMapAndState();
+                if (project.items && project.items.length > 0) {
+                  // Clear existing waypoints (except the live blue marker which is separate)
+                  resetMapAndState();
 
-                // Small timeout to allow state clear to process before adding new ones
-                setTimeout(() => {
-                  loadProjectWaypointsToMap({ waypoints: project.items }, { id: project.project_id, name: project.project_name });
+                  // Small timeout to allow state clear to process before adding new ones
+                  setTimeout(() => {
+                    loadProjectWaypointsToMap({ waypoints: project.items }, { id: project.project_id, name: project.project_name });
 
-                  // Load GPS tracks for this project
-                  loadProjectTracks(project.project_id);
+                    // Load GPS tracks for this project
+                    loadProjectTracks(project.project_id);
 
-                  setSinglePointCaptureActive(true);
-                  setPreviewModeActive(true);
-                  showSnackbar(`Loaded points from ${project.project_name}`, 'success');
-                }, 50);
+                    setSinglePointCaptureActive(true);
+                    setPreviewModeActive(true);
+                    showSnackbar(`Loaded points from ${project.project_name}`, 'success');
+                  }, 50);
 
-              } else {
-                showSnackbar('Project has no points', 'info');
-              }
-            }}
-          />
+                } else {
+                  showSnackbar('Project has no points', 'info');
+                }
+              }}
+            />
 
-          {/* Export Dialog */}
-          <ExportDialog
-            open={exportDialogOpen}
-            onClose={() => setExportDialogOpen(false)}
-            onShowSnackbar={showSnackbar}
-          />
+            {/* Export Dialog */}
+            <ExportDialog
+              open={exportDialogOpen}
+              onClose={() => setExportDialogOpen(false)}
+              onShowSnackbar={showSnackbar}
+            />
 
-          {/* CRS Converter Dialog */}
-          <CRSConverterDialog
-            open={crsConverterOpen}
-            onClose={() => setCrsConverterOpen(false)}
-            currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
-            onShowSnackbar={showSnackbar}
-          />
+            {/* CRS Converter Dialog */}
+            <CRSConverterDialog
+              open={crsConverterOpen}
+              onClose={() => setCrsConverterOpen(false)}
+              currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
+              onShowSnackbar={showSnackbar}
+            />
 
-          {/* Snackbar for notifications */}
-          <CustomSnackbar
-            open={snackbar.open}
-            message={snackbar.message}
-            severity={snackbar.severity}
-            onClose={handleCloseSnackbar}
-          />
+            {/* Snackbar for notifications */}
+            <CustomSnackbar
+              open={snackbar.open}
+              message={snackbar.message}
+              severity={snackbar.severity}
+              onClose={handleCloseSnackbar}
+            />
 
-          {/* Login Prompt Dialog */}
-          <LoginPromptDialog
-            open={loginPromptOpen}
-            onClose={() => setLoginPromptOpen(false)}
-          />
-          <GPSWarningDialog
-            open={gpsWarningOpen}
-            onClose={() => setGpsWarningOpen(false)}
-            onContinue={handleGpsWarningContinue}
-            onRetry={handleGpsWarningRetry}
-            requireGPS={gpsRequiredForSurvey}
-          />
+            {/* Login Prompt Dialog */}
+            <LoginPromptDialog
+              open={loginPromptOpen}
+              onClose={() => setLoginPromptOpen(false)}
+            />
+            <GPSWarningDialog
+              open={gpsWarningOpen}
+              onClose={() => setGpsWarningOpen(false)}
+              onContinue={handleGpsWarningContinue}
+              onRetry={handleGpsWarningRetry}
+              requireGPS={gpsRequiredForSurvey}
+            />
 
-          {/* Hidden file input for importing GeoJSON/KML files */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".geojson,.json,.kml"
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
-        </Box>
+            {/* Hidden file input for importing GeoJSON/KML files */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".geojson,.json,.kml"
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+          </Box>
 
-        {/* Floating bottom bar for project controls */}
-        {isProjectMode && (
-          <>
-            {/* Exit button - separate floating button for both mobile and desktop */}
-            {!projectRecording && (
-              <Paper
-                elevation={8}
-                sx={{
+          {/* Floating bottom bar for project controls */}
+          {isProjectMode && (
+            <>
+              {/* Exit button - separate floating button for both mobile and desktop */}
+              {!projectRecording && (
+                <Paper
+                  elevation={8}
+                  sx={{
+                    position: 'fixed',
+                    ...(isMobile ? {
+                      right: '0.75rem',
+                      top: mapDynamicHeight ? `calc(${mapDynamicHeight / 2}px - 13.5rem + 4.5rem)` : 'calc(50% - 13.5rem + 4.5rem)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    } : {
+                      bottom: 32,
+                      left: 'calc(50% - 280px)',
+                      display: 'flex',
+                      flexDirection: 'row',
+                    }),
+                    zIndex: theme.zIndex.drawer + 30,
+                    gap: 0.75,
+                    p: 0.75,
+                    borderRadius: 4,
+                    backgroundColor: theme.palette.background.paper,
+                    opacity: 0.65
+                  }}
+                >
+                  <IconButton
+                    aria-label="exit"
+                    title="Exit survey"
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      width: '3.5rem',
+                      height: '3.5rem',
+                      '&:hover': {
+                        backgroundColor: theme.palette.action.hover,
+                      },
+                      '& .MuiSvgIcon-root': {
+                        fontSize: isMobile ? '2rem' : '1.25rem'
+                      }
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exitSurveyMode();
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </Paper>
+              )}
+
+              <Paper ref={projectBarRef} elevation={8} sx={{
+                position: 'fixed',
+                top: isMobile ? '5rem' : 'auto',
+                bottom: isMobile ? 'auto' : 32,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: isMobile ? 'auto' : 'fit-content',
+                maxWidth: { xs: '90%', sm: 'min(95%, 900px)', md: 'min(90%, 1000px)' },
+                zIndex: { xs: theme.zIndex.drawer + 3, sm: theme.zIndex.drawer + 30 },
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: isMobile ? 0.5 : 1,
+                px: { xs: 2, sm: 2, md: 3 },
+                py: { xs: 1, sm: 1.5 },
+                borderRadius: 4,
+                cursor: 'default',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                whiteSpace: 'nowrap'
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
+                  <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%' }}>
+                    <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? '120px' : '180px' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
+                    <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
+                    {isMobile && (
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? '#0891B2' : 'red', ml: 1 }} />
+                    )}
+                  </Box>
+                </Box>
+
+                {!isMobile && (
+                  <Box ref={optionsRef} sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5, md: 2 }, width: 'auto', flexWrap: 'nowrap', justifyContent: 'center', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
+                    <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center' }} onClick={async (e) => {
+                      e.stopPropagation();
+
+                      // Check authentication first
+                      if (!isAuthenticated) {
+                        setLoginPromptOpen(true);
+                        return;
+                      }
+
+                      const map = mapRef.current;
+                      if (!coordinates || !coordinates.lat || !coordinates.lng) {
+                        showSnackbar('Unable to determine current live location (GPS).', 'error');
+                        return;
+                      }
+
+                      const waypointId = `waypoint-${Date.now()}`;
+                      const latNum = parseFloat(coordinates.lat);
+                      const lngNum = parseFloat(coordinates.lng);
+
+                      const newWp = {
+                        id: waypointId,
+                        lat: latNum,
+                        lng: lngNum,
+                        name: `Point ${(waypoints.filter(w => w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1}`,
+                        notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
+                        images: [],
+                        project_id: activeProject?.id || null,
+                        project_name: activeProject?.name || null,
+                        elevation: coordinates.elevation,
+                        followsLive: true,
+                        createdDuringProject: isProjectMode ? true : false
+                      };
+
+                      // Move map to live location
+                      try { map && map.panTo([latNum, lngNum]); } catch (e) { }
+
+                      // Ensure only one live-following waypoint at a time
+                      setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
+                      setCurrentLocationWaypointId(waypointId);
+
+                      if (map) {
+                        const marker = L.marker([latNum, lngNum]).addTo(map);
+                        marker.on('click', function () { handleSelectWaypoint(waypointId); });
+                        markersRef.current[waypointId] = marker;
+                      }
+
+                      // Auto-save the waypoint to database
+                      try {
+                        const waypointPayload = {
+                          name: newWp.name,
+                          lat: latNum,
+                          lng: lngNum,
+                          notes: newWp.notes || '',
+                          images: [],
+                          elevation: newWp.elevation,
+                          project_id: newWp.project_id,
+                          project_name: newWp.project_name,
+                        };
+
+                        const savedWaypoint = await waypointsAPI.create(waypointPayload);
+                        setDbWaypointIds(prev => ({ ...prev, [waypointId]: savedWaypoint.id }));
+                        showSnackbar('Point saved! You can add more details.', 'success');
+                      } catch (error) {
+                        console.error('Error auto-saving waypoint:', error);
+                        if (error.message === 'Authentication required') {
+                          setLoginPromptOpen(true);
+                          return;
+                        }
+                        showSnackbar('Point created locally. Save again to update.', 'warning');
+                      }
+
+                      // Select the waypoint and open details for editing
+                      setSelectedWaypointId(waypointId);
+                      setWaypointDetailsOpen(true);
+                      setWaypointData({
+                        name: newWp.name,
+                        lat: latNum.toFixed(6),
+                        lng: lngNum.toFixed(6),
+                        notes: newWp.notes,
+                        images: [],
+                        project_id: newWp.project_id,
+                        project_name: newWp.project_name,
+                        elevation: newWp.elevation,
+                        followsLive: true
+                      });
+                    }}>
+                      <AddLocation />
+                    </IconButton>
+
+                    <IconButton aria-label="start" title="Start" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#0891B2', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#0E7490' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                      <PlayArrowOutlinedIcon />
+                    </IconButton>
+
+                    <IconButton aria-label="pause" title="Pause" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', transition: 'all 0.25s ease' }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
+                      <PauseOutlinedIcon />
+                    </IconButton>
+
+                    <IconButton aria-label="stop" title="End" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', transition: 'all 0.25s ease' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
+                      <StopCircleOutlinedIcon />
+                    </IconButton>
+                  </Box>
+                )}
+              </Paper>
+
+              {isMobile && (
+                <Paper elevation={8} sx={{
                   position: 'fixed',
-                  ...(isMobile ? {
-                    right: '0.75rem',
-                    top: mapDynamicHeight ? `calc(${mapDynamicHeight / 2}px - 13.5rem + 4.5rem)` : 'calc(50% - 13.5rem + 4.5rem)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  } : {
-                    bottom: 32,
-                    left: 'calc(50% - 280px)',
-                    display: 'flex',
-                    flexDirection: 'row',
-                  }),
+                  right: '0.75rem',
+                  top: mapDynamicHeight ? `calc(${mapDynamicHeight / 2}px + 4.5rem)` : 'calc(50% + 4.5rem)',
+                  transform: 'translateY(-50%)',
                   zIndex: theme.zIndex.drawer + 30,
+                  display: 'flex',
+                  flexDirection: 'column',
                   gap: 0.75,
                   p: 0.75,
                   borderRadius: 4,
                   backgroundColor: theme.palette.background.paper,
-                  opacity: 0.65
-                }}
-              >
-                <IconButton
-                  aria-label="exit"
-                  title="Exit survey"
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    width: '3.5rem',
-                    height: '3.5rem',
-                    '&:hover': {
-                      backgroundColor: theme.palette.action.hover,
-                    },
-                    '& .MuiSvgIcon-root': {
-                      fontSize: isMobile ? '2rem' : '1.25rem'
-                    }
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    exitSurveyMode();
-                  }}
-                >
-                  <CloseIcon />
-                </IconButton>
-              </Paper>
-            )}
-
-            <Paper ref={projectBarRef} elevation={8} sx={{
-              position: 'fixed',
-              top: isMobile ? '5rem' : 'auto',
-              bottom: isMobile ? 'auto' : 32,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: isMobile ? 'auto' : 'fit-content',
-              maxWidth: { xs: '90%', sm: 'min(95%, 900px)', md: 'min(90%, 1000px)' },
-              zIndex: { xs: theme.zIndex.drawer + 3, sm: theme.zIndex.drawer + 30 },
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: isMobile ? 0.5 : 1,
-              px: { xs: 2, sm: 2, md: 3 },
-              py: { xs: 1, sm: 1.5 },
-              borderRadius: 4,
-              cursor: 'default',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-              whiteSpace: 'nowrap'
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center', position: 'relative' }}>
-                <Box ref={infoBoxRef} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', width: '100%' }}>
-                  <Typography sx={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: isMobile ? '120px' : '180px' }}>{activeProject ? activeProject.name : 'Project'}</Typography>
-                  <Typography sx={{ ml: 1, mr: 1, fontWeight: 600, color: theme.palette.text.primary, flexShrink: 0 }}>{formatTime(timerSeconds)}</Typography>
-                  {isMobile && (
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: projectRecording ? '#0891B2' : 'red', ml: 1 }} />
-                  )}
-                </Box>
-              </Box>
-
-              {!isMobile && (
-                <Box ref={optionsRef} sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.5, md: 2 }, width: 'auto', flexWrap: 'nowrap', justifyContent: 'center', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
-                  <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center' }} onClick={async (e) => {
+                  opacity: 0.85
+                }}>
+                  <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={async (e) => {
                     e.stopPropagation();
 
-                    // Check authentication first
                     if (!isAuthenticated) {
                       setLoginPromptOpen(true);
                       return;
@@ -3712,14 +4001,13 @@ function App() {
                       images: [],
                       project_id: activeProject?.id || null,
                       project_name: activeProject?.name || null,
+                      elevation: coordinates.elevation,
                       followsLive: true,
                       createdDuringProject: isProjectMode ? true : false
                     };
 
-                    // Move map to live location
                     try { map && map.panTo([latNum, lngNum]); } catch (e) { }
 
-                    // Ensure only one live-following waypoint at a time
                     setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
                     setCurrentLocationWaypointId(waypointId);
 
@@ -3729,7 +4017,6 @@ function App() {
                       markersRef.current[waypointId] = marker;
                     }
 
-                    // Auto-save the waypoint to database
                     try {
                       const waypointPayload = {
                         name: newWp.name,
@@ -3739,6 +4026,7 @@ function App() {
                         images: [],
                         project_id: newWp.project_id,
                         project_name: newWp.project_name,
+                        elevation: coordinates.elevation || null
                       };
 
                       const savedWaypoint = await waypointsAPI.create(waypointPayload);
@@ -3753,7 +4041,6 @@ function App() {
                       showSnackbar('Point created locally. Save again to update.', 'warning');
                     }
 
-                    // Select the waypoint and open details for editing
                     setSelectedWaypointId(waypointId);
                     setWaypointDetailsOpen(true);
                     setWaypointData({
@@ -3764,212 +4051,103 @@ function App() {
                       images: [],
                       project_id: newWp.project_id,
                       project_name: newWp.project_name,
+                      elevation: newWp.elevation,
                       followsLive: true
                     });
+
+                    // Expand bottom sheet on mobile
+                    if (isMobile && bottomSheetRef.current) {
+                      setTimeout(() => {
+                        bottomSheetRef.current.expand();
+                      }, 100);
+                    }
                   }}>
                     <AddLocation />
                   </IconButton>
 
-                  <IconButton aria-label="start" title="Start" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#0891B2', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#0E7490' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
+                  <IconButton aria-label="start" title="Start" sx={{ display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#0891B2', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#0E7490' }, '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
                     <PlayArrowOutlinedIcon />
                   </IconButton>
 
-                  <IconButton aria-label="pause" title="Pause" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', transition: 'all 0.25s ease' }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
+                  <IconButton aria-label="pause" title="Pause" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
                     <PauseOutlinedIcon />
                   </IconButton>
 
-                  <IconButton aria-label="stop" title="End" sx={{ flex: 'initial', display: 'flex', justifyContent: 'center', transition: 'all 0.25s ease' }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
+                  <IconButton aria-label="stop" title="End" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
                     <StopCircleOutlinedIcon />
                   </IconButton>
-                </Box>
+                </Paper>
               )}
-            </Paper>
+            </>
+          )}
 
-            {isMobile && (
-              <Paper elevation={8} sx={{
-                position: 'fixed',
-                right: '0.75rem',
-                top: mapDynamicHeight ? `calc(${mapDynamicHeight / 2}px + 4.5rem)` : 'calc(50% + 4.5rem)',
-                transform: 'translateY(-50%)',
-                zIndex: theme.zIndex.drawer + 30,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 0.75,
-                p: 0.75,
-                borderRadius: 4,
-                backgroundColor: theme.palette.background.paper,
-                opacity: 0.85
-              }}>
-                <IconButton aria-label="add-current" title="Add point (live coords)" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={async (e) => {
-                  e.stopPropagation();
-
-                  if (!isAuthenticated) {
-                    setLoginPromptOpen(true);
-                    return;
-                  }
-
-                  const map = mapRef.current;
-                  if (!coordinates || !coordinates.lat || !coordinates.lng) {
-                    showSnackbar('Unable to determine current live location (GPS).', 'error');
-                    return;
-                  }
-
-                  const waypointId = `waypoint-${Date.now()}`;
-                  const latNum = parseFloat(coordinates.lat);
-                  const lngNum = parseFloat(coordinates.lng);
-
-                  const newWp = {
-                    id: waypointId,
-                    lat: latNum,
-                    lng: lngNum,
-                    name: `Point ${(waypoints.filter(w => w.project_id && String(w.project_id) === String(activeProject?.id)).length) + 1}`,
-                    notes: coordinates.accuracy ? `Accuracy: ±${coordinates.accuracy}m` : '',
-                    images: [],
-                    project_id: activeProject?.id || null,
-                    project_name: activeProject?.name || null,
-                    followsLive: true,
-                    createdDuringProject: isProjectMode ? true : false
-                  };
-
-                  try { map && map.panTo([latNum, lngNum]); } catch (e) { }
-
-                  setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
-                  setCurrentLocationWaypointId(waypointId);
-
-                  if (map) {
-                    const marker = L.marker([latNum, lngNum]).addTo(map);
-                    marker.on('click', function () { handleSelectWaypoint(waypointId); });
-                    markersRef.current[waypointId] = marker;
-                  }
-
-                  try {
-                    const waypointPayload = {
-                      name: newWp.name,
-                      lat: latNum,
-                      lng: lngNum,
-                      notes: newWp.notes || '',
-                      images: [],
-                      project_id: newWp.project_id,
-                      project_name: newWp.project_name,
-                    };
-
-                    const savedWaypoint = await waypointsAPI.create(waypointPayload);
-                    setDbWaypointIds(prev => ({ ...prev, [waypointId]: savedWaypoint.id }));
-                    showSnackbar('Point saved! You can add more details.', 'success');
-                  } catch (error) {
-                    console.error('Error auto-saving waypoint:', error);
-                    if (error.message === 'Authentication required') {
-                      setLoginPromptOpen(true);
-                      return;
-                    }
-                    showSnackbar('Point created locally. Save again to update.', 'warning');
-                  }
-
-                  setSelectedWaypointId(waypointId);
-                  setWaypointDetailsOpen(true);
-                  setWaypointData({
-                    name: newWp.name,
-                    lat: latNum.toFixed(6),
-                    lng: lngNum.toFixed(6),
-                    notes: newWp.notes,
-                    images: [],
-                    project_id: newWp.project_id,
-                    project_name: newWp.project_name,
-                    followsLive: true
-                  });
-
-                  // Expand bottom sheet on mobile
-                  if (isMobile && bottomSheetRef.current) {
-                    setTimeout(() => {
-                      bottomSheetRef.current.expand();
-                    }, 100);
-                  }
-                }}>
-                  <AddLocation />
-                </IconButton>
-
-                <IconButton aria-label="start" title="Start" sx={{ display: 'flex', justifyContent: 'center', bgcolor: projectRecording ? 'transparent' : '#0891B2', color: projectRecording ? 'inherit' : 'white', borderRadius: '50%', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '&:hover': { bgcolor: projectRecording ? undefined : '#0E7490' }, '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handleStartRecording(); }} disabled={projectRecording}>
-                  <PlayArrowOutlinedIcon />
-                </IconButton>
-
-                <IconButton aria-label="pause" title="Pause" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} onClick={(e) => { e.stopPropagation(); handlePauseRecording(); }} disabled={!projectRecording}>
-                  <PauseOutlinedIcon />
-                </IconButton>
-
-                <IconButton aria-label="stop" title="End" sx={{ display: 'flex', justifyContent: 'center', width: '3.5rem', height: '3.5rem', transition: 'all 0.25s ease', '& .MuiSvgIcon-root': { fontSize: '2rem' } }} color="error" onClick={(e) => { e.stopPropagation(); handleStopProject(); }}>
-                  <StopCircleOutlinedIcon />
-                </IconButton>
-              </Paper>
-            )}
-          </>
-        )}
-
-        {/* End Project Confirmation Dialog */}
-        <Dialog
-          open={endProjectDialogOpen}
-          onClose={() => setEndProjectDialogOpen(false)}
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              p: 1
-            }
-          }}
-        >
-          <DialogTitle sx={{ fontWeight: 600 }}>
-            End Project
-          </DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to end this project? You will not be able to add more waypoints to this project.
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button
-              onClick={() => setEndProjectDialogOpen(false)}
-              variant="text"
-              sx={{ textTransform: 'none' }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={confirmEndProject}
-              variant="contained"
-              color="error"
-              sx={{ textTransform: 'none', boxShadow: 1 }}
-            >
+          {/* End Project Confirmation Dialog */}
+          <Dialog
+            open={endProjectDialogOpen}
+            onClose={() => setEndProjectDialogOpen(false)}
+            PaperProps={{
+              sx: {
+                borderRadius: 3,
+                p: 1
+              }
+            }}
+          >
+            <DialogTitle sx={{ fontWeight: 600 }}>
               End Project
-            </Button>
-          </DialogActions>
-        </Dialog>
-        {/* Exit Project Warning Dialog */}
-        <Dialog
-          open={exitProjectWarningOpen}
-          onClose={() => setExitProjectWarningOpen(false)}
-          PaperProps={{
-            sx: { borderRadius: 3, p: 1 }
-          }}
-        >
-          <DialogTitle sx={{ fontWeight: 600 }}>
-            Project in Progress
-          </DialogTitle>
-          <DialogContent>
-            <Typography>
-              You need to exit the current survey project before accessing this feature.
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button
-              onClick={() => setExitProjectWarningOpen(false)}
-              variant="contained"
-              sx={{ textTransform: 'none', borderRadius: 2 }}
-            >
-              OK
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Box>
-    </ThemeProvider>
-  )
+            </DialogTitle>
+            <DialogContent>
+              <Typography>
+                Are you sure you want to end this project? You will not be able to add more waypoints to this project.
+              </Typography>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button
+                onClick={() => setEndProjectDialogOpen(false)}
+                variant="text"
+                sx={{ textTransform: 'none' }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmEndProject}
+                variant="contained"
+                color="error"
+                sx={{ textTransform: 'none', boxShadow: 1 }}
+              >
+                End Project
+              </Button>
+            </DialogActions>
+          </Dialog>
+          {/* Exit Project Warning Dialog */}
+          <Dialog
+            open={exitProjectWarningOpen}
+            onClose={() => setExitProjectWarningOpen(false)}
+            PaperProps={{
+              sx: { borderRadius: 3, p: 1 }
+            }}
+          >
+            <DialogTitle sx={{ fontWeight: 600 }}>
+              Project in Progress
+            </DialogTitle>
+            <DialogContent>
+              <Typography>
+                You need to exit the current survey project before accessing this feature.
+              </Typography>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button
+                onClick={() => setExitProjectWarningOpen(false)}
+                variant="contained"
+                sx={{ textTransform: 'none', borderRadius: 2 }}
+              >
+                OK
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </Box>
+      </ThemeProvider>
+    </>
+  );
 }
 
 export default App;

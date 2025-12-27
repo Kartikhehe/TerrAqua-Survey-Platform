@@ -95,7 +95,8 @@ function SavedPoints({ open, onClose, onSelectWaypoint, onShowSnackbar, onPrevie
         notes: waypoint.notes || '',
         images: waypoint.images || (waypoint.image_url ? [{ url: waypoint.image_url, public_id: 'legacy' }] : []),
         project_id: waypoint.project_id,
-        project_name: waypoint.project_name
+        project_name: waypoint.project_name,
+        elevation: waypoint.elevation
       });
     }
     onClose();
