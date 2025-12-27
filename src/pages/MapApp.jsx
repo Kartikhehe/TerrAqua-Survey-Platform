@@ -37,6 +37,7 @@ import WaypointSelector from '../components/WaypointSelector';
 import SavedPoints from '../components/SavedPoints';
 import StartSurveyDialog from '../components/StartSurveyDialog';
 import ExportDialog from '../components/ExportDialog';
+import CRSConverterDialog from '../components/CRSConverterDialog';
 import CustomSnackbar from '../components/Snackbar';
 import { waypointsAPI, uploadAPI, projectsAPI, tracksAPI } from '../services/api';
 import { createAppTheme } from '../theme/theme.js';
@@ -113,6 +114,7 @@ function App() {
   const [endProjectDialogOpen, setEndProjectDialogOpen] = useState(false); // Confirmation dialog for ending project
   const [exitProjectWarningOpen, setExitProjectWarningOpen] = useState(false); // Warning dialog for restricted actions during project
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(true); // Satellite hybrid view mode
+  const [crsConverterOpen, setCrsConverterOpen] = useState(false); // CRS Converter dialog state
   const [defaultLocation, setDefaultLocation] = useState(INDIA_CENTER);
 
   // GPS Tracking (using GPSTracker class)
@@ -1448,6 +1450,8 @@ function App() {
       setSavedPointsOpen(true);
     } else if (item === 'Export Data') {
       setExportDialogOpen(true);
+    } else if (item === 'CRS Converter') {
+      setCrsConverterOpen(true);
     } else if (item === 'Import File') {
       // Trigger file input click
       if (fileInputRef.current) {
@@ -3553,6 +3557,14 @@ function App() {
           <ExportDialog
             open={exportDialogOpen}
             onClose={() => setExportDialogOpen(false)}
+            onShowSnackbar={showSnackbar}
+          />
+
+          {/* CRS Converter Dialog */}
+          <CRSConverterDialog
+            open={crsConverterOpen}
+            onClose={() => setCrsConverterOpen(false)}
+            currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng } : null}
             onShowSnackbar={showSnackbar}
           />
 

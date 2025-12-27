@@ -34,6 +34,7 @@ import {
   LightMode,
   LocationOn as LocationOnIcon,
   TextSnippetOutlined as TextSnippetIcon,
+  ChangeCircleOutlined as ChangeCircleIcon,
 } from '@mui/icons-material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import { useAuth } from '../context/AuthContext';
@@ -98,6 +99,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
     { text: 'Start Survey', icon: <AddLocationAltOutlinedIcon />, action: () => onMenuItemClick('Start Survey') },
     { text: 'View Saved Points', icon: <BookmarkAddedOutlinedIcon />, action: () => onMenuItemClick('Saved Points') },
     { text: 'Export Data', icon: <IosShareOutlinedIcon />, action: () => onMenuItemClick('Export Data') },
+    { text: 'CRS Converter', icon: <ChangeCircleIcon />, action: () => onMenuItemClick('CRS Converter') },
     {
       text: satelliteHybridMode ? 'OpenStreet Mode' : 'Satellite Mode',
       icon: satelliteHybridMode ? <MapIcon /> : <SatelliteAltIcon />,
