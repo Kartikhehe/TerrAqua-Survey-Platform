@@ -33,6 +33,7 @@ import {
   DarkMode,
   LightMode,
   LocationOn as LocationOnIcon,
+  TextSnippetOutlined as TextSnippetIcon,
 } from '@mui/icons-material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import { useAuth } from '../context/AuthContext';
@@ -107,6 +108,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
       }
     },
     { text: 'Import File', icon: <InputOutlinedIcon />, action: () => onMenuItemClick('Import File') },
+    { text: 'User Guide', icon: <TextSnippetIcon />, action: () => navigate('/guide') },
   ];
 
   return (

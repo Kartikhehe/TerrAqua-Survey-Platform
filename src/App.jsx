@@ -7,6 +7,7 @@ import ForgotPasswordPage from './pages/ForgotPassword';
 import VerifyResetOTPPage from './pages/VerifyResetOTP';
 import ResetPasswordPage from './pages/ResetPassword';
 import MapApp from './pages/MapApp';
+import UserGuide from './pages/UserGuide';
 import { Box, CircularProgress } from '@mui/material';
 
 function App() {
@@ -56,6 +57,10 @@ function App() {
       <Route
         path="/"
         element={<MapApp />}
+      />
+      <Route
+        path="/guide"
+        element={<UserGuide />}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
