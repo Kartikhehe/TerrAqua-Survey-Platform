@@ -5,7 +5,7 @@ import { Close, Save, Delete, CameraAlt } from '@mui/icons-material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 
-const COLLAPSED_HEIGHT = '14vh';
+const COLLAPSED_HEIGHT = '120px';
 
 const BottomSheet = forwardRef(({
     isOpen,
@@ -113,6 +113,7 @@ const BottomSheet = forwardRef(({
                     overflow: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
+                    paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
                 }}
             >
                 {/* Toggle Icon - Always visible, clickable in both states */}
@@ -151,7 +152,7 @@ const BottomSheet = forwardRef(({
                     <Box
                         sx={{
                             px: 2,
-                            pb: 1.5,
+                            pb: 2,
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 1,

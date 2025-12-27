@@ -112,7 +112,7 @@ function App() {
   const [isProjectMode, setIsProjectMode] = useState(false);
   const [endProjectDialogOpen, setEndProjectDialogOpen] = useState(false); // Confirmation dialog for ending project
   const [exitProjectWarningOpen, setExitProjectWarningOpen] = useState(false); // Warning dialog for restricted actions during project
-  const [satelliteHybridMode, setSatelliteHybridMode] = useState(false); // Satellite hybrid view mode
+  const [satelliteHybridMode, setSatelliteHybridMode] = useState(true); // Satellite hybrid view mode
   const [defaultLocation, setDefaultLocation] = useState(INDIA_CENTER);
 
   // GPS Tracking (using GPSTracker class)
@@ -174,7 +174,10 @@ function App() {
           const map = mapRef.current;
 
           if (map) {
-            map.setView([latitude, longitude], 15);
+            map.flyTo([latitude, longitude], 15, {
+              animate: true,
+              duration: 1.5
+            });
 
             // Activate survey mode if not already active to allow waypoint insertion
             setSinglePointCaptureActive(prev => (!prev ? true : prev));
@@ -222,12 +225,13 @@ function App() {
               setWaypointDetailsOpen(true);
 
               showSnackbar(`Location found! Accuracy: ${Math.round(accuracy)}m`, 'success');
-            }, 200);
+            }, 500); // Increased delay slightly to allow flyTo to progress
           }
         },
         (error) => {
           console.error('Geolocation error:', error);
           showSnackbar('Unable to get your location. Please check GPS settings.', 'error');
+          setGpsWarningOpen(true);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
@@ -1943,7 +1947,8 @@ function App() {
         // Satellite hybrid mode: Use Esri World Imagery with labels
         const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           attribution: '',
-          maxZoom: 19,
+          maxZoom: 22,
+          maxNativeZoom: 19,
           minZoom: 1,
           tileSize: 256,
           zoomOffset: 0,
@@ -1964,7 +1969,8 @@ function App() {
 
           const labelLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
             attribution: '',
-            maxZoom: 19,
+            maxZoom: 22,
+            maxNativeZoom: 19,
             minZoom: 1,
             opacity: 0.7,
             tileSize: 256,
@@ -2538,7 +2544,8 @@ function App() {
       // Satellite hybrid mode: Esri World Imagery (satellite) + Reference labels
       const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: '',
-        maxZoom: 19,
+        maxZoom: 22,
+        maxNativeZoom: 19,
         minZoom: 1,
         tileSize: 256,
         zoomOffset: 0,
@@ -2554,7 +2561,8 @@ function App() {
         if (mapRef.current && satelliteHybridMode) {
           const labelLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
             attribution: '',
-            maxZoom: 19,
+            maxZoom: 22,
+            maxNativeZoom: 19,
             minZoom: 1,
             opacity: 0.7,
             tileSize: 256,

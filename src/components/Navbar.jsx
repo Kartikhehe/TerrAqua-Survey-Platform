@@ -185,7 +185,7 @@ function Navbar({
               display: 'flex',
               alignItems: 'center',
               width: '100%',
-              maxWidth: { xs: '140px', sm: '220px', md: '300px' },
+              maxWidth: { xs: '180px', sm: '220px', md: '300px' },
             }}
           >
             {!isMobile && (

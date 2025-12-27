@@ -214,7 +214,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             md: '22.96875rem'
           },
           maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
-          maxHeight: { xs: 'none', sm: 'calc(100vh - 10.5rem)', md: 'calc(100vh - 13.125rem)' },
+          maxHeight: { xs: 'none', sm: 'calc(100vh - 12.5rem)', md: 'calc(100vh - 15.5rem)' },
           p: { xs: 0, sm: 1.75, md: 2.625 },
           pt: { xs: 0, sm: 1.75, md: 2.625 },
           borderRadius: { xs: '24px 24px 0 0', sm: '0.875rem' },
@@ -335,11 +335,11 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             flexDirection: 'column',
             gap: { xs: 1.5, sm: 2 },
             flex: 1,
-            overflow: { xs: 'hidden', sm: 'auto' },
+            overflow: 'auto',
             minHeight: 0,
             px: { xs: 1.5, sm: 0 },
             pt: '10px',
-            pb: { xs: 2.5, sm: '10px' },
+            pb: { xs: 5, sm: '10px' },
           }}
         >
           <TextField

@@ -4,6 +4,11 @@
   "webDir": "dist",
   "bundledWebRuntime": false,
   "plugins": {
+    "Keyboard": {
+      "resize": "body",
+      "style": "DARK",
+      "resizeOnFullScreen": true
+    },
     "StatusBar": {
       "overlay": false,
       "backgroundColor": "#000000",
