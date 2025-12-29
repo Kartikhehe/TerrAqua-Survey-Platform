@@ -698,7 +698,7 @@ function App() {
 
     // Request background location permission on Android (dynamic import to avoid build errors)
     // Request background location permission on Android (dynamic import to avoid build errors)
-    /* try {
+    try {
       // Check if we're on a native platform
       const { Capacitor } = await import('@capacitor/core');
 
@@ -735,7 +735,7 @@ function App() {
     } catch (error) {
       // Capacitor not available (web build), continue normally
       console.log('Running on web, skipping native permission request');
-    } */
+    }
 
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
@@ -1016,7 +1016,7 @@ function App() {
     await stopLocationWatcher(); // Clear existing
 
     try {
-      /* const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+      const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
 
       // Check permissions gently
       try {
@@ -1044,7 +1044,7 @@ function App() {
         }
       );
       watchPositionIdRef.current = watcherId;
-      console.log('Native Background Tracking active:', watcherId); */
+      console.log('Native Background Tracking active:', watcherId);
 
       // Fallback for dev mode
       startForegroundTracking();
@@ -1062,11 +1062,11 @@ function App() {
 
       // If Native, switch to Background Tracking Mode
       try {
-        /* const { Capacitor } = await import('@capacitor/core');
+        const { Capacitor } = await import('@capacitor/core');
         if (Capacitor.isNativePlatform()) {
           console.log('[GPS] Switching to Native Background Mode');
           await startNativeBackgroundTracking();
-        } */
+        }
       } catch (e) { }
 
       console.log('[GPS] Map ref:', mapRef.current);
@@ -1103,11 +1103,11 @@ function App() {
 
         // If Native, revert to Foreground Tracking Mode
         try {
-          /* const { Capacitor } = await import('@capacitor/core');
+          const { Capacitor } = await import('@capacitor/core');
           if (Capacitor.isNativePlatform()) {
             console.log('[GPS] Reverting to Foreground Mode');
             await startForegroundTracking();
-          } */
+          }
         } catch (e) { }
 
         return result;
@@ -2814,9 +2814,9 @@ function App() {
         if (typeof watchPositionIdRef.current === 'string') {
           // Native watcher (string ID)
           // Native watcher (string ID)
-          /* import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
+          import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
             BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
-          }).catch(e => console.error(e)); */
+          }).catch(e => console.error(e));
         } else if (navigator.geolocation) {
           // Web watcher (number ID)
           navigator.geolocation.clearWatch(watchPositionIdRef.current);
@@ -3884,7 +3884,7 @@ function App() {
                         project_id: activeProject?.id || null,
                         project_name: activeProject?.name || null,
                         elevation: coordinates.elevation,
-                        followsLive: true,
+                        followsLive: false,
                         createdDuringProject: isProjectMode ? true : false
                       };
 
@@ -3893,7 +3893,8 @@ function App() {
 
                       // Ensure only one live-following waypoint at a time
                       setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
-                      setCurrentLocationWaypointId(waypointId);
+                      // DO NOT set currentLocationWaypointId here so the point remains fixed after saving
+                      // setCurrentLocationWaypointId(waypointId);
 
                       if (map) {
                         const marker = L.marker([latNum, lngNum]).addTo(map);
@@ -3938,7 +3939,7 @@ function App() {
                         project_id: newWp.project_id,
                         project_name: newWp.project_name,
                         elevation: newWp.elevation,
-                        followsLive: true
+                        followsLive: false
                       });
                     }}>
                       <AddLocation />
@@ -4002,14 +4003,15 @@ function App() {
                       project_id: activeProject?.id || null,
                       project_name: activeProject?.name || null,
                       elevation: coordinates.elevation,
-                      followsLive: true,
+                      followsLive: false,
                       createdDuringProject: isProjectMode ? true : false
                     };
 
                     try { map && map.panTo([latNum, lngNum]); } catch (e) { }
 
                     setWaypoints(prev => prev.map(w => ({ ...w, followsLive: false })).concat([newWp]));
-                    setCurrentLocationWaypointId(waypointId);
+                    // DO NOT set currentLocationWaypointId here so the point remains fixed after saving
+                    // setCurrentLocationWaypointId(waypointId);
 
                     if (map) {
                       const marker = L.marker([latNum, lngNum]).addTo(map);
@@ -4052,7 +4054,7 @@ function App() {
                       project_id: newWp.project_id,
                       project_name: newWp.project_name,
                       elevation: newWp.elevation,
-                      followsLive: true
+                      followsLive: false
                     });
 
                     // Expand bottom sheet on mobile
