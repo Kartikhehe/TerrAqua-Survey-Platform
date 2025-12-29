@@ -368,21 +368,16 @@ function App() {
     }
   };
 
-  const refreshMapMarkers = () => {
+  const refreshMapMarkers = (wps = waypointsRef.current, isProj = isProjectModeRef.current, activeProj = activeProjectRef.current) => {
     const map = mapRef.current;
     if (!map) return;
-
-    // Use refs to get latest state, avoiding stale closures in timeouts
-    const currentWaypoints = waypointsRef.current;
-    const currentIsProjectMode = isProjectModeRef.current;
-    const currentActiveProject = activeProjectRef.current;
 
     clearAllMarkers();
 
     // Add only project waypoints in project mode, otherwise add all
-    const itemsToAdd = (currentIsProjectMode && currentActiveProject && currentActiveProject.id)
-      ? currentWaypoints.filter(wp => wp.project_id && String(wp.project_id) === String(currentActiveProject.id))
-      : currentWaypoints;
+    const itemsToAdd = (isProj && activeProj && activeProj.id)
+      ? wps.filter(wp => wp.project_id && String(wp.project_id) === String(activeProj.id))
+      : wps;
 
     itemsToAdd.forEach(wp => addMarkerForWaypoint(wp));
     // add live location marker
@@ -678,6 +673,8 @@ function App() {
     // Stop timer
     stopTimer();
     showSnackbar('Project ended', 'info');
+    setSinglePointCaptureActive(true); // Keep UI visible for viewing
+    setPreviewModeActive(true); // Enable viewing mode
   };
 
   const handleToggleRecording = () => {
@@ -698,44 +695,43 @@ function App() {
 
     // Request background location permission on Android (dynamic import to avoid build errors)
     // Request background location permission on Android (dynamic import to avoid build errors)
-    try {
-      // Check if we're on a native platform
-      const { Capacitor } = await import('@capacitor/core');
+    // try {
+    //   const { Capacitor } = await import('@capacitor/core');
 
-      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-        try {
-          const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
-          const permission = await BackgroundGeolocation.requestPermissions();
-          console.log('Background location permission:', permission);
+    //   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+    //     try {
+    //       const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+    //       const permission = await BackgroundGeolocation.requestPermissions();
+    //       console.log('Background location permission:', permission);
 
-          if (permission?.location !== 'granted') {
-            // Show guidance to user
-            const userConfirmed = window.confirm(
-              "Background location access is required for continuous tracking.\n\n" +
-              "Please follow these steps:\n" +
-              "1. Tap 'Settings' when prompted\n" +
-              "2. Go to Permissions → Location\n" +
-              "3. Select 'Allow all the time'\n\n" +
-              "Tap OK to open settings, or Cancel to continue without background tracking."
-            );
+    //       if (permission?.location !== 'granted') {
+    //         // Show guidance to user
+    //         const userConfirmed = window.confirm(
+    //           "Background location access is required for continuous tracking.\n\n" +
+    //           "Please follow these steps:\n" +
+    //           "1. Tap 'Settings' when prompted\n" +
+    //           "2. Go to Permissions → Location\n" +
+    //           "3. Select 'Allow all the time'\n\n" +
+    //           "Tap OK to open settings, or Cancel to continue without background tracking."
+    //         );
 
-            if (userConfirmed) {
-              showSnackbar('Please enable "Allow all the time" in location permissions', 'warning');
-            } else {
-              showSnackbar('Background tracking may not work without "Allow all the time" permission', 'warning');
-            }
-          } else {
-            showSnackbar('Background location permission granted', 'success');
-          }
-        } catch (error) {
-          console.error('Error requesting background location permission:', error);
-          showSnackbar('Failed to request location permission', 'error');
-        }
-      }
-    } catch (error) {
-      // Capacitor not available (web build), continue normally
-      console.log('Running on web, skipping native permission request');
-    }
+    //         if (userConfirmed) {
+    //           showSnackbar('Please enable "Allow all the time" in location permissions', 'warning');
+    //         } else {
+    //           showSnackbar('Background tracking may not work without "Allow all the time" permission', 'warning');
+    //         }
+    //       } else {
+    //         showSnackbar('Background location permission granted', 'success');
+    //       }
+    //     } catch (error) {
+    //       console.error('Error requesting background location permission:', error);
+    //       showSnackbar('Failed to request location permission', 'error');
+    //     }
+    //   }
+    // } catch (error) {
+    //   // Capacitor not available (web build), continue normally
+    //   console.log('Running on web, skipping native permission request');
+    // }
 
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
@@ -831,13 +827,14 @@ function App() {
         }
       });
 
-      // Merge into current state
+      setDbWaypointIds((prev) => ({ ...prev, ...newDbMapping }));
       setWaypoints((prev) => {
         const existingDbIds = new Set(Object.values(dbWaypointIds));
         const filtered = newWaypoints.filter((wp) => !existingDbIds.has(newDbMapping[wp.id]));
-        return [...prev, ...filtered];
+        const updated = [...prev, ...filtered];
+        waypointsRef.current = updated; // Update ref immediately to avoid marker disappearance
+        return updated;
       });
-      setDbWaypointIds((prev) => ({ ...prev, ...newDbMapping }));
       Object.assign(markersRef.current, newMarkers);
       // Fit map to loaded project waypoints
       if (map && newWaypoints.length > 0) {
@@ -889,6 +886,8 @@ function App() {
     updateSelectedMarkerOverlay(null);
     // refresh markers so saved points remain visible and live marker stays
     setTimeout(() => refreshMapMarkers(), 10);
+    setSinglePointCaptureActive(true); // Keep UI visible for viewing
+    setPreviewModeActive(true); // Enable viewing mode
     showSnackbar('Exited survey mode', 'info');
   };
 
@@ -1014,45 +1013,45 @@ function App() {
   // Start heavy-duty background tracking (Native Plugin) - For Active Surveys
   const startNativeBackgroundTracking = async () => {
     await stopLocationWatcher(); // Clear existing
+    startForegroundTracking();
+    // try {
+    //   const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
 
-    try {
-      const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+    //   // Check permissions gently
+    //   try {
+    //     const status = await BackgroundGeolocation.checkPermissions();
+    //     if (status.location !== 'granted') {
+    //       await BackgroundGeolocation.requestPermissions();
+    //     }
+    //   } catch (e) { console.warn('checkPermissions failed', e); }
 
-      // Check permissions gently
-      try {
-        const status = await BackgroundGeolocation.checkPermissions();
-        if (status.location !== 'granted') {
-          await BackgroundGeolocation.requestPermissions();
-        }
-      } catch (e) { console.warn('checkPermissions failed', e); }
+    //   const watcherId = await BackgroundGeolocation.addWatcher(
+    //     {
+    //       backgroundMessage: "Recording survey track...",
+    //       backgroundTitle: "TerrAqua",
+    //       requestPermissions: true,
+    //       stale: false,
+    //       distanceFilter: 2 // Update every 2 meters for recording
+    //     },
+    //     (location, error) => {
+    //       if (error) {
+    //         console.error('BackgroundGeolocation error:', error);
+    //         return;
+    //       }
+    //       handlePositionUpdate(location.latitude, location.longitude, location.accuracy, location.altitude);
+    //       setGpsActive(true);
+    //     }
+    //   );
+    //   watchPositionIdRef.current = watcherId;
+    //   console.log('Native Background Tracking active:', watcherId);
 
-      const watcherId = await BackgroundGeolocation.addWatcher(
-        {
-          backgroundMessage: "Recording survey track...",
-          backgroundTitle: "TerrAqua",
-          requestPermissions: true,
-          stale: false,
-          distanceFilter: 2 // Update every 2 meters for recording
-        },
-        (location, error) => {
-          if (error) {
-            console.error('BackgroundGeolocation error:', error);
-            return;
-          }
-          handlePositionUpdate(location.latitude, location.longitude, location.accuracy, location.altitude);
-          setGpsActive(true);
-        }
-      );
-      watchPositionIdRef.current = watcherId;
-      console.log('Native Background Tracking active:', watcherId);
+    //   // Fallback for dev mode
+    //   startForegroundTracking();
 
-      // Fallback for dev mode
-      startForegroundTracking();
-
-    } catch (e) {
-      console.error('Failed to start native background tracking, falling back to foreground:', e);
-      startForegroundTracking();
-    }
+    // } catch (e) {
+    //   console.error('Failed to start native background tracking, falling back to foreground:', e);
+    //   startForegroundTracking();
+    // }
   };
 
   // GPS Tracking Functions (using GPSTracker class)
@@ -1061,13 +1060,13 @@ function App() {
       console.log('[GPS] Starting GPS tracking for project:', projectId);
 
       // If Native, switch to Background Tracking Mode
-      try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (Capacitor.isNativePlatform()) {
-          console.log('[GPS] Switching to Native Background Mode');
-          await startNativeBackgroundTracking();
-        }
-      } catch (e) { }
+      // try {
+      //   const { Capacitor } = await import('@capacitor/core');
+      //   if (Capacitor.isNativePlatform()) {
+      //     console.log('[GPS] Switching to Native Background Mode');
+      //     await startNativeBackgroundTracking();
+      //   }
+      // } catch (e) { }
 
       console.log('[GPS] Map ref:', mapRef.current);
       gpsTrackerRef.current = new GPSTracker(mapRef.current, projectId);
@@ -1102,13 +1101,13 @@ function App() {
         console.log('GPS tracking ended. Distance:', result.total_distance, 'm');
 
         // If Native, revert to Foreground Tracking Mode
-        try {
-          const { Capacitor } = await import('@capacitor/core');
-          if (Capacitor.isNativePlatform()) {
-            console.log('[GPS] Reverting to Foreground Mode');
-            await startForegroundTracking();
-          }
-        } catch (e) { }
+        // try {
+        //   const { Capacitor } = await import('@capacitor/core');
+        //   if (Capacitor.isNativePlatform()) {
+        //     console.log('[GPS] Reverting to Foreground Mode');
+        //     await startForegroundTracking();
+        //   }
+        // } catch (e) { }
 
         return result;
       } catch (error) {
@@ -2308,10 +2307,10 @@ function App() {
   // Keep markers in sync with project mode, active project, waypoints and live coordinates
   useEffect(() => {
     try {
-      refreshMapMarkers();
+      refreshMapMarkers(waypoints, isProjectMode, activeProject);
     } catch (e) { console.error('Error refreshing markers in effect:', e); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProjectMode, activeProject?.id, waypoints.length, coordinates.lat, coordinates.lng]);
+  }, [isProjectMode, activeProject?.id, waypoints, coordinates.lat, coordinates.lng]);
 
   // On login or mount, fetch any active project for this user
   useEffect(() => {
@@ -2814,9 +2813,9 @@ function App() {
         if (typeof watchPositionIdRef.current === 'string') {
           // Native watcher (string ID)
           // Native watcher (string ID)
-          import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
-            BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
-          }).catch(e => console.error(e));
+          // import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
+          //   BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
+          // }).catch(e => console.error(e));
         } else if (navigator.geolocation) {
           // Web watcher (number ID)
           navigator.geolocation.clearWatch(watchPositionIdRef.current);
@@ -3652,8 +3651,11 @@ function App() {
 
                 // 2. Set all necessary states to open details panel and show point
                 setWaypoints([newWaypoint]);
+                waypointsRef.current = [newWaypoint]; // Update ref immediately
                 setDbWaypointIds({ [waypointId]: waypoint.id });
                 setSelectedWaypointId(waypointId);
+                setSinglePointCaptureActive(true); // Enable UI for viewing
+                setPreviewModeActive(true); // In viewing mode
                 setWaypointData({
                   name: waypoint.name,
                   lat: latFormatted,
