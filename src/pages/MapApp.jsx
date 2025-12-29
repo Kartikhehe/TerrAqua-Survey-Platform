@@ -58,6 +58,8 @@ import { startTimerFromProject, stopTimer } from '../utils/projectUtils';
 import { decodePolyline } from '../utils/navigationUtils';
 import { GPSTracker } from '../utils/gpsTracker';
 import { INDIA_CENTER, drawerWidth, drawerCollapsedWidth } from '../constants/mapConstants';
+import { addWatermarkToImage } from '../utils/watermarkUtils';
+import { saveToNativeGallery } from '../utils/nativeUtils';
 
 // Ensure default Leaflet markers load correctly when bundled (e.g., on Vercel)
 delete L.Icon.Default.prototype._getIconUrl;
@@ -139,6 +141,13 @@ function App() {
   useEffect(() => { waypointsRef.current = waypoints; }, [waypoints]);
   useEffect(() => { activeProjectRef.current = activeProject; }, [activeProject]);
   useEffect(() => { isProjectModeRef.current = isProjectMode; }, [isProjectMode]);
+
+  const dbWaypointIdsRef = useRef(dbWaypointIds);
+  useEffect(() => { dbWaypointIdsRef.current = dbWaypointIds; }, [dbWaypointIds]);
+
+  // Image Upload Queue
+  const uploadQueueRef = useRef([]);
+  const isProcessingQueueRef = useRef(false);
   const watchPositionIdRef = useRef(null); // Reference to watchPosition ID for cleanup
   const routePolylineRef = useRef(null); // Reference to route polyline on map
   const navigationStartMarkerRef = useRef(null); // Reference to starting point marker for navigation
@@ -234,6 +243,27 @@ function App() {
                 images: []
               });
               setWaypointDetailsOpen(true);
+
+              // Auto-save My Location to DB if authenticated
+              if (isAuthenticated) {
+                const waypointPayload = {
+                  name: 'My Location',
+                  lat: latitude,
+                  lng: longitude,
+                  notes: '',
+                  images: [],
+                  elevation: position.coords.altitude || null,
+                  project_id: isProjectMode ? activeProject?.id : null,
+                  project_name: isProjectMode ? activeProject?.name : null
+                };
+
+                waypointsAPI.create(waypointPayload).then(saved => {
+                  setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
+                  showSnackbar('Location saved to database!', 'success');
+                }).catch(err => {
+                  console.error('Error auto-saving My Location:', err);
+                });
+              }
 
               showSnackbar(`Location found! Accuracy: ${Math.round(accuracy)}m`, 'success');
             }, 500); // Increased delay slightly to allow flyTo to progress
@@ -2445,6 +2475,148 @@ function App() {
     };
   }, []);
 
+  const processUploadQueue = async () => {
+    if (isProcessingQueueRef.current || uploadQueueRef.current.length === 0) return;
+    isProcessingQueueRef.current = true;
+    setImageUploading(true);
+    console.log('[Queue] Starting to process upload queue. Size:', uploadQueueRef.current.length);
+
+    while (uploadQueueRef.current.length > 0) {
+      const item = uploadQueueRef.current[0];
+      const { files, targetWpId, deviceInfo } = item;
+
+      try {
+        // Process each file: Save Raw -> Watermark -> Save Watermarked -> Compress
+        const processedFilesForUpload = await Promise.all(files.map(async (file) => {
+          try {
+            console.log(`[Queue] Processing file: ${file.name}`);
+
+            // 1. Save Raw to Native Gallery (First safety)
+            await saveToNativeGallery(file, 'TerrAqua/Raw');
+
+            // 2. Add Watermark
+            let watermarkedFile = file;
+            try {
+              watermarkedFile = await addWatermarkToImage(file, deviceInfo);
+              console.log('[Queue] Watermark applied successfully');
+
+              // 3. Save Watermarked to Native Gallery
+              await saveToNativeGallery(watermarkedFile, 'TerrAqua/Watermarked');
+            } catch (wErr) {
+              console.error('[Queue] Watermarking failed, using original:', wErr);
+            }
+
+            // 4. Compress Watermarked (or raw if watermark failed) for Upload
+            try {
+              const imageCompression = (await import('browser-image-compression')).default;
+              const compressionOptions = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true, fileType: 'image/jpeg' };
+              const compressed = await imageCompression(watermarkedFile, compressionOptions);
+              console.log(`[Queue] Compressed: ${(compressed.size / 1024 / 1024).toFixed(2)}MB`);
+              return compressed;
+            } catch (cErr) {
+              console.warn('[Queue] Compression failed, using watermarked file:', cErr);
+              return watermarkedFile;
+            }
+          } catch (err) {
+            console.error('[Queue] Error in file processing chain:', err);
+            return file;
+          }
+        }));
+
+        // Upload to Cloudinary
+        const result = await uploadAPI.uploadMultipleImages(processedFilesForUpload, deviceInfo);
+        console.log(`[Queue] Uploaded ${result.count} images for ${targetWpId}`);
+
+        // Automatically save to Postgres DB
+        // 1. Retry logic to wait for DB ID if the waypoint is being created in another process (e.g. bar button)
+        let dbId = dbWaypointIdsRef.current[targetWpId];
+        let retries = 0;
+        while (!dbId && retries < 10) {
+          console.log(`[Queue] DB ID for ${targetWpId} not found, retrying in 1s... (${retries + 1}/10)`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          dbId = dbWaypointIdsRef.current[targetWpId];
+          retries++;
+        }
+
+        // 2. If STILL missing after retries, it means the point was never auto-saved. Try to create it now.
+        if (!dbId) {
+          console.log(`[Queue] DB ID for ${targetWpId} still missing after retries. Attempting fallback auto-create...`);
+          const wpInRef = waypointsRef.current.find(w => w.id === targetWpId);
+          if (wpInRef) {
+            try {
+              const payload = {
+                name: wpInRef.name || 'Captured Point',
+                lat: wpInRef.lat,
+                lng: wpInRef.lng,
+                notes: wpInRef.notes || '',
+                images: [],
+                project_id: wpInRef.project_id || (isProjectModeRef.current && activeProjectRef.current ? activeProjectRef.current.id : null),
+                project_name: wpInRef.project_name || (isProjectModeRef.current && activeProjectRef.current ? activeProjectRef.current.name : null),
+                elevation: wpInRef.elevation || null
+              };
+              const saved = await waypointsAPI.create(payload);
+              dbId = saved.id;
+              setDbWaypointIds(prev => ({ ...prev, [targetWpId]: dbId }));
+              console.log(`[Queue] Fallback auto-creation success: ${dbId}`);
+            } catch (err) {
+              console.error('[Queue] Fallback auto-creation failed:', err);
+            }
+          }
+        }
+
+        if (dbId) {
+          // Get latest waypoint state from ref to avoid overwriting attributes like notes
+          const wpInRef = waypointsRef.current.find(w => w.id === targetWpId);
+          if (wpInRef) {
+            const updatedImages = [...(wpInRef.images || []), ...result.images];
+            const updatedWp = { ...wpInRef, images: updatedImages };
+
+            console.log(`[Queue] Automatically saving images to DB for waypoint ${dbId}`);
+            await waypointsAPI.update(dbId, updatedWp);
+
+            // Update local state for the specific waypoint
+            setWaypoints(prev => prev.map(w => w.id === targetWpId ? updatedWp : w));
+
+            // If the user happens to have this same waypoint selected right now, update the view-model
+            setSelectedWaypointId(currentId => {
+              if (String(currentId) === String(targetWpId)) {
+                setWaypointData(prev => ({
+                  ...prev,
+                  images: updatedImages
+                }));
+              }
+              return currentId;
+            });
+
+            showSnackbar(`Images automatically saved for ${wpInRef.name || 'point'}`, 'success');
+          }
+        } else {
+          console.warn(`[Queue] Failed to find DB ID for ${targetWpId} even after fallback. Images uploaded to Cloudinary but not linked in DB.`);
+          // Still need to update local waypoints so user can manually save later
+          setWaypoints(prev => prev.map(w => {
+            if (w.id === targetWpId) {
+              const updatedImages = [...(w.images || []), ...result.images];
+              return { ...w, images: updatedImages };
+            }
+            return w;
+          }));
+        }
+
+        // Successfully processed this item, remove from queue
+        uploadQueueRef.current.shift();
+      } catch (error) {
+        console.error('[Queue] Error processing upload:', error);
+        showSnackbar(`Upload failed for a point in background.`, 'error');
+        // Remove anyway to avoid infinite loop, or move to a failed list
+        uploadQueueRef.current.shift();
+      }
+    }
+
+    isProcessingQueueRef.current = false;
+    setImageUploading(false);
+    console.log('[Queue] Upload queue empty.');
+  };
+
   const handleImageUpload = async (event) => {
     const action = event.target.dataset?.action || 'add';
     console.log('[handleImageUpload] Action:', action, 'Files:', event.target.files?.length);
@@ -2469,14 +2641,23 @@ function App() {
 
         // Also update the waypoints array so it persists when switching waypoints
         if (selectedWaypointId) {
-          setWaypoints(prev => prev.map(wp =>
-            wp.id === selectedWaypointId
-              ? { ...wp, images: updatedImages }
-              : wp
-          ));
+          setWaypoints(prev => {
+            const updated = prev.map(wp =>
+              wp.id === selectedWaypointId
+                ? { ...wp, images: updatedImages }
+                : wp
+            );
+            // Trigger auto-save to DB for deletion too
+            const dbId = dbWaypointIdsRef.current[selectedWaypointId];
+            if (dbId) {
+              const targetWp = updated.find(w => w.id === selectedWaypointId);
+              waypointsAPI.update(dbId, targetWp).catch(err => console.error('Auto-save failed on delete:', err));
+            }
+            return updated;
+          });
         }
 
-        setSnackbar({ open: true, message: 'Image deleted successfully', severity: 'success' });
+        setSnackbar({ open: true, message: 'Image deleted and changes saved', severity: 'success' });
       } catch (error) {
         console.error('Error deleting image:', error);
         setSnackbar({ open: true, message: 'Failed to delete image', severity: 'error' });
@@ -2484,117 +2665,43 @@ function App() {
     } else if (action === 'add') {
       // Handle image upload (multiple files)
       const files = Array.from(event.target.files || []);
-      console.log('[handleImageUpload] Files to upload:', files.length, files);
+      const targetWpId = selectedWaypointId;
 
-      if (files.length === 0) {
-        console.log('[handleImageUpload] No files selected');
-        return;
-      }
+      if (files.length === 0 || !targetWpId) return;
 
-      // Check if adding these files would exceed the limit
-      const currentCount = waypointData.images?.length || 0;
+      // Basic local validation (check both current images AND ones already in the upload queue)
       const maxImages = 10;
-      console.log('[handleImageUpload] Current images:', currentCount, 'Max:', maxImages);
+      const currentImages = waypoints.find(w => w.id === targetWpId)?.images?.length || 0;
+      const queuedImagesCount = uploadQueueRef.current
+        .filter(item => item.targetWpId === targetWpId)
+        .reduce((sum, item) => sum + item.files.length, 0);
 
-      if (currentCount + files.length > maxImages) {
-        setSnackbar({ open: true, message: `Maximum ${maxImages} images allowed`, severity: 'warning' });
+      if (currentImages + queuedImagesCount + files.length > maxImages) {
+        setSnackbar({
+          open: true,
+          message: `Maximum ${maxImages} images allowed. (${currentImages} existing, ${queuedImagesCount} in queue)`,
+          severity: 'warning'
+        });
         return;
       }
 
-      // Validate each file
-      const maxBytes = 10 * 1024 * 1024;
-      for (const file of files) {
-        if (!file.type || !file.type.startsWith('image/')) {
-          setSnackbar({ open: true, message: 'Only image files allowed', severity: 'error' });
-          return;
+      // Metadata for watermark
+      const deviceInfo = {
+        deviceName: navigator.userAgent.includes('Mobile') ? `${navigator.platform} Mobile` : navigator.platform,
+        browser: navigator.userAgent.split(' ').slice(-1)[0],
+        userName: user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown User'),
+        location: {
+          lat: waypointData.lat || 'N/A',
+          lng: waypointData.lng || 'N/A'
         }
-        if (file.size > maxBytes) {
-          setSnackbar({ open: true, message: `Image "${file.name}" is too large. Max size is 10MB`, severity: 'error' });
-          return;
-        }
-      }
+      };
 
-      // Prevent multiple uploads
-      if (imageUploading) {
-        console.log('[handleImageUpload] Upload already in progress');
-        return;
-      }
-      setImageUploading(true);
-      console.log('[handleImageUpload] Starting upload...');
+      // Push to background queue
+      uploadQueueRef.current.push({ files, targetWpId, deviceInfo });
+      showSnackbar(`Upload started for ${files.length} image(s)...`, 'info');
 
-      try {
-        // Compress images before upload
-        const imageCompression = (await import('browser-image-compression')).default;
-        const compressionOptions = {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-          fileType: 'image/jpeg'
-        };
-
-        const compressedFiles = await Promise.all(
-          files.map(async (file) => {
-            try {
-              console.log(`[Compression] Original size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-              const compressed = await imageCompression(file, compressionOptions);
-              console.log(`[Compression] Compressed size: ${(compressed.size / 1024 / 1024).toFixed(2)}MB`);
-              return compressed;
-            } catch (err) {
-              console.warn(`[Compression] Failed to compress ${file.name}, using original:`, err);
-              return file;
-            }
-          })
-        );
-
-        // Get device info for watermark
-        const deviceInfo = {
-          deviceName: navigator.userAgent.includes('Mobile')
-            ? `${navigator.platform} Mobile`
-            : navigator.platform,
-          browser: navigator.userAgent.split(' ').slice(-1)[0],
-          userName: user?.name || (user?.email ? user.email.split('@')[0] : 'Unknown User'),
-          location: {
-            lat: waypointData.lat || 'N/A',
-            lng: waypointData.lng || 'N/A'
-          }
-        };
-
-        // Upload all images with device info
-        const result = await uploadAPI.uploadMultipleImages(compressedFiles, deviceInfo);
-        console.log('[handleImageUpload] Upload successful:', result);
-
-        // Add to existing images
-        const updatedImages = [...(waypointData.images || []), ...result.images];
-        setWaypointData(prev => ({
-          ...prev,
-          images: updatedImages
-        }));
-
-        // Also update the waypoints array so it persists when switching waypoints
-        if (selectedWaypointId) {
-          setWaypoints(prev => prev.map(wp =>
-            wp.id === selectedWaypointId
-              ? { ...wp, images: updatedImages }
-              : wp
-          ));
-        }
-
-        setSnackbar({ open: true, message: `${result.count} image(s) uploaded successfully`, severity: 'success' });
-      } catch (error) {
-        console.error('[handleImageUpload] Error uploading images:', error);
-        console.error('[handleImageUpload] Error details:', error.message, error.stack);
-        if (error && error.message && error.message.toLowerCase().includes('authentication')) {
-          setLoginPromptOpen(true);
-          setSnackbar({ open: true, message: 'Please login to upload images', severity: 'error' });
-        } else if (error && error.message && error.message.toLowerCase().includes('networkerror')) {
-          setSnackbar({ open: true, message: 'Network error: Unable to reach upload server', severity: 'error' });
-        } else {
-          setSnackbar({ open: true, message: `Failed to upload images: ${error.message}`, severity: 'error' });
-        }
-      } finally {
-        setImageUploading(false);
-        console.log('[handleImageUpload] Upload process complete');
-      }
+      // Kick off queue processing
+      processUploadQueue();
     }
   };
 
@@ -3096,13 +3203,28 @@ function App() {
             updateSelectedMarkerOverlay(waypointId);
           }, 0);
 
-          // Update red circleMarker overlay since it's selected
-          setTimeout(() => {
-            updateSelectedMarkerOverlay(waypointId);
-          }, 0);
-
           return renamed;
         });
+
+        // Auto-save map click point to DB if authenticated (Side effect outside of state update)
+        if (isAuthenticated) {
+          const waypointPayload = {
+            name: `Point ${currentCount + 1}`,
+            lat: latlng.lat,
+            lng: latlng.lng,
+            notes: '',
+            images: [],
+            project_id: projectIdForNew,
+            project_name: projectIdForNew ? activeProject?.name : null,
+            elevation: coordinates.elevation || null
+          };
+
+          waypointsAPI.create(waypointPayload).then(saved => {
+            setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
+          }).catch(err => {
+            console.error('Error auto-saving clicked point:', err);
+          });
+        }
       };
 
       map.on('click', handleMapClick);

@@ -159,7 +159,6 @@ const ImageGallery = ({
                         multiple
                         style={{ display: 'none' }}
                         onChange={handleFileSelect}
-                        disabled={disabled}
                     />
                     <Button
                         variant="outlined"
@@ -167,7 +166,6 @@ const ImageGallery = ({
                         startIcon={disabled ? <CircularProgress color="inherit" size={16} /> : <CloudUpload />}
                         fullWidth
                         onClick={handleAddClick}
-                        disabled={disabled}
                         sx={{
                             py: 1.5,
                             borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
