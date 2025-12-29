@@ -26,8 +26,10 @@ export default function VerifyResetOTPPage() {
     const [resending, setResending] = useState(false);
     const [email, setEmail] = useState('');
 
+    const [consoleFallback, setConsoleFallback] = useState(location.state?.consoleFallback || false);
+
     useEffect(() => {
-        // Get email from navigation state
+        // Get email and fallback status from navigation state
         if (location.state?.email) {
             setEmail(location.state.email);
         } else {
@@ -84,14 +86,17 @@ export default function VerifyResetOTPPage() {
 
         try {
             const res = await authAPI.forgotPassword(email);
+            const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                const data = await res.json().catch(() => ({ error: 'Failed to resend' }));
                 throw new Error(data.error || 'Failed to resend OTP');
             }
 
-            setError('');
-            alert('A new OTP has been sent to your email');
+            if (data.consoleFallback !== undefined) {
+                setConsoleFallback(data.consoleFallback);
+            }
+
+            alert(data.message || 'A new OTP has been sent to your email');
 
         } catch (err) {
             console.error('Resend OTP error:', err);
@@ -183,6 +188,22 @@ export default function VerifyResetOTPPage() {
                         {email}
                     </Typography>
                 </Box>
+
+                {consoleFallback && (
+                    <Alert
+                        severity="info"
+                        sx={{
+                            mb: 3,
+                            borderRadius: "12px",
+                            "& .MuiAlert-icon": {
+                                fontSize: "24px",
+                            },
+                        }}
+                    >
+                        <strong>Development Mode:</strong> The email service is not configured.
+                        Please check the server console/logs for your password reset code.
+                    </Alert>
+                )}
 
                 {error && (
                     <Alert

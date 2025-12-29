@@ -26,8 +26,9 @@ export default function VerifyOTPPage() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Get email from navigation state
+    // Get email and fallback status from navigation state
     const email = location.state?.email || "";
+    const [consoleFallback, setConsoleFallback] = useState(location.state?.consoleFallback || false);
 
     useEffect(() => {
         if (isAuthenticated) navigate("/");
@@ -77,13 +78,17 @@ export default function VerifyOTPPage() {
 
         try {
             const res = await authAPI.resendOtp(email);
+            const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                const data = await res.json().catch(() => ({ error: 'Failed to resend OTP' }));
                 throw new Error(data.error || "Failed to resend OTP");
             }
 
-            setSuccess("New OTP sent to your email!");
+            if (data.consoleFallback !== undefined) {
+                setConsoleFallback(data.consoleFallback);
+            }
+
+            setSuccess(data.message || "New OTP sent to your email!");
         } catch (err) {
             console.error('Resend OTP error:', err);
             setError(err.message || "Failed to resend OTP. Please try again.");
@@ -181,6 +186,22 @@ export default function VerifyOTPPage() {
                         }}
                     >
                         {error}
+                    </Alert>
+                )}
+
+                {consoleFallback && (
+                    <Alert
+                        severity="info"
+                        sx={{
+                            mb: 3,
+                            borderRadius: "12px",
+                            "& .MuiAlert-icon": {
+                                fontSize: "24px",
+                            },
+                        }}
+                    >
+                        <strong>Development Mode:</strong> The email service is not configured.
+                        Please check the server console/logs for your OTP code.
                     </Alert>
                 )}
 

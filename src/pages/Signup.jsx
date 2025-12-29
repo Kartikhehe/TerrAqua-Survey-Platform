@@ -58,15 +58,13 @@ export default function SignupPage() {
 
       // Check if email verification is required
       if (signupData.requiresVerification) {
-        // Check if console fallback is active (domain not verified)
-        if (signupData.consoleFallback) {
-          // Show alert about console fallback
-          setError('⚠️ Email service not fully configured. Please contact the administrator to get your verification code from the server logs.');
-          return;
-        }
-
-        // Redirect to OTP verification page
-        navigate('/verify-otp', { state: { email: signupData.email || email } });
+        // Redirect to OTP verification page with fallback flag
+        navigate('/verify-otp', {
+          state: {
+            email: signupData.email || email,
+            consoleFallback: signupData.consoleFallback
+          }
+        });
         return;
       }
 
@@ -379,4 +377,3 @@ export default function SignupPage() {
     </Box>
   );
 }
-

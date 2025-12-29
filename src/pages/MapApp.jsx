@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+// import { Capacitor } from '@capacitor/core';
 import * as turf from '@turf/turf'
 import '../App.css'
 import L from 'leaflet'
@@ -724,44 +725,41 @@ function App() {
     }
 
     // Request background location permission on Android (dynamic import to avoid build errors)
-    // Request background location permission on Android (dynamic import to avoid build errors)
-    // try {
-    //   const { Capacitor } = await import('@capacitor/core');
+    /* try {
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+        try {
+          const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+          const permission = await BackgroundGeolocation.requestPermissions();
+          console.log('Background location permission:', permission);
 
-    //   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-    //     try {
-    //       const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
-    //       const permission = await BackgroundGeolocation.requestPermissions();
-    //       console.log('Background location permission:', permission);
+          if (permission?.location !== 'granted') {
+            // Show guidance to user
+            const userConfirmed = window.confirm(
+              "Background location access is required for continuous tracking.\n\n" +
+              "Please follow these steps:\n" +
+              "1. Tap 'Settings' when prompted\n" +
+              "2. Go to Permissions → Location\n" +
+              "3. Select 'Allow all the time'\n\n" +
+              "Tap OK to open settings, or Cancel to continue without background tracking."
+            );
 
-    //       if (permission?.location !== 'granted') {
-    //         // Show guidance to user
-    //         const userConfirmed = window.confirm(
-    //           "Background location access is required for continuous tracking.\n\n" +
-    //           "Please follow these steps:\n" +
-    //           "1. Tap 'Settings' when prompted\n" +
-    //           "2. Go to Permissions → Location\n" +
-    //           "3. Select 'Allow all the time'\n\n" +
-    //           "Tap OK to open settings, or Cancel to continue without background tracking."
-    //         );
-
-    //         if (userConfirmed) {
-    //           showSnackbar('Please enable "Allow all the time" in location permissions', 'warning');
-    //         } else {
-    //           showSnackbar('Background tracking may not work without "Allow all the time" permission', 'warning');
-    //         }
-    //       } else {
-    //         showSnackbar('Background location permission granted', 'success');
-    //       }
-    //     } catch (error) {
-    //       console.error('Error requesting background location permission:', error);
-    //       showSnackbar('Failed to request location permission', 'error');
-    //     }
-    //   }
-    // } catch (error) {
-    //   // Capacitor not available (web build), continue normally
-    //   console.log('Running on web, skipping native permission request');
-    // }
+            if (userConfirmed) {
+              showSnackbar('Please enable "Allow all the time" in location permissions', 'warning');
+            } else {
+              showSnackbar('Background tracking may not work without "Allow all the time" permission', 'warning');
+            }
+          } else {
+            showSnackbar('Background location permission granted', 'success');
+          }
+        } catch (error) {
+          console.error('Error requesting background location permission:', error);
+          showSnackbar('Failed to request location permission', 'error');
+        }
+      }
+    } catch (error) {
+      // Capacitor not available (web build), continue normally
+      console.log('Running on web, skipping native permission request');
+    } */
 
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
@@ -983,8 +981,8 @@ function App() {
       if (typeof watchPositionIdRef.current === 'string') {
         // Native watcher (string ID)
         try {
-          /* const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
-          await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current }); */
+          // const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+          // await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
         } catch (e) { console.error('Error stopping native watcher:', e); }
       } else if (navigator.geolocation) {
         // Web watcher (number ID)
@@ -1044,44 +1042,45 @@ function App() {
   const startNativeBackgroundTracking = async () => {
     await stopLocationWatcher(); // Clear existing
     startForegroundTracking();
-    // try {
-    //   const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+    /* try {
+      const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
 
-    //   // Check permissions gently
-    //   try {
-    //     const status = await BackgroundGeolocation.checkPermissions();
-    //     if (status.location !== 'granted') {
-    //       await BackgroundGeolocation.requestPermissions();
-    //     }
-    //   } catch (e) { console.warn('checkPermissions failed', e); }
+      // Check permissions gently
+      try {
+        const status = await BackgroundGeolocation.checkPermissions();
+        if (status.location !== 'granted') {
+          await BackgroundGeolocation.requestPermissions();
+        }
+      } catch (e) { console.warn('checkPermissions failed', e); }
 
-    //   const watcherId = await BackgroundGeolocation.addWatcher(
-    //     {
-    //       backgroundMessage: "Recording survey track...",
-    //       backgroundTitle: "TerrAqua",
-    //       requestPermissions: true,
-    //       stale: false,
-    //       distanceFilter: 2 // Update every 2 meters for recording
-    //     },
-    //     (location, error) => {
-    //       if (error) {
-    //         console.error('BackgroundGeolocation error:', error);
-    //         return;
-    //       }
-    //       handlePositionUpdate(location.latitude, location.longitude, location.accuracy, location.altitude);
-    //       setGpsActive(true);
-    //     }
-    //   );
-    //   watchPositionIdRef.current = watcherId;
-    //   console.log('Native Background Tracking active:', watcherId);
+      const watcherId = await BackgroundGeolocation.addWatcher(
+        {
+          backgroundMessage: "Recording survey track...",
+          backgroundTitle: "TerrAqua",
+          requestPermissions: true,
+          stale: false,
+          distanceFilter: 2 // Update every 2 meters for recording
+        },
+        (location, error) => {
+          if (error) {
+            console.error('BackgroundGeolocation error:', error);
+            return;
+          }
+          handlePositionUpdate(location.latitude, location.longitude, location.accuracy, location.altitude);
+          setGpsActive(true);
+        }
+      );
+      watchPositionIdRef.current = watcherId;
+      console.log('Native Background Tracking active:', watcherId);
 
-    //   // Fallback for dev mode
-    //   startForegroundTracking();
+      // Fallback for dev mode
+      startForegroundTracking();
 
-    // } catch (e) {
-    //   console.error('Failed to start native background tracking, falling back to foreground:', e);
-    //   startForegroundTracking();
-    // }
+    } catch (e) {
+      console.error('Failed to start native background tracking, falling back to foreground:', e);
+      startForegroundTracking();
+    } */
+    startForegroundTracking();
   };
 
   // GPS Tracking Functions (using GPSTracker class)
@@ -1091,7 +1090,6 @@ function App() {
 
       // If Native, switch to Background Tracking Mode
       // try {
-      //   const { Capacitor } = await import('@capacitor/core');
       //   if (Capacitor.isNativePlatform()) {
       //     console.log('[GPS] Switching to Native Background Mode');
       //     await startNativeBackgroundTracking();
@@ -1132,7 +1130,6 @@ function App() {
 
         // If Native, revert to Foreground Tracking Mode
         // try {
-        //   const { Capacitor } = await import('@capacitor/core');
         //   if (Capacitor.isNativePlatform()) {
         //     console.log('[GPS] Reverting to Foreground Mode');
         //     await startForegroundTracking();
