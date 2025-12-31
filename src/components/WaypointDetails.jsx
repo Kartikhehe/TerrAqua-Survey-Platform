@@ -22,11 +22,7 @@ import { CircularProgress } from '@mui/material';
 import ImageGallery from './ImageGallery';
 import ImageViewerDialog from './ImageViewerDialog';
 
-// Default location to use when GPS is unavailable
-const DEFAULT_LOCATION = {
-  lat: 26.516654,
-  lng: 80.231507
-};
+
 
 const WaypointDetails = React.forwardRef(function WaypointDetails({
   selectedWaypointId,
@@ -48,6 +44,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
   currentLocationId = null,
   canSaveDuringProject = true,
   onCollapseBottomSheet = null, // Function to collapse bottom sheet on mobile
+  isMobile = false, // Indicates if mobile layout should be used
 }, ref) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -109,15 +106,15 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         },
         (error) => {
           console.error('Error getting current location:', error);
-          // Fallback to using passed currentLocation if available, otherwise use default location
+          // Fallback to using passed currentLocation if available
           let fallbackLat, fallbackLng;
           if (currentLocation && currentLocation.lat && currentLocation.lng) {
             fallbackLat = parseFloat(currentLocation.lat);
             fallbackLng = parseFloat(currentLocation.lng);
           } else {
-            // Use default location when GPS fails and no currentLocation is available
-            fallbackLat = DEFAULT_LOCATION.lat;
-            fallbackLng = DEFAULT_LOCATION.lng;
+            // No location available
+            handleClose();
+            return;
           }
 
           const currentLocationWaypoint = {
@@ -142,9 +139,9 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         fallbackLat = parseFloat(currentLocation.lat);
         fallbackLng = parseFloat(currentLocation.lng);
       } else {
-        // Use default location when geolocation is not available
-        fallbackLat = DEFAULT_LOCATION.lat;
-        fallbackLng = DEFAULT_LOCATION.lng;
+        // No location available
+        handleNavigateClose();
+        return;
       }
 
       const currentLocationWaypoint = {
@@ -202,56 +199,51 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
         elevation={0}
         sx={{
           position: 'fixed',
-          right: { xs: 0, sm: '1.5rem' },
-          bottom: { xs: 0, sm: '10rem', md: '10rem' },
-          left: {
-            xs: 0,
-            sm: 'auto'
-          },
-          width: {
-            xs: '100%',
-            sm: '19.25rem',
-            md: '22.96875rem'
-          },
-          maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
-          maxHeight: { xs: 'none', sm: 'calc(100vh - 12.5rem)', md: 'calc(100vh - 15.5rem)' },
-          p: { xs: 0, sm: 1.75, md: 2.625 },
-          pt: { xs: 0, sm: 1.75, md: 2.625 },
-          borderRadius: { xs: '24px 24px 0 0', sm: '0.875rem' },
+          right: isMobile ? 0 : '1.5rem',
+          bottom: isMobile ? 0 : '10rem',
+          left: isMobile ? 0 : 'auto',
+          width: isMobile ? '100%' : '19.25rem',
+          maxWidth: isMobile ? '100%' : '90vw',
+          maxHeight: isMobile ? 'none' : 'calc(100vh - 12.5rem)',
+          p: isMobile ? 0 : 1.75,
+          pt: isMobile ? 0 : 1.75,
+          borderRadius: isMobile ? '24px 24px 0 0' : '0.875rem',
           overflow: 'hidden',
           backgroundColor: theme.palette.background.paper,
-          boxShadow: {
-            xs: theme.palette.mode === 'dark'
+          boxShadow: isMobile
+            ? theme.palette.mode === 'dark'
               ? '0 8px 18px rgba(0, 0, 0, 0.35)'
-              : '0 8px 18px rgba(0, 0, 0, 0.18)',
-            sm: theme.palette.mode === 'dark'
+              : '0 8px 18px rgba(0, 0, 0, 0.18)'
+            : theme.palette.mode === 'dark'
               ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
               : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
-          },
-          border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
-          zIndex: {
-            xs: theme.zIndex.drawer + 3, // keep below LiveCoordinates to avoid shadow on it
-            sm: theme.zIndex.drawer + 3,
-          },
+          border: isMobile ? 'none' : `1px solid ${theme.palette.divider}`,
+          zIndex: theme.zIndex.drawer + 3,
           display: 'flex',
           flexDirection: 'column',
-          gap: { xs: 1.5, sm: 2 },
+          gap: isMobile ? 1.5 : 2,
           overflowX: 'hidden',
-          overflowY: { xs: 'visible', sm: 'hidden' },
-          WebkitOverflowScrolling: { xs: 'auto', sm: 'auto' },
-          scrollbarWidth: { xs: 'thin', sm: 'auto' }, // Firefox - keep scrollbar visible
-          scrollbarColor: { xs: '#9e9e9e #e0e0e0', sm: 'auto' },
+          overflowY: isMobile ? 'visible' : 'hidden',
+          WebkitOverflowScrolling: 'auto',
+          scrollbarWidth: isMobile ? 'thin' : 'auto',
+          scrollbarColor: isMobile ? '#9e9e9e #e0e0e0' : 'auto',
           '&::-webkit-scrollbar': {
-            width: { xs: '8px', sm: '0px' },
-            backgroundColor: { xs: '#e0e0e0', sm: 'transparent' },
+            width: isMobile ? '8px' : '0px',
+            backgroundColor: isMobile ? '#e0e0e0' : 'transparent',
           },
           '&::-webkit-scrollbar-track': {
-            backgroundColor: { xs: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5', sm: 'transparent' },
+            backgroundColor: isMobile
+              ? theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5'
+              : 'transparent',
           },
           '&::-webkit-scrollbar-thumb': {
-            backgroundColor: { xs: theme.palette.mode === 'dark' ? '#9e9e9e' : '#9e9e9e', sm: 'transparent' },
+            backgroundColor: isMobile
+              ? theme.palette.mode === 'dark' ? '#9e9e9e' : '#9e9e9e'
+              : 'transparent',
             borderRadius: '999px',
-            border: { xs: theme.palette.mode === 'dark' ? '2px solid #2a2a2a' : '2px solid #f5f5f5', sm: 'none' },
+            border: isMobile
+              ? theme.palette.mode === 'dark' ? '2px solid #2a2a2a' : '2px solid #f5f5f5'
+              : 'none',
           },
           transform: 'translateZ(0)',
           willChange: 'transform',
@@ -267,7 +259,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           <Box
             onClick={onCollapseBottomSheet}
             sx={{
-              display: { xs: 'flex', sm: 'none' },
+              display: isMobile ? 'flex' : 'none',
               justifyContent: 'center',
               alignItems: 'center',
               width: '100%',
@@ -294,9 +286,9 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          mb: { xs: 0.5, sm: 1 },
-          mt: { xs: 0, sm: 0 },
-          px: { xs: 1.5, sm: 0 },
+          mb: isMobile ? 0.5 : 1,
+          mt: 0,
+          px: isMobile ? 1.5 : 0,
           flexShrink: 0,
           position: 'relative',
           zIndex: 1,
@@ -304,7 +296,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           <Typography
             variant="h6"
             sx={{
-              fontSize: { xs: '1.05rem', sm: '0.875rem', md: '0.9625rem' },
+              fontSize: isMobile ? '1.05rem' : '0.875rem',
               fontWeight: 600,
               color: theme.palette.text.primary,
             }}
@@ -318,8 +310,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               color: theme.palette.text.secondary,
               backgroundColor: theme.palette.action.hover,
               borderRadius: '50%',
-              width: { xs: '1.53125rem', sm: '1.75rem' },
-              height: { xs: '1.53125rem', sm: '1.75rem' },
+              width: isMobile ? '1.53125rem' : '1.75rem',
+              height: isMobile ? '1.53125rem' : '1.75rem',
               '&:hover': {
                 backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
               },
@@ -333,13 +325,13 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
           sx={{
             display: 'flex',
             flexDirection: 'column',
-            gap: { xs: 1.5, sm: 2 },
+            gap: isMobile ? 1.5 : 2,
             flex: 1,
             overflow: 'auto',
             minHeight: 0,
-            px: { xs: 1.5, sm: 0 },
+            px: isMobile ? 1.5 : 0,
             pt: '10px',
-            pb: { xs: 5, sm: '10px' },
+            pb: isMobile ? 5 : '10px',
           }}
         >
           <TextField
@@ -349,7 +341,7 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
             fullWidth
             size="small"
             placeholder="Enter waypoint name"
-            disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
+            disabled={false}
             sx={{
               '& .MuiOutlinedInput-root': {
                 fontSize: { xs: '1rem', sm: '0.875rem' },
@@ -516,8 +508,8 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
 
           />
 
-          <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', gap: { xs: 1, sm: 1.5, md: 2 }, flexWrap: { xs: 'nowrap', sm: 'wrap' } }}>
+          <Box sx={{ display: 'flex', gap: isMobile ? 1.5 : 2, flexDirection: 'column' }}>
+            <Box sx={{ display: 'flex', gap: isMobile ? 1 : 1.5, flexWrap: 'nowrap' }}>
               <Button
                 variant="contained"
                 startIcon={<Save />}
@@ -525,12 +517,12 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 disabled={!canSaveDuringProject}
                 title={!canSaveDuringProject ? 'Only current location or project points can be saved during survey' : undefined}
                 sx={{
-                  flex: { xs: 2, sm: 1 }, // 50% on mobile, equal on desktop
-                  py: { xs: 1.25, sm: 1.5 },
-                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
+                  flex: isMobile ? 2 : 1,
+                  py: isMobile ? 1.25 : 1.5,
+                  borderRadius: isMobile ? '0.65625rem' : '0.765625rem',
                   backgroundColor: '#0891B2',
                   textTransform: 'none',
-                  fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
+                  fontSize: isMobile ? '0.9rem' : '0.7875rem',
                   boxShadow: '0 0.109375rem 0.4375rem rgba(8, 145, 178, 0.3)',
                   '&:hover': {
                     backgroundColor: '#0E7490',
@@ -546,11 +538,11 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 onClick={handleNavigateClick}
                 disabled={isProjectMode || Boolean(waypointData?.followsLive)}
                 sx={{
-                  flex: { xs: 1, sm: 'initial' }, // 25% on mobile, auto on desktop
-                  py: { xs: 1.25, sm: 1.5 },
-                  minWidth: { xs: 'auto', sm: '7.5rem' },
-                  borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                  fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
+                  flex: isMobile ? 1 : 'initial',
+                  py: isMobile ? 1.25 : 1.5,
+                  minWidth: isMobile ? 'auto' : '7.5rem',
+                  borderRadius: isMobile ? '0.65625rem' : '0.765625rem',
+                  fontSize: isMobile ? '0.9rem' : '0.7875rem',
                   borderColor: theme.palette.divider,
                   color: theme.palette.text.primary,
                   backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',
@@ -567,10 +559,10 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
                 variant="outlined"
                 startIcon={<Delete />}
                 onClick={handleDeleteClick}
-                disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
+                disabled={false}
                 sx={{
-                  display: { xs: 'flex', sm: 'none' }, // Show on mobile only in this row
-                  flex: 1, // 25% on mobile
+                  display: isMobile ? 'flex' : 'none',
+                  flex: 1,
                   py: 1.25,
                   minWidth: 'auto',
                   borderRadius: '0.65625rem',
@@ -598,13 +590,13 @@ const WaypointDetails = React.forwardRef(function WaypointDetails({
               variant="outlined"
               startIcon={<Delete />}
               onClick={handleDeleteClick}
-              disabled={waypointData.name && waypointData.name.trim().toLowerCase() === 'default location'}
+              disabled={false}
               fullWidth
               sx={{
-                display: { xs: 'none', sm: 'flex' }, // Hide on mobile, show on sm and up
-                py: { xs: 1.25, sm: 1.5 },
-                borderRadius: { xs: '0.65625rem', sm: '0.765625rem', md: '0.875rem' },
-                fontSize: { xs: '0.9rem', sm: '0.7875rem', md: '0.875rem' },
+                display: isMobile ? 'none' : 'flex',
+                py: isMobile ? 1.25 : 1.5,
+                borderRadius: isMobile ? '0.65625rem' : '0.765625rem',
+                fontSize: isMobile ? '0.9rem' : '0.7875rem',
                 borderColor: '#9E9E9E',
                 color: '#616161',
                 backgroundColor: theme.palette.mode === 'dark' ? '#2a2a2a' : '#f5f5f5',

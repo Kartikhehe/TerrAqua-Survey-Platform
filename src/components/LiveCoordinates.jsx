@@ -1,41 +1,30 @@
 import React from 'react';
-import { Box, Paper, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Paper, Typography, useTheme, useMediaQuery, IconButton, Tooltip } from '@mui/material';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
-const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates, sidebarOpen = false }, ref) {
+const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates, sidebarOpen = false, onCopySuccess, isMobile }, ref) {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
     <Paper
       elevation={0}
       sx={{
         position: 'fixed',
-        bottom: { xs: '0', sm: '1.5rem' },
-        right: { xs: 0, sm: '1.5rem' },
-        left: {
-          xs: 0,
-          sm: 'auto'
-        },
-        width: {
-          xs: '100%',
-          sm: '19.25rem',
-          md: '22.96875rem'
-        },
-        maxWidth: { xs: '100%', sm: '90vw', md: '22.96875rem' },
-        p: { xs: '0.75rem 1rem', sm: 1.75, md: 2.625 },
-        borderRadius: { xs: 0, sm: '0.875rem' },
+        bottom: isMobile ? '0' : '1.5rem',
+        right: isMobile ? 0 : '1.5rem',
+        left: isMobile ? 0 : 'auto',
+        width: isMobile ? '100%' : '19.25rem',
+        maxWidth: isMobile ? '100%' : '90vw',
+        p: isMobile ? '0.75rem 1rem' : 1.75,
+        borderRadius: isMobile ? 0 : '0.875rem',
         backgroundColor: theme.palette.background.paper,
-        boxShadow: {
-          xs: 'none',
-          sm: theme.palette.mode === 'dark'
+        boxShadow: isMobile
+          ? 'none'
+          : theme.palette.mode === 'dark'
             ? '0 0.25rem 0.75rem rgba(0, 0, 0, 0.5)'
             : '0 0.25rem 0.75rem rgba(0, 0, 0, 0.1)',
-        },
-        border: { xs: 'none', sm: `1px solid ${theme.palette.divider}` },
-        zIndex: {
-          xs: theme.zIndex.drawer + 4,
-          sm: theme.zIndex.drawer + 2,
-        },
+        border: isMobile ? 'none' : `1px solid ${theme.palette.divider}`,
+        zIndex: isMobile ? theme.zIndex.drawer + 4 : theme.zIndex.drawer + 2,
         transform: 'translateZ(0)',
         willChange: 'transform',
         display: 'flex',
@@ -99,6 +88,25 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
                 LONG {coordinates.lng}
               </Typography>
             </Box>
+            <IconButton
+              size="small"
+              onClick={() => {
+                const text = `${coordinates.lat}, ${coordinates.lng}`;
+                navigator.clipboard.writeText(text);
+                if (onCopySuccess) onCopySuccess('Coordinates copied to clipboard');
+              }}
+              sx={{
+                p: 0.5,
+                color: '#0891B2',
+                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(8, 145, 178, 0.1)' : 'rgba(8, 145, 178, 0.05)',
+                '&:hover': {
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(8, 145, 178, 0.2)' : 'rgba(8, 145, 178, 0.12)',
+                }
+              }}
+              title="Copy Coordinates"
+            >
+              <ContentCopyOutlinedIcon sx={{ fontSize: '1.2rem' }} />
+            </IconButton>
           </Box>
         </>
       ) : (
@@ -123,6 +131,25 @@ const LiveCoordinates = React.forwardRef(function LiveCoordinates({ coordinates,
             >
               Live Coordinates
             </Typography>
+            <Tooltip title="Copy lat,long">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  const text = `${coordinates.lat},${coordinates.lng}`;
+                  navigator.clipboard.writeText(text);
+                  if (onCopySuccess) onCopySuccess('Coordinates copied to clipboard');
+                }}
+                sx={{
+                  color: '#0891B2',
+                  p: 0.5,
+                  '&:hover': {
+                    backgroundColor: 'rgba(8, 145, 178, 0.08)',
+                  }
+                }}
+              >
+                <ContentCopyOutlinedIcon sx={{ fontSize: '1.1rem' }} />
+              </IconButton>
+            </Tooltip>
           </Box>
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { sm: 2 }, flex: 1, overflow: 'auto', minHeight: 0 }}>

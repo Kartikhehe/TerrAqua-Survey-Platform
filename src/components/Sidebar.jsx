@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Drawer,
   List,
@@ -29,6 +29,7 @@ import {
   SatelliteAlt as SatelliteAltIcon,
   Map as MapIcon,
   Logout as LogoutIcon,
+  Login as LoginIcon,
   Settings as SettingsIcon,
   DarkMode,
   LightMode,
@@ -93,6 +94,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
     handleSettingsClose();
   };
 
+  // Close settings menu if sidebar is closed/collapsed
+  useEffect(() => {
+    if (!sidebarOpen && settingsOpen) {
+      handleSettingsClose();
+    }
+  }, [sidebarOpen, settingsOpen]);
+
 
 
   const menuItems = [
@@ -136,9 +144,12 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
           },
         }}
         sx={(theme) => ({
-          width: sidebarOpen
-            ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
-            : { xs: drawerCollapsedWidth.xs, sm: drawerCollapsedWidth.sm },
+          width: isMobile
+            ? (sidebarOpen ? drawerWidth.xs : 0)
+            : (sidebarOpen
+              ? { xs: drawerWidth.xs, sm: drawerWidth.sm, md: drawerWidth.md }
+              : { xs: drawerCollapsedWidth.xs, sm: drawerCollapsedWidth.sm }),
+          display: isMobile && !sidebarOpen ? 'none' : 'block',
           flexShrink: 0,
           whiteSpace: 'nowrap',
           '& .MuiDrawer-paper': {
@@ -160,8 +171,8 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
             height: { xs: 'calc(100vh - 4rem)', sm: 'calc(100vh - 3.5rem)' },
             position: 'fixed',
             left: 0,
-            zIndex: isMobile ? theme.zIndex.drawer + 20 : theme.zIndex.drawer,
-            display: 'flex',
+            zIndex: isMobile ? theme.zIndex.modal + 10 : theme.zIndex.drawer,
+            display: (isMobile && !sidebarOpen) ? 'none' : 'flex',
             flexDirection: 'column',
           },
         })}
@@ -194,7 +205,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                 backgroundColor: theme.palette.mode === 'dark' ? '#3a3a3a' : '#e0e0e0',
               },
               '& .MuiSvgIcon-root': {
-                fontSize: { xs: '2rem', sm: '1.25rem' },
+                fontSize: isMobile ? '1.5rem' : '1.25rem',
               },
             }}
             size="small"
@@ -221,11 +232,11 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                     }
                   }}
                   sx={{
-                    mx: { xs: 0.65625, sm: 0.875 },
-                    borderRadius: { xs: 0, sm: '0.765625rem', md: '0.875rem' },
+                    mx: isMobile ? 1 : 0.875,
+                    borderRadius: isMobile ? '0.65625rem' : '0.765625rem',
                     justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                    minHeight: { xs: '3.75rem', sm: '2.625rem' },
-                    py: { xs: 1.25, sm: 0.5 },
+                    minHeight: isMobile ? '3.25rem' : '2.625rem',
+                    py: isMobile ? 1 : 0.5,
                     '&:hover': {
                       backgroundColor: theme.palette.action.hover,
                     },
@@ -242,13 +253,13 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                   <ListItemIcon
                     sx={{
                       color: sidebarOpen ? '#0891B2' : theme.palette.text.secondary,
-                      minWidth: sidebarOpen ? { xs: '2.75rem', sm: '2.1875rem' } : 'auto',
+                      minWidth: sidebarOpen ? (isMobile ? '2.75rem' : '2.5rem') : 'auto',
                       justifyContent: 'center',
                       '& .Mui-selected': {
                         color: '#0891B2',
                       },
                       '& .MuiSvgIcon-root': {
-                        fontSize: { xs: '1.75rem', sm: '1.25rem' },
+                        fontSize: isMobile ? '1.5rem' : '1.25rem',
                       },
                     }}
                   >
@@ -260,7 +271,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                       primaryTypographyProps={{
                         fontWeight: 600,
                         color: theme.palette.text.primary,
-                        fontSize: { xs: '1.125rem', sm: '0.8rem', md: '0.83125rem' },
+                        fontSize: isMobile ? '0.9rem' : '0.8rem',
                       }}
                     />
                   )}
@@ -298,7 +309,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                     sx={{
                       fontWeight: 600,
                       color: 'text.primary',
-                      fontSize: '0.875rem',
+                      fontSize: '0.95rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
@@ -323,7 +334,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                   variant="caption"
                   sx={{
                     color: 'text.secondary',
-                    fontSize: '0.75rem',
+                    fontSize: '0.8rem',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -334,7 +345,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                 </Typography>
               </Box>
             </Box>
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <Button
                 fullWidth
                 variant="outlined"
@@ -345,10 +356,29 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
                   textTransform: 'none',
                   borderRadius: 2,
                   py: 0.75,
-                  fontSize: '0.875rem',
+                  fontSize: '0.95rem',
                 }}
               >
                 Logout
+              </Button>
+            ) : (
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<LoginIcon />}
+                onClick={() => navigate('/login')}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  py: 0.75,
+                  fontSize: '0.95rem',
+                  backgroundColor: '#0891B2',
+                  '&:hover': {
+                    backgroundColor: '#0E7490',
+                  },
+                }}
+              >
+                Login
               </Button>
             )}
           </Box>
@@ -359,6 +389,7 @@ function Sidebar({ sidebarOpen, onToggle, isMobile, onMenuItemClick, satelliteHy
           anchorEl={settingsAnchorEl}
           open={settingsOpen}
           onClose={handleSettingsClose}
+          sx={{ zIndex: (theme) => theme.zIndex.tooltip + 1000 }}
           anchorOrigin={{
             vertical: 'top',
             horizontal: 'right',

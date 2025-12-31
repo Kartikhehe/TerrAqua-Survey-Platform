@@ -2,9 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Box, Paper, Typography, IconButton, useTheme, useMediaQuery, Menu, MenuItem, ListItemText } from '@mui/material';
 import { ChevronLeft, ChevronRight, ExpandMore } from '@mui/icons-material';
 
-function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
+function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint, isMobile }) {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const scrollContainerRef = useRef(null);
   const truncate = (s, n = 14) => {
     if (!s) return '';
@@ -77,10 +76,10 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
           elevation={0}
           sx={{
             position: 'fixed',
-            top: '8.1375rem',
+            top: isMobile ? '8.4375rem' : '4.375rem',
             left: '50%',
             transform: 'translateX(-50%)',
-            maxWidth: { xs: '25vw', sm: '30vw' },
+            maxWidth: isMobile ? '25vw' : '30vw',
             px: 0.875,
             py: 0.65625,
             borderRadius: '0.65625rem',
@@ -117,7 +116,7 @@ function WaypointSelector({ waypoints, selectedWaypointId, onSelectWaypoint }) {
             sx: {
               maxHeight: '400px',
               width: 'calc(100vw - 2rem)',
-              maxWidth: { xs: '200px', sm: '300px' },
+              maxWidth: isMobile ? '200px' : '300px',
               mt: 1,
               borderRadius: '0.65625rem',
               backgroundColor: theme.palette.background.paper,

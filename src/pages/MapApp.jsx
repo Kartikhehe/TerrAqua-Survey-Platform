@@ -87,6 +87,9 @@ function App() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [dbWaypointIds, setDbWaypointIds] = useState({}); // Map local waypoint IDs to database IDs
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const showSnackbar = useCallback((message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
   const [imageUploading, setImageUploading] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('themeMode');
@@ -123,11 +126,20 @@ function App() {
   const [satelliteHybridMode, setSatelliteHybridMode] = useState(true); // Satellite hybrid view mode
   const [crsConverterOpen, setCrsConverterOpen] = useState(false); // CRS Converter dialog state
   const [measureActive, setMeasureActive] = useState(false);
+  const [activeMeasureMode, setActiveMeasureMode] = useState(null); // 'polygon' or 'polyline'
   const [hasMeasureSelection, setHasMeasureSelection] = useState(false);
   const measurementLabelsRef = useRef(new L.LayerGroup());
   const drawControlRef = useRef(null);
+  const measureHandlerRef = useRef(null);
   const drawnItemsRef = useRef(null);
-  const [defaultLocation, setDefaultLocation] = useState(INDIA_CENTER);
+  const gestureStateRef = useRef({
+    isTouchMoving: false,
+    lastInteractionTime: 0,
+    touchStartPos: null,
+    touchStartTime: 0,
+    touchCountOnStart: 0
+  });
+
 
   // GPS Tracking (using GPSTracker class)
   const gpsTrackerRef = useRef(null); // Reference to GPSTracker instance
@@ -186,109 +198,85 @@ function App() {
     }
   };
 
-  const handleMapLocate = () => {
+  const handleMapLocate = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Use current coordinates if they are already available (even with lower accuracy)
+    const lat = typeof coordinates.lat === 'string' ? parseFloat(coordinates.lat) : coordinates.lat;
+    const lng = typeof coordinates.lng === 'string' ? parseFloat(coordinates.lng) : coordinates.lng;
+
+    if (lat !== 0 && lng !== 0) {
+      map.flyTo([lat, lng], 19, {
+        animate: true,
+        duration: 2.0 // Slightly faster animation
+      });
+      // No snackbar here for "without any delay" feel as per previous request if possible, 
+      // but user asked for center so we give a small confirmation.
+      return;
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          const accuracy = position.coords.accuracy || 0;
-          const map = mapRef.current;
-
-          if (map) {
-            map.flyTo([latitude, longitude], 15, {
-              animate: true,
-              duration: 1.5
-            });
-
-            // Activate survey mode if not already active to allow waypoint insertion
-            setSinglePointCaptureActive(prev => (!prev ? true : prev));
-            setPreviewModeActive(false);
-
-            // Brief delay to ensure state updates if we were in a different mode
-            setTimeout(() => {
-              const waypointId = `waypoint-${Date.now()}`;
-              const latlng = [latitude, longitude];
-
-              const newWaypoint = {
-                id: waypointId,
-                lat: latitude,
-                lng: longitude,
-                name: 'My Location',
-                notes: '',
-                images: []
-              };
-
-              // Add to state and refs
-              setWaypoints(prev => [...prev, newWaypoint]);
-
-              const marker = L.marker(latlng).addTo(map);
-              marker.on('click', (e) => {
-                e.originalEvent?.stopPropagation?.();
-                handleSelectWaypoint(waypointId);
-              });
-              markersRef.current[waypointId] = marker;
-
-              setCoordinates({
-                lat: latitude.toFixed(6),
-                lng: longitude.toFixed(6),
-                accuracy: accuracy.toFixed(1),
-                elevation: position.coords.altitude ? position.coords.altitude.toFixed(1) : null
-              });
-
-              setSelectedWaypointId(waypointId);
-              setWaypointData({
-                name: 'My Location',
-                lat: latitude.toFixed(6),
-                lng: longitude.toFixed(6),
-                notes: '',
-                images: []
-              });
-              setWaypointDetailsOpen(true);
-
-              // Auto-save My Location to DB if authenticated
-              if (isAuthenticated) {
-                const waypointPayload = {
-                  name: 'My Location',
-                  lat: latitude,
-                  lng: longitude,
-                  notes: '',
-                  images: [],
-                  elevation: position.coords.altitude || null,
-                  project_id: isProjectMode ? activeProject?.id : null,
-                  project_name: isProjectMode ? activeProject?.name : null
-                };
-
-                waypointsAPI.create(waypointPayload).then(saved => {
-                  setDbWaypointIds(prev => ({ ...prev, [waypointId]: saved.id }));
-                  showSnackbar('Location saved to database!', 'success');
-                }).catch(err => {
-                  console.error('Error auto-saving My Location:', err);
-                });
-              }
-
-              showSnackbar(`Location found! Accuracy: ${Math.round(accuracy)}m`, 'success');
-            }, 500); // Increased delay slightly to allow flyTo to progress
-          }
+          map.flyTo([latitude, longitude], 18, {
+            animate: true,
+            duration: 1.0
+          });
         },
         (error) => {
           console.error('Geolocation error:', error);
           showSnackbar('Unable to get your location. Please check GPS settings.', 'error');
           setGpsWarningOpen(true);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 } // Don't look for too much accuracy/freshness
       );
     } else {
       showSnackbar('Geolocation is not supported by your browser', 'error');
     }
-  };
+  }, [coordinates, showSnackbar]);
   const liveCoordsRef = useRef(null); // Measure live coordinates card height (mobile)
   const waypointDetailsRef = useRef(null); // Measure waypoint details card height (mobile)
   const [mapDynamicHeight, setMapDynamicHeight] = useState(null);
   const theme = createAppTheme(darkMode ? 'dark' : 'light');
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Detect orientation
+  const [isPortrait, setIsPortrait] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerHeight > window.innerWidth;
+  });
+
+  // Detect if screen is mobile-sized (small screens)
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Detect if screen is tablet-sized in portrait (md and below in portrait)
+  const isTabletPortrait = useMediaQuery(theme.breakpoints.down('md')) && isPortrait;
+
+  // Treat both small screens and tablets in portrait as "mobile" for UI purposes
+  const isMobile = isSmallScreen || isTabletPortrait;
+
+  // Show landscape warning for small screens in landscape mode
+  const showLandscapeWarning = isSmallScreen && !isPortrait;
+
   const { isAuthenticated, user } = useAuth();
   const [bottomSheetExpanded, setBottomSheetExpanded] = useState(false);
   const bottomSheetRef = useRef(null);
+
+  // Update orientation on window resize
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleOrientationChange);
+    window.addEventListener('orientationchange', handleOrientationChange);
+
+    return () => {
+      window.removeEventListener('resize', handleOrientationChange);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
+  }, []);
 
   useEffect(() => {
     setProjectBarExpanded(isMobile ? false : true);
@@ -492,9 +480,7 @@ function App() {
     window.location.reload();
   };
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
+
 
   // Start Survey handlers
   const handleStartSurveyNew = async (project) => {
@@ -1004,13 +990,27 @@ function App() {
           handlePositionUpdate(latitude, longitude, accuracy, altitude);
           setGpsActive(true);
 
-          // Initial center if needed (only on very first load logic, but here we just ensure marker)
-          // If map is empty or uninitialized, might need check.
-          try {
-            if (mapRef.current && !gpsActive) {
-              mapRef.current.setView([latitude, longitude], 15);
+          // Initial center on first GPS position
+          setTimeout(() => {
+            try {
+              if (mapRef.current) {
+                const currentZoom = mapRef.current.getZoom();
+                console.log(`[GPS] Auto-navigate check: current zoom = ${currentZoom}`);
+                // Only auto-navigate if map is still at initial zoom (5) or lower
+                if (currentZoom <= 5) {
+                  console.log(`[GPS] Auto-navigating to location: [${latitude}, ${longitude}] at zoom 19`);
+                  mapRef.current.flyTo([latitude, longitude], 19, {
+                    duration: 1.5,
+                    easeLinearity: 0.5
+                  });
+                } else {
+                  console.log(`[GPS] Skipping auto-navigate - user has manually zoomed to ${currentZoom}`);
+                }
+              }
+            } catch (e) {
+              console.error('[GPS] Error during auto-navigate:', e);
             }
-          } catch (e) { }
+          }, 100);
 
           // Watch
           watchPositionIdRef.current = navigator.geolocation.watchPosition(
@@ -1548,30 +1548,349 @@ function App() {
     if (!mapRef.current) return;
     setSinglePointCaptureActive(false);
     setLocationSelectionActive(false);
-    const polygonHandler = new L.Draw.Polygon(mapRef.current, {
-      shapeOptions: {
-        color: '#0891B2',
-        fillOpacity: 0.2,
-        weight: 3
+
+    if (measureHandlerRef.current) {
+      measureHandlerRef.current.disable();
+    }
+
+    const map = mapRef.current;
+
+    // Create custom polygon measurement object instead of using L.Draw.Polygon
+    // This gives us complete control - no automatic click handling
+    const customPolygonMeasurement = {
+      _map: map,
+      _vertices: [], // Store vertices manually
+      _polyline: null, // Visual feedback line
+      _markers: [], // Vertex markers
+      _clickHandler: null, // Store click handler for cleanup
+      enabled: true,
+
+      // Method to add vertex (called from + button or validated map click)
+      addVertex: function (latlng) {
+        console.log('[Measure] Adding vertex manually:', latlng);
+        this._vertices.push(latlng);
+
+        // Add marker at vertex
+        const marker = L.circleMarker(latlng, {
+          radius: 5,
+          color: '#0891B2',
+          fillColor: '#fff',
+          fillOpacity: 1,
+          weight: 2
+        }).addTo(map);
+        this._markers.push(marker);
+
+        // Update polyline
+        if (!this._polyline) {
+          this._polyline = L.polyline(this._vertices, {
+            color: '#0891B2',
+            weight: 3,
+            fillOpacity: 0.2
+          }).addTo(map);
+        } else {
+          this._polyline.setLatLngs(this._vertices);
+        }
+      },
+
+      // Complete the polygon
+      completeShape: function() {
+        if (this._vertices.length < 3) {
+          showSnackbar('Need at least 3 points to create a polygon', 'warning');
+          return;
+        }
+        
+        // Create final polygon
+        const polygon = L.polygon(this._vertices, {
+          color: '#0891B2',
+          fillOpacity: 0.2,
+          weight: 3
+        });
+        
+        // Calculate area using turf
+        const geojson = polygon.toGeoJSON();
+        const area = turf.area(geojson);
+        const areaLabel = `${area.toFixed(2)} sq m`;
+        
+        // Clear temporary polyline and markers
+        if (this._polyline) this._polyline.remove();
+        this._markers.forEach(m => m.remove());
+        
+        // Add final polygon to drawn items
+        drawnItemsRef.current.clearLayers();
+        measurementLabelsRef.current.clearLayers();
+        drawnItemsRef.current.addLayer(polygon);
+        setHasMeasureSelection(true);
+        
+        // Add area label at centroid
+        const centroid = turf.centroid(geojson);
+        const centerCoords = [centroid.geometry.coordinates[1], centroid.geometry.coordinates[0]];
+        const areaLabelMarker = L.marker(centerCoords, {
+          icon: L.divIcon({
+            className: 'measurement-label',
+            html: `<div class="measurement-label-content">${areaLabel}</div>`,
+            iconSize: [200, 40],
+            iconAnchor: [100, 20]
+          }),
+          zIndexOffset: 1000,
+          interactive: false
+        });
+        measurementLabelsRef.current.addLayer(areaLabelMarker);
+        
+        // Add edge length labels
+        for (let i = 0; i < this._vertices.length; i++) {
+          const start = this._vertices[i];
+          const end = this._vertices[(i + 1) % this._vertices.length]; // Wrap around for last edge
+          
+          // Calculate edge length using turf
+          const edgeLine = turf.lineString([
+            [start.lng, start.lat],
+            [end.lng, end.lat]
+          ]);
+          const edgeLength = turf.length(edgeLine, { units: 'kilometers' });
+          const edgeLengthLabel = edgeLength > 1
+            ? `${edgeLength.toFixed(2)} km`
+            : `${(edgeLength * 1000).toFixed(2)} m`;
+          
+          // Calculate midpoint for label placement
+          const midLat = (start.lat + end.lat) / 2;
+          const midLng = (start.lng + end.lng) / 2;
+          
+          // Add edge length label
+          const edgeLabelMarker = L.marker([midLat, midLng], {
+            icon: L.divIcon({
+              className: 'measurement-label',
+              html: `<div class="measurement-label-content" style="background-color: rgba(8, 145, 178, 0.9); font-size: 0.75rem; padding: 2px 6px;">${edgeLengthLabel}</div>`,
+              iconSize: [100, 30],
+              iconAnchor: [50, 15]
+            }),
+            zIndexOffset: 999,
+            interactive: false
+          });
+          measurementLabelsRef.current.addLayer(edgeLabelMarker);
+        }
+        
+        // Remove click handler after completion
+        if (this._clickHandler) {
+          map.off('click', this._clickHandler);
+          this._clickHandler = null;
+        }
+      },
+
+      disable: function () {
+        // Cleanup
+        if (this._polyline) this._polyline.remove();
+        this._markers.forEach(m => m.remove());
+        this._vertices = [];
+        this._markers = [];
+        this.enabled = false;
+
+        // Remove click handler
+        if (this._clickHandler) {
+          map.off('click', this._clickHandler);
+          this._clickHandler = null;
+        }
       }
-    });
-    polygonHandler.enable();
+    };
+
+    // Add validated click handler with gesture detection
+    const handleMapClick = (e) => {
+      const gestureState = gestureStateRef.current;
+      const recentlyInteracting = (Date.now() - gestureState.lastInteractionTime < 300);
+
+      // Check if this is a valid tap (not during pan/zoom)
+      if (gestureState.isTouchMoving || recentlyInteracting) {
+        console.log('[Measure] Click blocked - gesture in progress (pan/zoom detected)');
+        return;
+      }
+
+      // Valid click/tap - add vertex at clicked location
+      console.log('[Measure] Valid click detected - adding vertex');
+      customPolygonMeasurement.addVertex(e.latlng);
+    };
+
+    // Attach click handler to map
+    map.on('click', handleMapClick);
+    customPolygonMeasurement._clickHandler = handleMapClick;
+
+    // Show instructions to user
+    showSnackbar('Tap to add points or use + button for crosshair. Click ✓ when done.', 'info');
+
+    measureHandlerRef.current = customPolygonMeasurement;
+    setActiveMeasureMode('polygon');
   };
 
   const handleStartMeasureDistance = () => {
     if (!mapRef.current) return;
     setSinglePointCaptureActive(false);
     setLocationSelectionActive(false);
-    const polylineHandler = new L.Draw.Polyline(mapRef.current, {
-      shapeOptions: {
-        color: '#0891B2',
-        weight: 3
+
+    if (measureHandlerRef.current) {
+      measureHandlerRef.current.disable();
+    }
+
+    const map = mapRef.current;
+
+    // Create custom polyline measurement object instead of using L.Draw.Polyline
+    // This gives us complete control - no automatic click handling
+    const customPolylineMeasurement = {
+      _map: map,
+      _vertices: [], // Store vertices manually
+      _polyline: null, // Visual feedback line
+      _markers: [], // Vertex markers
+      _clickHandler: null, // Store click handler for cleanup
+      enabled: true,
+
+      // Method to add vertex (called from + button or validated map click)
+      addVertex: function (latlng) {
+        console.log('[Measure] Adding vertex manually:', latlng);
+        this._vertices.push(latlng);
+
+        // Add marker at vertex
+        const marker = L.circleMarker(latlng, {
+          radius: 5,
+          color: '#0891B2',
+          fillColor: '#fff',
+          fillOpacity: 1,
+          weight: 2
+        }).addTo(map);
+        this._markers.push(marker);
+
+        // Update polyline
+        if (!this._polyline) {
+          this._polyline = L.polyline(this._vertices, {
+            color: '#0891B2',
+            weight: 3
+          }).addTo(map);
+        } else {
+          this._polyline.setLatLngs(this._vertices);
+        }
+      },
+
+      // Complete the polyline
+      completeShape: function () {
+        if (this._vertices.length < 2) {
+          showSnackbar('Need at least 2 points to measure distance', 'warning');
+          return;
+        }
+
+        // Create final polyline
+        const polyline = L.polyline(this._vertices, {
+          color: '#0891B2',
+          weight: 3
+        });
+
+        // Calculate distance using turf
+        const geojson = polyline.toGeoJSON();
+        const totalLength = turf.length(geojson, { units: 'kilometers' });
+        const label = totalLength > 1
+          ? `${totalLength.toFixed(2)} km`
+          : `${(totalLength * 1000).toFixed(2)} m`;
+
+        // Clear temporary polyline and markers
+        if (this._polyline) this._polyline.remove();
+        this._markers.forEach(m => m.remove());
+
+        // Add final polyline to drawn items
+        drawnItemsRef.current.clearLayers();
+        measurementLabelsRef.current.clearLayers();
+        drawnItemsRef.current.addLayer(polyline);
+        setHasMeasureSelection(true);
+
+        // Add label at midpoint
+        const midpoint = turf.along(geojson, totalLength / 2);
+        const centerCoords = [midpoint.geometry.coordinates[1], midpoint.geometry.coordinates[0]];
+        const labelMarker = L.marker(centerCoords, {
+          icon: L.divIcon({
+            className: 'measurement-label',
+            html: `<div class="measurement-label-content">${label}</div>`,
+            iconSize: [200, 40],
+            iconAnchor: [100, 20]
+          }),
+          zIndexOffset: 1000,
+          interactive: false
+        });
+        measurementLabelsRef.current.addLayer(labelMarker);
+
+        // Remove click handler after completion
+        if (this._clickHandler) {
+          map.off('click', this._clickHandler);
+          this._clickHandler = null;
+        }
+      },
+
+      disable: function () {
+        // Cleanup
+        if (this._polyline) this._polyline.remove();
+        this._markers.forEach(m => m.remove());
+        this._vertices = [];
+        this._markers = [];
+        this.enabled = false;
+
+        // Remove click handler
+        if (this._clickHandler) {
+          map.off('click', this._clickHandler);
+          this._clickHandler = null;
+        }
       }
-    });
-    polylineHandler.enable();
+    };
+
+    // Add validated click handler with gesture detection
+    const handleMapClick = (e) => {
+      const gestureState = gestureStateRef.current;
+      const recentlyInteracting = (Date.now() - gestureState.lastInteractionTime < 300);
+
+      // Check if this is a valid tap (not during pan/zoom)
+      if (gestureState.isTouchMoving || recentlyInteracting) {
+        console.log('[Measure] Click blocked - gesture in progress (pan/zoom detected)');
+        return;
+      }
+
+      // Valid click/tap - add vertex at clicked location
+      console.log('[Measure] Valid click detected - adding vertex');
+      customPolylineMeasurement.addVertex(e.latlng);
+    };
+
+    // Attach click handler to map
+    map.on('click', handleMapClick);
+    customPolylineMeasurement._clickHandler = handleMapClick;
+
+    // Show instructions to user
+    showSnackbar('Tap to add points or use + button for crosshair. Click ✓ when done.', 'info');
+
+    measureHandlerRef.current = customPolylineMeasurement;
+    setActiveMeasureMode('polyline');
+  };
+
+  const handleMeasureAddPoint = () => {
+    if (measureHandlerRef.current && mapRef.current) {
+      const center = mapRef.current.getCenter();
+      measureHandlerRef.current.addVertex(center);
+    }
+  };
+
+  const handleMeasureFinish = () => {
+    if (measureHandlerRef.current) {
+      // Try multiple methods to finish shape depending on handler implementation
+      if (typeof measureHandlerRef.current.completeShape === 'function') {
+        measureHandlerRef.current.completeShape();
+      } else if (typeof measureHandlerRef.current._finishShape === 'function') {
+        measureHandlerRef.current._finishShape();
+      }
+
+      measureHandlerRef.current.disable();
+      measureHandlerRef.current = null;
+
+      setActiveMeasureMode(null);
+    }
   };
 
   const handleClearMeasure = () => {
+    if (measureHandlerRef.current) {
+      measureHandlerRef.current.disable();
+      measureHandlerRef.current = null;
+    }
+
+    setActiveMeasureMode(null);
     if (drawnItemsRef.current) drawnItemsRef.current.clearLayers();
     if (measurementLabelsRef.current) measurementLabelsRef.current.clearLayers();
     setHasMeasureSelection(false);
@@ -1629,8 +1948,7 @@ function App() {
         }
       }
 
-      // Check if this is "Default Location" - if so, ensure name stays as "Default Location"
-      const isDefaultLocation = waypoint.name && waypoint.name.trim().toLowerCase() === 'default location';
+
       // Determine default "Point N" name when in project mode
       let defaultPointName = `Point ${waypoints.findIndex(wp => wp.id === selectedWaypointId) + 1}`;
       if (isProjectMode && activeProject && activeProject.id) {
@@ -1640,7 +1958,7 @@ function App() {
       // If in project mode and the name is the placeholder 'My Current Location', prefer default Point name
       const nameCandidates = (waypointData.name || '').trim();
       const isMyCurrentLocation = nameCandidates.toLowerCase() === 'my current location';
-      const finalName = isDefaultLocation ? 'Default Location' : ((isProjectMode && (!nameCandidates || isMyCurrentLocation)) ? defaultPointName : (waypointData.name || `Point ${waypoints.findIndex(wp => wp.id === selectedWaypointId) + 1}`));
+      const finalName = ((isProjectMode && (!nameCandidates || isMyCurrentLocation)) ? defaultPointName : (waypointData.name || `Point ${waypoints.findIndex(wp => wp.id === selectedWaypointId) + 1}`));
 
       const waypointPayload = {
         name: finalName,
@@ -1684,20 +2002,7 @@ function App() {
         setWaypointData(prev => ({ ...prev, name: nextName }));
       }
 
-      // Update waypointData to ensure name is correct for default location
-      if (isDefaultLocation) {
-        setWaypointData(prev => ({ ...prev, name: 'Default Location' }));
-        // Reload default location from database after saving
-        try {
-          const defaultLoc = await waypointsAPI.getDefault();
-          setDefaultLocation({
-            lat: parseFloat(defaultLoc.latitude),
-            lng: parseFloat(defaultLoc.longitude)
-          });
-        } catch (error) {
-          console.error('Error reloading default location:', error);
-        }
-      }
+
 
       // Close waypoint details on mobile after save
       if (isMobile) {
@@ -2313,23 +2618,7 @@ function App() {
 
   // Polyline decoder - now using imported utility from navigationUtils.js
 
-  // Fetch default location from database on mount
-  useEffect(() => {
-    const fetchDefaultLocation = async () => {
-      try {
-        const defaultLoc = await waypointsAPI.getDefault();
-        setDefaultLocation({
-          lat: parseFloat(defaultLoc.latitude),
-          lng: parseFloat(defaultLoc.longitude)
-        });
-      } catch (error) {
-        console.error('Error fetching default location:', error);
-        // Use fallback if fetch fails
-        setDefaultLocation({ lat: 26.516654, lng: 80.231507 });
-      }
-    };
-    fetchDefaultLocation();
-  }, []);
+
 
   // Keep markers in sync with project mode, active project, waypoints and live coordinates
   useEffect(() => {
@@ -2737,6 +3026,8 @@ function App() {
       rotate: true, // Enable map rotation
       touchRotate: true, // Enable rotation with touch gestures (finger/trackpad)
       touchGestures: true, // Enable touch gestures
+      tap: false, // Disable Leaflet's internal tap handler to reduce ghost clicks on mobile
+      clickTolerance: 15, // Increase tolerance for mobile to differentiate between tap and move
       rotateControl: false, // Disable rotate control button (only use gestures)
       bearing: 0, // Initial bearing (rotation angle in degrees)
     }).setView([INDIA_CENTER.lat, INDIA_CENTER.lng], 5); // Show India at zoom 5 while detecting GPS (will be updated if geolocation succeeds)
@@ -2801,8 +3092,128 @@ function App() {
     measurementLabelsRef.current = new L.LayerGroup();
     measurementLabelsRef.current.addTo(map);
 
-    // Handle Leaflet Draw events
+    // Enhanced interaction tracking to prevent accidental point placement during pan/zoom on touch devices
+    let lastInteractionTime = 0;
+
+    // Touch tracking for measurement tool
+    const handleTouchStart = (e) => {
+      if (e.originalEvent && e.originalEvent.touches) {
+        const touches = e.originalEvent.touches;
+        const touchCount = touches.length;
+
+        gestureStateRef.current.touchCountOnStart = touchCount;
+
+        if (touches.length === 1) {
+          // Single touch - potential tap
+          gestureStateRef.current.touchStartPos = {
+            x: touches[0].clientX,
+            y: touches[0].clientY
+          };
+          gestureStateRef.current.touchStartTime = Date.now();
+          gestureStateRef.current.isTouchMoving = false;
+        } else {
+          // Multi-touch - definitely a zoom/pan gesture
+          gestureStateRef.current.touchStartPos = null;
+          gestureStateRef.current.lastInteractionTime = Date.now();
+          lastInteractionTime = Date.now();
+          gestureStateRef.current.isTouchMoving = true;
+        }
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      const gestureState = gestureStateRef.current;
+
+      if (e.originalEvent && e.originalEvent.touches && gestureState.touchStartPos) {
+        const touches = e.originalEvent.touches;
+
+        if (touches.length > 1 || gestureState.touchCountOnStart > 1) {
+          // Multi-touch detected during move
+          gestureState.isTouchMoving = true;
+          gestureState.lastInteractionTime = Date.now();
+          lastInteractionTime = Date.now();
+          return;
+        }
+
+        // Calculate movement distance for single touch
+        const touch = touches[0];
+        const deltaX = Math.abs(touch.clientX - gestureState.touchStartPos.x);
+        const deltaY = Math.abs(touch.clientY - gestureState.touchStartPos.y);
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // If moved more than 10 pixels, consider it a pan
+        if (distance > 10) {
+          gestureState.isTouchMoving = true;
+          gestureState.lastInteractionTime = Date.now();
+          lastInteractionTime = Date.now();
+        }
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      const gestureState = gestureStateRef.current;
+
+      if (gestureState.touchStartPos && gestureState.touchStartTime) {
+        const touchDuration = Date.now() - gestureState.touchStartTime;
+
+        // Valid tap criteria:
+        // 1. Single touch throughout
+        // 2. Short duration (< 300ms)
+        // 3. Minimal movement
+        // 4. No multi-touch
+        const isValidTap = !gestureState.isTouchMoving &&
+          touchDuration < 300 &&
+          gestureState.touchCountOnStart === 1;
+
+        if (!isValidTap) {
+          gestureState.lastInteractionTime = Date.now();
+          lastInteractionTime = Date.now();
+        } else {
+          // Valid tap - reset moving state to allow vertex addition
+          gestureState.isTouchMoving = false;
+        }
+      }
+
+      // Reset tracking after a short delay to allow the click event to process
+      setTimeout(() => {
+        gestureStateRef.current.touchStartPos = null;
+        gestureStateRef.current.touchStartTime = 0;
+        gestureStateRef.current.touchCountOnStart = 0;
+      }, 50);
+    };
+
+    // Register touch event handlers
+    map.on('touchstart', handleTouchStart);
+    map.on('touchmove', handleTouchMove);
+    map.on('touchend', handleTouchEnd);
+    map.on('touchcancel', handleTouchEnd);
+
+    map.on('movestart zoomstart', (e) => {
+      if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 1) {
+        gestureStateRef.current.lastInteractionTime = Date.now();
+        lastInteractionTime = Date.now();
+        gestureStateRef.current.isTouchMoving = true;
+      }
+    });
+
+    map.on('move zoom', () => {
+      gestureStateRef.current.lastInteractionTime = Date.now();
+      lastInteractionTime = Date.now();
+    });
+
+    const isRecentlyInteracting = () => {
+      const recentlyMoved = (Date.now() - lastInteractionTime < 500);
+      return recentlyMoved || gestureStateRef.current.isTouchMoving;
+    };
+
+    // Handle Leaflet Draw events - with enhanced touch gesture validation
     const handleDrawCreated = (e) => {
+      // Check if this was triggered during a pan/zoom gesture
+      if (isRecentlyInteracting()) {
+        console.log('[Measure] Skipping draw event - user was panning/zooming');
+        return;
+      }
+
       const type = e.layerType;
       const layer = e.layer;
 
@@ -3198,6 +3609,10 @@ function App() {
           // Update red circleMarker overlay since it's selected
           setTimeout(() => {
             updateSelectedMarkerOverlay(waypointId);
+            // Auto-expand bottom sheet on mobile for immediate editing
+            if (isMobile && bottomSheetRef.current) {
+              bottomSheetRef.current.expand();
+            }
           }, 0);
 
           return renamed;
@@ -3444,17 +3859,80 @@ function App() {
           onStartMeasureArea={handleStartMeasureArea}
           onStartMeasureDistance={handleStartMeasureDistance}
           onClearMeasure={handleClearMeasure}
+          onAddPoint={handleMeasureAddPoint}
+          onFinish={handleMeasureFinish}
           onClose={() => {
             setMeasureActive(false);
             handleClearMeasure();
           }}
           hasSelection={hasMeasureSelection}
+          activeMode={activeMeasureMode}
           mapDynamicHeight={mapDynamicHeight}
         />
       )}
 
       <ThemeProvider theme={theme}>
         <CssBaseline />
+
+        {/* Landscape Warning for Small Screens */}
+        {showLandscapeWarning && (
+          <Box
+            sx={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              backgroundColor: theme.palette.background.default,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 3,
+              p: 4,
+              textAlign: 'center',
+            }}
+          >
+            <Box
+              sx={{
+                fontSize: '4rem',
+                color: theme.palette.primary.main,
+                animation: 'rotate 2s linear infinite',
+                '@keyframes rotate': {
+                  '0%': { transform: 'rotate(0deg)' },
+                  '100%': { transform: 'rotate(360deg)' },
+                },
+              }}
+            >
+              <svg
+                width="1em"
+                height="1em"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M7.34 6.41L.86 12.9l6.49 6.48 6.49-6.48-6.5-6.49zM3.69 12.9l3.66-3.66L11 12.9l-3.66 3.66-3.65-3.66zm15.67-6.26C17.61 4.88 15.3 4 13 4V.76L8.76 5 13 9.24V6c1.79 0 3.58.68 4.95 2.05 2.73 2.73 2.73 7.17 0 9.9C16.58 19.32 14.79 20 13 20c-.97 0-1.94-.21-2.84-.61l-1.49 1.49C10.02 21.62 11.51 22 13 22c2.3 0 4.61-.88 6.36-2.64 3.52-3.51 3.52-9.21 0-12.72z" />
+              </svg>
+            </Box>
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 600,
+                color: theme.palette.text.primary,
+              }}
+            >
+              Rotate Your Device
+            </Typography>
+            <Typography
+              variant="body1"
+              sx={{
+                color: theme.palette.text.secondary,
+                maxWidth: '400px',
+              }}
+            >
+              This website is optimized for portrait mode on mobile devices.
+              Please rotate your screen to continue.
+            </Typography>
+          </Box>
+        )}
+
         <Box sx={{
           display: 'flex',
           height: '100vh',
@@ -3521,8 +3999,8 @@ function App() {
                 }}
               />
 
-              {/* Center crosshair for touch devices - relative to map area */}
-              {!hasCursor && (
+              {/* Center crosshair for touch devices or measurement mode - relative to map area */}
+              {(!hasCursor || measureActive) && (
                 <Box
                   sx={{
                     position: 'absolute',
@@ -3532,7 +4010,7 @@ function App() {
                     width: '1px',
                     height: { xs: '24px', sm: '30px' },
                     backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)',
-                    zIndex: theme.zIndex.drawer + 1,
+                    zIndex: theme.zIndex.drawer + 50, // Ensure it's above other elements during measurement
                     pointerEvents: 'none',
                     '&::before': {
                       content: '""',
@@ -3551,7 +4029,7 @@ function App() {
 
             {/* Live Coordinates card - hide on mobile when waypoint details open */}
             {(!isMobile || !waypointDetailsOpen) && (
-              <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} />
+              <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} onCopySuccess={(msg) => showSnackbar(msg, 'success')} isMobile={isMobile} />
             )}
 
             {(singlePointCaptureActive || isProjectMode) && (
@@ -3561,6 +4039,7 @@ function App() {
                   waypoints={selectorWaypoints}
                   selectedWaypointId={selectedWaypointId}
                   onSelectWaypoint={handleSelectWaypoint}
+                  isMobile={isMobile}
                 />
 
                 {/* Waypoint Details - Bottom Sheet for mobile, fixed card for desktop */}
@@ -3628,6 +4107,7 @@ function App() {
                         return !!(isProjectPoint || isCurrent || isPinCreated);
                       })()}
                       onCollapseBottomSheet={() => bottomSheetRef.current?.collapse()}
+                      isMobile={isMobile}
                       ref={waypointDetailsRef}
                     />
                   </BottomSheet>
@@ -3668,6 +4148,7 @@ function App() {
                         const isPinCreated = wp.createdDuringProject && !wp.project_id;
                         return !!(isProjectPoint || isCurrent || isPinCreated);
                       })()}
+                      isMobile={isMobile}
                       ref={waypointDetailsRef}
                     />
                   )
@@ -3709,37 +4190,11 @@ function App() {
                 currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng, elevation: coordinates.elevation } : null}
                 sidebarOpen={sidebarOpen}
                 isProjectMode={isProjectMode}
+                isMobile={isMobile}
               />
             )}
 
-            {/* Waypoint Details - also show when default location is selected (even if survey not active) */}
-            {selectedWaypointId && !singlePointCaptureActive && currentLocationWaypointId === selectedWaypointId && (
-              <WaypointDetails
-                selectedWaypointId={selectedWaypointId}
-                waypointData={waypointData}
-                setWaypointData={setWaypointData}
-                onClose={() => {
-                  setSelectedWaypointId(null);
-                  setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
-                  setLocationSelectionActive(false); // Deactivate location selection when closing
-                  updateSelectedMarkerOverlay(null);
-                }}
-                onSave={handleSaveWaypoint}
-                locationSelectionActive={locationSelectionActive}
-                onToggleLocationSelection={() => setLocationSelectionActive(prev => !prev)}
-                onDelete={() => {
-                  // Don't allow deleting the current location marker
-                  showSnackbar('Cannot delete current location marker', 'info');
-                }}
-                onImageUpload={handleImageUpload}
-                imageUploading={imageUploading}
-                savedWaypoints={savedWaypointsList}
-                onNavigate={handleNavigate}
-                currentLocation={coordinates.lat && coordinates.lng ? { lat: coordinates.lat, lng: coordinates.lng, elevation: coordinates.elevation } : null}
-                sidebarOpen={sidebarOpen}
-                isProjectMode={isProjectMode}
-              />
-            )}
+
 
             {/* Saved Points Dialog */}
             <SavedPoints
@@ -3809,6 +4264,11 @@ function App() {
 
                   // Sync the selected overlay (red circle)
                   updateSelectedMarkerOverlay(waypointId);
+
+                  // Auto-expand bottom sheet on mobile for viewing saved points
+                  if (isMobile && bottomSheetRef.current) {
+                    bottomSheetRef.current.expand();
+                  }
                 }, 100);
 
                 setSavedPointsOpen(false);

@@ -159,19 +159,30 @@ const CRSConverterDialog = ({ open, onClose, currentLocation, onShowSnackbar }) 
                 </IconButton>
             </DialogTitle>
 
-            <DialogContent dividers>
-                <Box sx={{ py: 1 }}>
-                    <Grid container spacing={2}>
-                        {/* From Section */}
-                        <Grid item xs={12}>
-                            <Typography variant="body2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
-                                FROM
-                            </Typography>
-                            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                <InputLabel>Source CRS</InputLabel>
+            <DialogContent dividers sx={{ p: { xs: 1.5, sm: 2 } }}>
+                <Box sx={{ py: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                    {/* Source Section */}
+                    <Paper
+                        variant="outlined"
+                        sx={{
+                            p: 2,
+                            width: '100%',
+                            borderRadius: 2,
+                            bgcolor: 'action.hover',
+                            borderStyle: 'solid',
+                            borderColor: 'divider'
+                        }}
+                    >
+                        <Typography variant="caption" color="primary" sx={{ fontWeight: 700, mb: 1.5, display: 'block', letterSpacing: 1 }}>
+                            SOURCE (FROM)
+                        </Typography>
+
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Select CRS</InputLabel>
                                 <Select
                                     value={fromCRS}
-                                    label="Source CRS"
+                                    label="Select CRS"
                                     onChange={(e) => setFromCRS(e.target.value)}
                                 >
                                     {commonCRS.map(crs => (
@@ -181,57 +192,79 @@ const CRSConverterDialog = ({ open, onClose, currentLocation, onShowSnackbar }) 
                                     ))}
                                 </Select>
                             </FormControl>
-                        </Grid>
 
-                        <Grid item xs={6}>
-                            <TextField
-                                label={fromCRS.includes('4326') ? "Longitude (X)" : "Easting (X)"}
-                                fullWidth
-                                size="small"
-                                value={inputX}
-                                onChange={(e) => setInputX(e.target.value)}
-                                placeholder="Enter X..."
-                            />
-                        </Grid>
-                        <Grid item xs={6}>
-                            <TextField
-                                label={fromCRS.includes('4326') ? "Latitude (Y)" : "Northing (Y)"}
-                                fullWidth
-                                size="small"
-                                value={inputY}
-                                onChange={(e) => setInputY(e.target.value)}
-                                placeholder="Enter Y..."
-                            />
-                        </Grid>
+                            <Box sx={{ display: 'flex', gap: 1.5 }}>
+                                <TextField
+                                    label={fromCRS.includes('4326') ? "Longitude (X)" : "Easting (X)"}
+                                    fullWidth
+                                    size="small"
+                                    value={inputX}
+                                    onChange={(e) => setInputX(e.target.value)}
+                                    placeholder="X..."
+                                />
+                                <TextField
+                                    label={fromCRS.includes('4326') ? "Latitude (Y)" : "Northing (Y)"}
+                                    fullWidth
+                                    size="small"
+                                    value={inputY}
+                                    onChange={(e) => setInputY(e.target.value)}
+                                    placeholder="Y..."
+                                />
+                            </Box>
 
-                        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', my: 1 }}>
                             <Button
                                 variant="outlined"
                                 startIcon={<MyLocationIcon />}
                                 onClick={handleUseCurrentLocation}
+                                fullWidth
                                 size="small"
-                                sx={{ textTransform: 'none', borderRadius: 2 }}
+                                sx={{ textTransform: 'none', borderRadius: 1.5, bgcolor: 'background.paper' }}
                             >
-                                Use Current Location
+                                Use My Current Location
                             </Button>
-                        </Grid>
-
-                        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', my: 1 }}>
-                            <IconButton onClick={handleSwap} sx={{ border: '1px solid', borderColor: 'divider' }}>
-                                <SwapIcon />
-                            </IconButton>
                         </Box>
+                    </Paper>
 
-                        {/* To Section */}
-                        <Grid item xs={12}>
-                            <Typography variant="body2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
-                                TO
-                            </Typography>
-                            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                                <InputLabel>Target CRS</InputLabel>
+                    {/* Interchange Button - Vertically positioned in between with overlap */}
+                    <IconButton
+                        onClick={handleSwap}
+                        size="medium"
+                        sx={{
+                            my: -2.25, // Overlap both papers
+                            zIndex: 2,
+                            border: '2px solid',
+                            borderColor: 'primary.main',
+                            color: 'primary.main',
+                            bgcolor: 'background.paper',
+                            boxShadow: 3,
+                            '&:hover': { bgcolor: 'primary.main', color: 'white' }
+                        }}
+                    >
+                        <SwapIcon />
+                    </IconButton>
+
+                    {/* Target Section */}
+                    <Paper
+                        variant="outlined"
+                        sx={{
+                            p: 2,
+                            width: '100%',
+                            borderRadius: 2,
+                            bgcolor: 'background.paper',
+                            borderStyle: 'solid',
+                            borderColor: 'divider'
+                        }}
+                    >
+                        <Typography variant="caption" color="primary" sx={{ fontWeight: 700, mb: 1.5, display: 'block', letterSpacing: 1 }}>
+                            TARGET (TO)
+                        </Typography>
+
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Select CRS</InputLabel>
                                 <Select
                                     value={toCRS}
-                                    label="Target CRS"
+                                    label="Select CRS"
                                     onChange={(e) => setToCRS(e.target.value)}
                                 >
                                     {commonCRS.map(crs => (
@@ -241,52 +274,65 @@ const CRSConverterDialog = ({ open, onClose, currentLocation, onShowSnackbar }) 
                                     ))}
                                 </Select>
                             </FormControl>
-                        </Grid>
 
-                        <Grid item xs={12}>
-                            <Paper variant="outlined" sx={{ p: 2, bgcolor: 'action.hover', position: 'relative' }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                    <Typography variant="caption" color="text.secondary">RESULT</Typography>
+                            <Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: 1 }}>
+                                        CONVERSION RESULT
+                                    </Typography>
                                     {resultX && (
-                                        <Tooltip title={copied ? "Copied!" : "Copy Result"}>
-                                            <IconButton size="small" onClick={handleCopy}>
-                                                {copied ? <CheckIcon size={16} color="success" /> : <CopyIcon size={16} />}
-                                            </IconButton>
-                                        </Tooltip>
+                                        <Button
+                                            size="small"
+                                            startIcon={copied ? <CheckIcon fontSize="small" /> : <CopyIcon fontSize="small" />}
+                                            onClick={handleCopy}
+                                            sx={{ textTransform: 'none', py: 0, minWidth: 'auto', fontWeight: 600 }}
+                                            color={copied ? "success" : "primary"}
+                                        >
+                                            {copied ? "Copied" : "Copy"}
+                                        </Button>
                                     )}
                                 </Box>
-                                <Grid container spacing={2}>
-                                    <Grid item xs={6}>
-                                        <Typography variant="body2" color="text.secondary">
+
+                                <Box sx={{ display: 'flex', gap: 1.5, bgcolor: 'action.hover', p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'divider' }}>
+                                    <Box sx={{ flex: 1 }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
                                             {toCRS.includes('4326') ? "Longitude (X)" : "Easting (X)"}
                                         </Typography>
-                                        <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', fontSize: { xs: '1rem', sm: '1.15rem' }, lineHeight: 1.2 }}>
                                             {resultX || '---'}
                                         </Typography>
-                                    </Grid>
-                                    <Grid item xs={6}>
-                                        <Typography variant="body2" color="text.secondary">
+                                    </Box>
+                                    <Box sx={{ flex: 1 }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
                                             {toCRS.includes('4326') ? "Latitude (Y)" : "Northing (Y)"}
                                         </Typography>
-                                        <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', fontSize: { xs: '1rem', sm: '1.15rem' }, lineHeight: 1.2 }}>
                                             {resultY || '---'}
                                         </Typography>
-                                    </Grid>
-                                </Grid>
-                            </Paper>
-                        </Grid>
-                    </Grid>
+                                    </Box>
+                                </Box>
+                            </Box>
+                        </Box>
+                    </Paper>
                 </Box>
             </DialogContent>
 
-            <DialogActions sx={{ p: 2 }}>
-                <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
+            <DialogActions sx={{ p: 2, flexDirection: 'column', gap: 1 }}>
                 <Button
                     variant="contained"
                     onClick={handleConvert}
-                    sx={{ textTransform: 'none', borderRadius: 2, px: 3 }}
+                    fullWidth
+                    sx={{ textTransform: 'none', borderRadius: 2, py: 1.2, fontWeight: 600 }}
                 >
-                    Convert
+                    Convert Coordinates
+                </Button>
+                <Button
+                    onClick={onClose}
+                    fullWidth
+                    variant="outlined"
+                    sx={{ textTransform: 'none', borderRadius: 2, borderColor: 'divider', color: 'text.secondary' }}
+                >
+                    Close
                 </Button>
             </DialogActions>
         </Dialog>
