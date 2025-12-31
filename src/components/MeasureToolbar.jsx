@@ -12,7 +12,8 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    Chip
+    Chip,
+    Divider
 } from '@mui/material';
 import {
     PolylineOutlined as PolylineIcon,
@@ -406,63 +407,271 @@ const MeasureToolbar = ({
 
     // Desktop version - Bottom Bar
     return (
-        <Paper elevation={8} sx={{
-            position: 'fixed',
-            bottom: 32,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: theme.zIndex.drawer + 30,
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 2,
-            px: 3,
-            py: 1.5,
-            borderRadius: 4,
-            backgroundColor: theme.palette.background.paper,
-            minWidth: '450px'
-        }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 'auto' }}>
-                <MeasureIcon sx={{ color: '#0891B2' }} />
-                <Typography sx={{ fontWeight: 600 }}>Measurement Mode</Typography>
-            </Box>
+        <>
+            <Paper elevation={8} sx={{
+                position: 'fixed',
+                bottom: 32,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: theme.zIndex.drawer + 30,
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 1.5,
+                px: 2,
+                py: 1,
+                borderRadius: 4,
+                backgroundColor: theme.palette.background.paper,
+                minWidth: 'fit-content'
+            }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Tooltip title="Help Information">
+                        <IconButton
+                            onClick={() => setShowHelp(!showHelp)}
+                            size="small"
+                            sx={{
+                                color: showHelp ? '#4CAF50' : theme.palette.text.secondary,
+                                backgroundColor: showHelp ? 'rgba(76, 175, 80, 0.1)' : 'rgba(0,0,0,0.04)',
+                            }}
+                        >
+                            <InfoOutlineIcon />
+                        </IconButton>
+                    </Tooltip>
 
-            <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                    variant="outlined"
-                    startIcon={<MeasureIcon />}
-                    onClick={onStartMeasureArea}
-                    sx={{ borderRadius: 2, textTransform: 'none', color: '#0891B2', borderColor: '#0891B2' }}
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+                    <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <Tooltip title="Measure Area">
+                            <IconButton
+                                onClick={onStartMeasureArea}
+                                size="small"
+                                sx={{
+                                    color: activeMode === 'polygon' ? '#0891B2' : theme.palette.text.secondary,
+                                    backgroundColor: activeMode === 'polygon' ? 'rgba(8, 145, 178, 0.1)' : 'transparent',
+                                    border: activeMode === 'polygon' ? '1px solid #0891B2' : 'none'
+                                }}
+                            >
+                                <MeasureIcon />
+                            </IconButton>
+                        </Tooltip>
+                        <Fade in={showHelp}>
+                            <Chip
+                                label="?"
+                                onClick={() => setHelpDialog('area')}
+                                size="small"
+                                sx={{
+                                    position: 'absolute',
+                                    top: -24,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    display: showHelp ? 'flex' : 'none',
+                                    backgroundColor: theme.palette.background.paper,
+                                    border: '1px solid #0891B2',
+                                    height: '20px',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer'
+                                }}
+                            />
+                        </Fade>
+                    </Box>
+
+                    <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <Tooltip title="Measure Distance">
+                            <IconButton
+                                onClick={onStartMeasureDistance}
+                                size="small"
+                                sx={{
+                                    color: activeMode === 'polyline' ? '#0891B2' : theme.palette.text.secondary,
+                                    backgroundColor: activeMode === 'polyline' ? 'rgba(8, 145, 178, 0.1)' : 'transparent',
+                                    border: activeMode === 'polyline' ? '1px solid #0891B2' : 'none'
+                                }}
+                            >
+                                <DistanceIcon />
+                            </IconButton>
+                        </Tooltip>
+                        <Fade in={showHelp}>
+                            <Chip
+                                label="?"
+                                onClick={() => setHelpDialog('distance')}
+                                size="small"
+                                sx={{
+                                    position: 'absolute',
+                                    top: -24,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    display: showHelp ? 'flex' : 'none',
+                                    backgroundColor: theme.palette.background.paper,
+                                    border: '1px solid #0891B2',
+                                    height: '20px',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer'
+                                }}
+                            />
+                        </Fade>
+                    </Box>
+
+                    {hasSelection && (
+                        <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <Tooltip title="Clear Measurement">
+                                <IconButton
+                                    onClick={onClearMeasure}
+                                    size="small"
+                                    sx={{
+                                        color: theme.palette.error.main,
+                                        backgroundColor: 'rgba(211, 47, 47, 0.05)',
+                                        '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.1)' }
+                                    }}
+                                >
+                                    <DeleteIcon />
+                                </IconButton>
+                            </Tooltip>
+                            <Fade in={showHelp}>
+                                <Chip
+                                    label="?"
+                                    onClick={() => setHelpDialog('clear')}
+                                    size="small"
+                                    sx={{
+                                        position: 'absolute',
+                                        top: -24,
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        display: showHelp ? 'flex' : 'none',
+                                        backgroundColor: theme.palette.background.paper,
+                                        border: `1px solid ${theme.palette.error.main}`,
+                                        height: '20px',
+                                        fontSize: '0.7rem',
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                            </Fade>
+                        </Box>
+                    )}
+
+                    {activeMode && (
+                        <>
+                            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <Tooltip title="Add Point at center">
+                                    <IconButton
+                                        onClick={onAddPoint}
+                                        size="small"
+                                        sx={{
+                                            backgroundColor: 'rgba(8, 145, 178, 0.1)',
+                                            color: '#0891B2',
+                                            '&:hover': { backgroundColor: 'rgba(8, 145, 178, 0.2)' }
+                                        }}
+                                    >
+                                        <AddPointIcon />
+                                    </IconButton>
+                                </Tooltip>
+                                <Fade in={showHelp}>
+                                    <Chip
+                                        label="?"
+                                        onClick={() => setHelpDialog('addPoint')}
+                                        size="small"
+                                        sx={{
+                                            position: 'absolute',
+                                            top: -24,
+                                            left: '50%',
+                                            transform: 'translateX(-50%)',
+                                            display: showHelp ? 'flex' : 'none',
+                                            backgroundColor: theme.palette.background.paper,
+                                            border: '1px solid #0891B2',
+                                            height: '20px',
+                                            fontSize: '0.7rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    />
+                                </Fade>
+                            </Box>
+
+                            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <Tooltip title="Finish Measurement">
+                                    <IconButton
+                                        onClick={onFinish}
+                                        size="small"
+                                        sx={{
+                                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                                            color: '#4CAF50',
+                                            '&:hover': { backgroundColor: 'rgba(76, 175, 80, 0.2)' }
+                                        }}
+                                    >
+                                        <FinishIcon />
+                                    </IconButton>
+                                </Tooltip>
+                                <Fade in={showHelp}>
+                                    <Chip
+                                        label="?"
+                                        onClick={() => setHelpDialog('finish')}
+                                        size="small"
+                                        sx={{
+                                            position: 'absolute',
+                                            top: -24,
+                                            left: '50%',
+                                            transform: 'translateX(-50%)',
+                                            display: showHelp ? 'flex' : 'none',
+                                            backgroundColor: theme.palette.background.paper,
+                                            border: '1px solid #4CAF50',
+                                            height: '20px',
+                                            fontSize: '0.7rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    />
+                                </Fade>
+                            </Box>
+                        </>
+                    )}
+
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                    <Tooltip title="Close Toolbar">
+                        <IconButton onClick={onClose} size="small">
+                            <CloseIcon />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
+            </Paper>
+
+            {/* Help Dialog for Desktop */}
+            {helpDialog && helpContent[helpDialog] && (
+                <Dialog
+                    open={Boolean(helpDialog)}
+                    onClose={() => setHelpDialog(null)}
+                    maxWidth="sm"
+                    fullWidth
+                    sx={{ zIndex: theme.zIndex.drawer + 100 }}
                 >
-                    Measure Area
-                </Button>
-
-                <Button
-                    variant="outlined"
-                    startIcon={<DistanceIcon />}
-                    onClick={onStartMeasureDistance}
-                    sx={{ borderRadius: 2, textTransform: 'none', color: '#0891B2', borderColor: '#0891B2' }}
-                >
-                    Measure Distance
-                </Button>
-
-                {hasSelection && (
-                    <Button
-                        variant="outlined"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={onClearMeasure}
-                        sx={{ borderRadius: 2, textTransform: 'none' }}
-                    >
-                        Clear
-                    </Button>
-                )}
-
-                <IconButton onClick={onClose} size="small" sx={{ ml: 1 }}>
-                    <CloseIcon />
-                </IconButton>
-            </Box>
-        </Paper>
+                    <DialogTitle sx={{
+                        fontWeight: 600,
+                        color: helpDialog === 'clear' ? theme.palette.error.main :
+                            helpDialog === 'finish' ? '#4CAF50' : '#0891B2'
+                    }}>
+                        {helpContent[helpDialog].title}
+                    </DialogTitle>
+                    <DialogContent>
+                        <Typography variant="body2" sx={{ mb: 2, fontWeight: 500 }}>
+                            {helpContent[helpDialog].description}
+                        </Typography>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                            How to use:
+                        </Typography>
+                        {helpContent[helpDialog].instructions.map((instruction, index) => (
+                            <Typography
+                                key={index}
+                                variant="body2"
+                                sx={{ mb: 0.5, pl: 1 }}
+                            >
+                                {instruction}
+                            </Typography>
+                        ))}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setHelpDialog(null)} sx={{ fontWeight: 600 }}>
+                            Got it!
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+            )}
+        </>
     );
 };
 

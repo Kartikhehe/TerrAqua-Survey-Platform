@@ -43,6 +43,7 @@ import StartSurveyDialog from '../components/StartSurveyDialog';
 import ExportDialog from '../components/ExportDialog';
 import CRSConverterDialog from '../components/CRSConverterDialog';
 import MeasureToolbar from '../components/MeasureToolbar';
+import MeasureResults from '../components/MeasureResults';
 import CustomSnackbar from '../components/Snackbar';
 import { waypointsAPI, uploadAPI, projectsAPI, tracksAPI } from '../services/api';
 import { createAppTheme } from '../theme/theme.js';
@@ -98,6 +99,8 @@ function App() {
   const [savedWaypointsList, setSavedWaypointsList] = useState([]); // List of all saved waypoints for navigation
   const [loginPromptOpen, setLoginPromptOpen] = useState(false); // Login prompt dialog state
   const [gpsWarningOpen, setGpsWarningOpen] = useState(false); // GPS warning dialog state
+  const [measureSummary, setMeasureSummary] = useState(null); // { area, perimeter, length, mode }
+  const [measureUnits, setMeasureUnits] = useState({ length: 'meters', area: 'sqm' });
   const [gpsWarningShown, setGpsWarningShown] = useState(false); // Track if GPS warning has been shown
   const [gpsRequiredForSurvey, setGpsRequiredForSurvey] = useState(false); // Track if GPS is required for current operation
   const [gpsActive, setGpsActive] = useState(false); // Whether device GPS watch is active
@@ -1480,6 +1483,12 @@ function App() {
     // Check if project mode is active for restricted actions
     // Allowed actions: 'Exit Survey' (which isn't in menu directly but handled via Stop)
     // Restricted: Single Point Capture, Start Survey (new), Saved Points, Import File
+    if ((isProjectMode || singlePointCaptureActive) && (item === 'Measure')) {
+      showSnackbar(`Please exit current ${isProjectMode ? 'survey project' : 'capture mode'} to use measurement tools`, 'warning');
+      if (isMobile) setSidebarOpen(false);
+      return;
+    }
+
     if (isProjectMode && ['Single Point Capture', 'Start Survey', 'Saved Points', 'Import File'].includes(item)) {
       setExitProjectWarningOpen(true);
       if (isMobile) setSidebarOpen(false);
@@ -1504,6 +1513,12 @@ function App() {
         setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
         updateSelectedMarkerOverlay(null);
       }
+      
+      // Auto-exit measure mode
+      if (measureActive) {
+        setMeasureActive(false);
+        handleClearMeasure();
+      }
     } else if (item === 'Start Survey') {
       if (!isAuthenticated) {
         setLoginPromptOpen(true);
@@ -1516,6 +1531,11 @@ function App() {
         return;
       }
       setSavedPointsOpen(true);
+      // Auto-exit measure mode
+      if (measureActive) {
+        setMeasureActive(false);
+        handleClearMeasure();
+      }
     } else if (item === 'Export Data') {
       setExportDialogOpen(true);
     } else if (item === 'CRS Converter') {
@@ -1530,6 +1550,11 @@ function App() {
         measurementLabelsRef.current.clearLayers();
       }
       setHasMeasureSelection(false);
+      setMeasureSummary(null);
+      
+      // Close waypoint details if they were open (for mobile space)
+      setWaypointDetailsOpen(false);
+      setSelectedWaypointId(null);
     } else if (item === 'Import File') {
       // Trigger file input click
       if (fileInputRef.current) {
@@ -1593,34 +1618,44 @@ function App() {
       },
 
       // Complete the polygon
-      completeShape: function() {
+      completeShape: function () {
         if (this._vertices.length < 3) {
           showSnackbar('Need at least 3 points to create a polygon', 'warning');
           return;
         }
-        
+
         // Create final polygon
         const polygon = L.polygon(this._vertices, {
           color: '#0891B2',
           fillOpacity: 0.2,
           weight: 3
         });
-        
+
         // Calculate area using turf
         const geojson = polygon.toGeoJSON();
         const area = turf.area(geojson);
+        const perimeter = turf.length(geojson, { units: 'kilometers' });
+
+        // Set summary results
+        setMeasureSummary({
+          area: area,
+          perimeter: perimeter,
+          mode: 'polygon',
+          vertices: [...this._vertices]
+        });
+
         const areaLabel = `${area.toFixed(2)} sq m`;
-        
+
         // Clear temporary polyline and markers
         if (this._polyline) this._polyline.remove();
         this._markers.forEach(m => m.remove());
-        
+
         // Add final polygon to drawn items
         drawnItemsRef.current.clearLayers();
         measurementLabelsRef.current.clearLayers();
         drawnItemsRef.current.addLayer(polygon);
         setHasMeasureSelection(true);
-        
+
         // Add area label at centroid
         const centroid = turf.centroid(geojson);
         const centerCoords = [centroid.geometry.coordinates[1], centroid.geometry.coordinates[0]];
@@ -1635,12 +1670,12 @@ function App() {
           interactive: false
         });
         measurementLabelsRef.current.addLayer(areaLabelMarker);
-        
+
         // Add edge length labels
         for (let i = 0; i < this._vertices.length; i++) {
           const start = this._vertices[i];
           const end = this._vertices[(i + 1) % this._vertices.length]; // Wrap around for last edge
-          
+
           // Calculate edge length using turf
           const edgeLine = turf.lineString([
             [start.lng, start.lat],
@@ -1650,11 +1685,11 @@ function App() {
           const edgeLengthLabel = edgeLength > 1
             ? `${edgeLength.toFixed(2)} km`
             : `${(edgeLength * 1000).toFixed(2)} m`;
-          
+
           // Calculate midpoint for label placement
           const midLat = (start.lat + end.lat) / 2;
           const midLng = (start.lng + end.lng) / 2;
-          
+
           // Add edge length label
           const edgeLabelMarker = L.marker([midLat, midLng], {
             icon: L.divIcon({
@@ -1668,7 +1703,7 @@ function App() {
           });
           measurementLabelsRef.current.addLayer(edgeLabelMarker);
         }
-        
+
         // Remove click handler after completion
         if (this._clickHandler) {
           map.off('click', this._clickHandler);
@@ -1717,6 +1752,7 @@ function App() {
 
     measureHandlerRef.current = customPolygonMeasurement;
     setActiveMeasureMode('polygon');
+    setMeasureSummary(null); // Clear previous results
   };
 
   const handleStartMeasureDistance = () => {
@@ -1782,6 +1818,16 @@ function App() {
         // Calculate distance using turf
         const geojson = polyline.toGeoJSON();
         const totalLength = turf.length(geojson, { units: 'kilometers' });
+        const perimeter = totalLength; // For distance tool, total length is what we show
+
+        // Set summary results
+        setMeasureSummary({
+          length: totalLength,
+          perimeter: perimeter,
+          mode: 'polyline',
+          vertices: [...this._vertices]
+        });
+
         const label = totalLength > 1
           ? `${totalLength.toFixed(2)} km`
           : `${(totalLength * 1000).toFixed(2)} m`;
@@ -1810,6 +1856,36 @@ function App() {
           interactive: false
         });
         measurementLabelsRef.current.addLayer(labelMarker);
+
+        // Add segment length labels
+        for (let i = 0; i < this._vertices.length - 1; i++) {
+          const start = this._vertices[i];
+          const end = this._vertices[i + 1];
+
+          const edgeLine = turf.lineString([
+            [start.lng, start.lat],
+            [end.lng, end.lat]
+          ]);
+          const edgeLength = turf.length(edgeLine, { units: 'kilometers' });
+          const edgeLengthLabel = edgeLength > 1
+            ? `${edgeLength.toFixed(2)} km`
+            : `${(edgeLength * 1000).toFixed(2)} m`;
+
+          const midLat = (start.lat + end.lat) / 2;
+          const midLng = (start.lng + end.lng) / 2;
+
+          const edgeLabelMarker = L.marker([midLat, midLng], {
+            icon: L.divIcon({
+              className: 'measurement-label',
+              html: `<div class="measurement-label-content" style="background-color: rgba(8, 145, 178, 0.9); font-size: 0.75rem; padding: 2px 6px;">${edgeLengthLabel}</div>`,
+              iconSize: [100, 30],
+              iconAnchor: [50, 15]
+            }),
+            zIndexOffset: 999,
+            interactive: false
+          });
+          measurementLabelsRef.current.addLayer(edgeLabelMarker);
+        }
 
         // Remove click handler after completion
         if (this._clickHandler) {
@@ -1859,6 +1935,7 @@ function App() {
 
     measureHandlerRef.current = customPolylineMeasurement;
     setActiveMeasureMode('polyline');
+    setMeasureSummary(null); // Clear previous results
   };
 
   const handleMeasureAddPoint = () => {
@@ -1894,6 +1971,7 @@ function App() {
     if (drawnItemsRef.current) drawnItemsRef.current.clearLayers();
     if (measurementLabelsRef.current) measurementLabelsRef.current.clearLayers();
     setHasMeasureSelection(false);
+    setMeasureSummary(null);
   };
 
   // Handle file selection from file input
@@ -4030,6 +4108,17 @@ function App() {
             {/* Live Coordinates card - hide on mobile when waypoint details open */}
             {(!isMobile || !waypointDetailsOpen) && (
               <LiveCoordinates coordinates={cursorCoordinates} sidebarOpen={sidebarOpen} ref={liveCoordsRef} onCopySuccess={(msg) => showSnackbar(msg, 'success')} isMobile={isMobile} />
+            )}
+
+            {measureSummary && (
+              <MeasureResults
+                summary={measureSummary}
+                units={measureUnits}
+                onUnitsChange={setMeasureUnits}
+                onClose={() => setMeasureSummary(null)}
+                isMobile={isMobile}
+                sidebarOpen={sidebarOpen}
+              />
             )}
 
             {(singlePointCaptureActive || isProjectMode) && (
