@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-// import { Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
 import * as turf from '@turf/turf'
 import '../App.css'
 import L from 'leaflet'
@@ -714,10 +714,11 @@ function App() {
     }
 
     // Request background location permission on Android (dynamic import to avoid build errors)
-    /* try {
+    try {
       if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
         try {
-          const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+          const pluginName = '@capacitor-community/background-geolocation';
+          const { BackgroundGeolocation } = await import(/* @vite-ignore */ pluginName);
           const permission = await BackgroundGeolocation.requestPermissions();
           console.log('Background location permission:', permission);
 
@@ -748,7 +749,7 @@ function App() {
     } catch (error) {
       // Capacitor not available (web build), continue normally
       console.log('Running on web, skipping native permission request');
-    } */
+    }
 
     // Remove any previously marked single-point capture points (non-project pin points)
     removePinCapturedPoints();
@@ -970,8 +971,9 @@ function App() {
       if (typeof watchPositionIdRef.current === 'string') {
         // Native watcher (string ID)
         try {
-          // const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
-          // await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
+          const pluginName = '@capacitor-community/background-geolocation';
+          const { BackgroundGeolocation } = await import(/* @vite-ignore */ pluginName);
+          await BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
         } catch (e) { console.error('Error stopping native watcher:', e); }
       } else if (navigator.geolocation) {
         // Web watcher (number ID)
@@ -1044,9 +1046,9 @@ function App() {
   // Start heavy-duty background tracking (Native Plugin) - For Active Surveys
   const startNativeBackgroundTracking = async () => {
     await stopLocationWatcher(); // Clear existing
-    startForegroundTracking();
-    /* try {
-      const { BackgroundGeolocation } = await import('@capacitor-community/background-geolocation');
+    try {
+      const pluginName = '@capacitor-community/background-geolocation';
+      const { BackgroundGeolocation } = await import(/* @vite-ignore */ pluginName);
 
       // Check permissions gently
       try {
@@ -1082,8 +1084,7 @@ function App() {
     } catch (e) {
       console.error('Failed to start native background tracking, falling back to foreground:', e);
       startForegroundTracking();
-    } */
-    startForegroundTracking();
+    }
   };
 
   // GPS Tracking Functions (using GPSTracker class)
@@ -1092,12 +1093,12 @@ function App() {
       console.log('[GPS] Starting GPS tracking for project:', projectId);
 
       // If Native, switch to Background Tracking Mode
-      // try {
-      //   if (Capacitor.isNativePlatform()) {
-      //     console.log('[GPS] Switching to Native Background Mode');
-      //     await startNativeBackgroundTracking();
-      //   }
-      // } catch (e) { }
+      try {
+        if (Capacitor.isNativePlatform()) {
+          console.log('[GPS] Switching to Native Background Mode');
+          await startNativeBackgroundTracking();
+        }
+      } catch (e) { }
 
       console.log('[GPS] Map ref:', mapRef.current);
       gpsTrackerRef.current = new GPSTracker(mapRef.current, projectId);
@@ -1132,12 +1133,12 @@ function App() {
         console.log('GPS tracking ended. Distance:', result.total_distance, 'm');
 
         // If Native, revert to Foreground Tracking Mode
-        // try {
-        //   if (Capacitor.isNativePlatform()) {
-        //     console.log('[GPS] Reverting to Foreground Mode');
-        //     await startForegroundTracking();
-        //   }
-        // } catch (e) { }
+        try {
+          if (Capacitor.isNativePlatform()) {
+            console.log('[GPS] Reverting to Foreground Mode');
+            await startForegroundTracking();
+          }
+        } catch (e) { }
 
         return result;
       } catch (error) {
@@ -1513,7 +1514,7 @@ function App() {
         setWaypointData({ name: '', lat: '', lng: '', notes: '', images: [] });
         updateSelectedMarkerOverlay(null);
       }
-      
+
       // Auto-exit measure mode
       if (measureActive) {
         setMeasureActive(false);
@@ -1551,7 +1552,7 @@ function App() {
       }
       setHasMeasureSelection(false);
       setMeasureSummary(null);
-      
+
       // Close waypoint details if they were open (for mobile space)
       setWaypointDetailsOpen(false);
       setSelectedWaypointId(null);
@@ -3405,10 +3406,10 @@ function App() {
       if (watchPositionIdRef.current !== null) {
         if (typeof watchPositionIdRef.current === 'string') {
           // Native watcher (string ID)
-          // Native watcher (string ID)
-          // import('@capacitor-community/background-geolocation').then(({ BackgroundGeolocation }) => {
-          //   BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
-          // }).catch(e => console.error(e));
+          const pluginName = '@capacitor-community/background-geolocation';
+          import(/* @vite-ignore */ pluginName).then(({ BackgroundGeolocation }) => {
+            BackgroundGeolocation.removeWatcher({ id: watchPositionIdRef.current });
+          }).catch(e => console.error(e));
         } else if (navigator.geolocation) {
           // Web watcher (number ID)
           navigator.geolocation.clearWatch(watchPositionIdRef.current);
