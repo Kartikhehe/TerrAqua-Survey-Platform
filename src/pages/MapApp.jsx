@@ -2169,18 +2169,20 @@ function App() {
   const importWaypointsFromFile = async (file) => {
     try {
       const text = await file.text();
-      let waypoints = [];
+      let result = { points: [], tracks: [] };
 
       if (file.name.endsWith('.geojson') || file.name.endsWith('.json')) {
-        waypoints = parseGeoJSON(text);
+        result = parseGeoJSON(text);
       } else if (file.name.endsWith('.kml')) {
-        waypoints = parseKML(text);
+        result = parseKML(text);
       } else {
         throw new Error('Unsupported file format. Please use GeoJSON or KML files.');
       }
 
-      if (waypoints.length === 0) {
-        showSnackbar('No valid waypoints found in the file', 'warning');
+      const { points: waypoints, tracks } = result;
+
+      if (waypoints.length === 0 && tracks.length === 0) {
+        showSnackbar('No valid data found in the file', 'warning');
         return;
       }
 
@@ -2236,6 +2238,29 @@ function App() {
         newMarkers[waypointId] = marker;
       });
 
+      // Add tracks to the map as polylines
+      tracks.forEach((track, index) => {
+        if (track.coordinates && track.coordinates.length > 0) {
+          // Convert [lng, lat] to [lat, lng] for Leaflet
+          const latLngs = track.coordinates.map(coord => [coord[1], coord[0]]);
+
+          // Create polyline for the track
+          const polyline = L.polyline(latLngs, {
+            color: '#FF6B35',  // Orange color for imported tracks
+            weight: 3,
+            opacity: 0.8
+          }).addTo(map);
+
+          // Add to loadedTracksRef so it persists during map operations
+          if (!loadedTracksRef.current) loadedTracksRef.current = [];
+          loadedTracksRef.current.push(polyline);
+
+          // Add popup with track info
+          const popupContent = `<b>${track.name || 'Imported Track'}</b><br/>${track.description || 'GPS Track'}<br/>Points: ${track.coordinates.length}`;
+          polyline.bindPopup(popupContent);
+        }
+      });
+
       // Update waypoints array with sequential naming
       setWaypoints(prev => {
         const allWaypoints = [...prev, ...newWaypoints];
@@ -2268,8 +2293,18 @@ function App() {
           }
         }, 100);
       }
+      // If only tracks, fit bounds to tracks
+      else if (tracks.length > 0 && tracks[0].coordinates.length > 0) {
+        const allCoords = tracks.flatMap(t => t.coordinates.map(c => [c[1], c[0]]));
+        const bounds = L.latLngBounds(allCoords);
+        try { map && map.fitBounds && map.fitBounds(bounds, { padding: [50, 50] }); } catch (e) { console.error('Error calling map.fitBounds for tracks:', e); }
+      }
 
-      showSnackbar(`Imported ${waypoints.length} waypoint${waypoints.length !== 1 ? 's' : ''} from ${file.name}`, 'success');
+      const summary = [];
+      if (waypoints.length > 0) summary.push(`${waypoints.length} point${waypoints.length !== 1 ? 's' : ''}`);
+      if (tracks.length > 0) summary.push(`${tracks.length} track${tracks.length !== 1 ? 's' : ''}`);
+
+      showSnackbar(`Imported ${summary.join(' and ')} from ${file.name}`, 'success');
     } catch (error) {
       console.error('Error importing file:', error);
       showSnackbar(error.message || 'Failed to import file. Please check the file format.', 'error');

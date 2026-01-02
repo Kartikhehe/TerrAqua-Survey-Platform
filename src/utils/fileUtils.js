@@ -1,28 +1,48 @@
 /**
  * Parse GeoJSON file content
  * @param {string} text - GeoJSON file content
- * @returns {Array} Array of waypoint objects {lat, lng, name, notes, image}
+ * @returns {Object} Object with points and tracks arrays: { points: [...], tracks: [...] }
  */
 export const parseGeoJSON = (text) => {
     try {
         const geoJSON = JSON.parse(text);
+        const result = { points: [], tracks: [] };
+        
         if (geoJSON.type === 'FeatureCollection' && Array.isArray(geoJSON.features)) {
-            return geoJSON.features
-                .filter(feature => feature.type === 'Feature' && feature.geometry && feature.geometry.type === 'Point')
-                .map(feature => {
+            geoJSON.features.forEach(feature => {
+                if (feature.type !== 'Feature' || !feature.geometry) return;
+                
+                const props = feature.properties || {};
+                
+                // Parse Point features (waypoints)
+                if (feature.geometry.type === 'Point') {
                     const [lng, lat, elevation] = feature.geometry.coordinates;
-                    const props = feature.properties || {};
-                    return {
+                    result.points.push({
                         lat,
                         lng,
                         elevation: elevation !== undefined ? elevation : (props.elevation || null),
                         name: props.name || 'Imported Point',
                         notes: props.notes || props.description || '',
                         image: props.image_url || null
-                    };
-                });
+                    });
+                }
+                
+                // Parse LineString features (GPS tracks)
+                else if (feature.geometry.type === 'LineString') {
+                    const coordinates = feature.geometry.coordinates; // [[lng, lat], ...]
+                    if (coordinates && coordinates.length > 0) {
+                        result.tracks.push({
+                            name: props.name || 'Imported Track',
+                            description: props.description || 'GPS Track',
+                            coordinates: coordinates, // Keep in [lng, lat] format
+                            project_name: props.project_name || null
+                        });
+                    }
+                }
+            });
         }
-        return [];
+        
+        return result;
     } catch (error) {
         console.error('Error parsing GeoJSON:', error);
         throw new Error('Invalid GeoJSON file format');
@@ -32,7 +52,7 @@ export const parseGeoJSON = (text) => {
 /**
  * Parse KML file content
  * @param {string} text - KML file content
- * @returns {Array} Array of waypoint objects {lat, lng, name, notes, image}
+ * @returns {Object} Object with points and tracks arrays: { points: [...], tracks: [...] }
  */
 export const parseKML = (text) => {
     try {
@@ -46,13 +66,15 @@ export const parseKML = (text) => {
         }
 
         const placemarks = xmlDoc.querySelectorAll('Placemark');
-        const waypoints = [];
+        const result = { points: [], tracks: [] };
 
         placemarks.forEach(placemark => {
             const nameElement = placemark.querySelector('name');
             const descriptionElement = placemark.querySelector('description');
             const pointElement = placemark.querySelector('Point');
+            const lineStringElement = placemark.querySelector('LineString');
 
+            // Parse Point placemarks (waypoints)
             if (pointElement) {
                 const coordinatesElement = pointElement.querySelector('coordinates');
                 if (coordinatesElement) {
@@ -65,7 +87,7 @@ export const parseKML = (text) => {
                         const notes = descriptionElement ? descriptionElement.textContent.trim() : '';
                         const elevation = coords.length >= 3 ? parseFloat(coords[2]) : null;
 
-                        waypoints.push({
+                        result.points.push({
                             lat,
                             lng,
                             elevation: isNaN(elevation) ? null : elevation,
@@ -76,9 +98,40 @@ export const parseKML = (text) => {
                     }
                 }
             }
+            
+            // Parse LineString placemarks (GPS tracks)
+            else if (lineStringElement) {
+                const coordinatesElement = lineStringElement.querySelector('coordinates');
+                if (coordinatesElement) {
+                    const coordText = coordinatesElement.textContent.trim();
+                    // KML format: "lng,lat,alt lng,lat,alt ..." (space-separated)
+                    const coordPairs = coordText.split(/\s+/).filter(s => s.length > 0);
+                    const coordinates = [];
+                    
+                    coordPairs.forEach(pair => {
+                        const parts = pair.split(',');
+                        const lng = parseFloat(parts[0]);
+                        const lat = parseFloat(parts[1]);
+                        if (!isNaN(lng) && !isNaN(lat)) {
+                            coordinates.push([lng, lat]);
+                        }
+                    });
+                    
+                    if (coordinates.length > 0) {
+                        const name = nameElement ? nameElement.textContent.trim() : 'Imported Track';
+                        const description = descriptionElement ? descriptionElement.textContent.trim() : 'GPS Track';
+                        
+                        result.tracks.push({
+                            name,
+                            description,
+                            coordinates: coordinates
+                        });
+                    }
+                }
+            }
         });
 
-        return waypoints;
+        return result;
     } catch (error) {
         console.error('Error parsing KML:', error);
         throw new Error('Invalid KML file format');

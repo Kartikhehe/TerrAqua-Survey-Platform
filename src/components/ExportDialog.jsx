@@ -24,7 +24,7 @@ import {
 } from '@mui/material';
 import { Close, Download, Map, ExpandMore, Search, FolderOpen, SortOutlined, SortByAlphaRounded, SwapVertRounded } from '@mui/icons-material';
 import { useState, useEffect, useMemo } from 'react';
-import { waypointsAPI, projectsAPI } from '../services/api';
+import { waypointsAPI, projectsAPI, tracksAPI } from '../services/api';
 
 function ExportDialog({ open, onClose, onShowSnackbar }) {
   const theme = useTheme();
@@ -57,7 +57,8 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
               project_id: pid,
               project_name: wp.project_name || 'Project',
               waypoints: [],
-              created_at: wp.created_at
+              created_at: wp.created_at,
+              tracks: [] // Initialize tracks array
             };
           }
           acc[pid].waypoints.push(wp);
@@ -65,10 +66,46 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
         return acc;
       }, {});
 
+      // Fetch tracks for each project
+      const projectsWithTracks = await Promise.all(
+        Object.values(projectsGrouped).map(async (project) => {
+          try {
+            const trackData = await tracksAPI.getByProject(project.project_id);
+            console.log(`Track data for project ${project.project_id}:`, trackData);
+
+            // Backend returns: { points: [...], summary: {...}, total_points: N }
+            // Convert points array to track format
+            let tracks = [];
+            if (trackData && trackData.points && trackData.points.length > 0) {
+              // Convert points to coordinates array [[lng, lat], ...]
+              const coordinates = trackData.points.map(point => [
+                parseFloat(point.lng),
+                parseFloat(point.lat)
+              ]);
+
+              tracks = [{
+                id: trackData.summary?.id || null,
+                coordinates: coordinates,
+                started_at: trackData.summary?.started_at || null,
+                ended_at: trackData.summary?.ended_at || null,
+                total_distance: trackData.summary?.total_distance || null,
+                total_duration: trackData.summary?.total_duration || null,
+                point_count: trackData.total_points || coordinates.length
+              }];
+            }
+
+            return { ...project, tracks };
+          } catch (error) {
+            console.error(`Error fetching tracks for project ${project.project_id}:`, error);
+            return { ...project, tracks: [] };
+          }
+        })
+      );
+
       // Separate individual points (no project)
       const individual = waypointsData.filter(wp => !wp.project_id);
 
-      setProjects(Object.values(projectsGrouped));
+      setProjects(projectsWithTracks);
       setIndividualPoints(individual);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -117,6 +154,7 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
 
   const getSelectedWaypoints = () => {
     const selected = [];
+    const selectedTracks = [];
 
     // Get selected individual points
     individualPoints.forEach(wp => {
@@ -125,22 +163,36 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
       }
     });
 
-    // Get selected project points
+    // Get selected project points and their tracks
     projects.forEach(project => {
-      project.waypoints.forEach(wp => {
-        if (selectedItems.has(`wp-${wp.id}`)) {
-          selected.push(wp);
+      const projectWaypoints = project.waypoints.filter(wp => selectedItems.has(`wp-${wp.id}`));
+
+      // If any waypoints from this project are selected, add them and the project's tracks
+      if (projectWaypoints.length > 0) {
+        selected.push(...projectWaypoints);
+
+        // Add tracks for this project
+        if (project.tracks && project.tracks.length > 0) {
+          project.tracks.forEach(track => {
+            selectedTracks.push({
+              ...track,
+              project_id: project.project_id,
+              project_name: project.project_name
+            });
+          });
         }
-      });
+      }
     });
 
-    return selected;
+    return { waypoints: selected, tracks: selectedTracks };
   };
 
-  const exportToGeoJSON = (waypoints) => {
-    const geoJSON = {
-      type: 'FeatureCollection',
-      features: waypoints.map(wp => ({
+  const exportToGeoJSON = (waypoints, tracks = []) => {
+    const features = [];
+
+    // Add waypoint features (Points)
+    waypoints.forEach(wp => {
+      features.push({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -155,7 +207,37 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
           created_at: wp.created_at || null,
           updated_at: wp.updated_at || null
         }
-      }))
+      });
+    });
+
+    // Add track features (LineStrings)
+    tracks.forEach(track => {
+      if (track.coordinates && track.coordinates.length > 0) {
+        // Coordinates are already in the correct format: [[lng, lat], ...]
+        const lineCoords = track.coordinates;
+
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: lineCoords
+          },
+          properties: {
+            name: `Track for ${track.project_name || 'Project'}`,
+            description: 'GPS Track',
+            track_id: track.id || null,
+            project_id: track.project_id || null,
+            project_name: track.project_name || null,
+            started_at: track.started_at || null,
+            ended_at: track.ended_at || null
+          }
+        });
+      }
+    });
+
+    const geoJSON = {
+      type: 'FeatureCollection',
+      features: features
     };
 
     const jsonString = JSON.stringify(geoJSON, null, 2);
@@ -171,13 +253,14 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
     URL.revokeObjectURL(url);
   };
 
-  const exportToKML = (waypoints) => {
+  const exportToKML = (waypoints, tracks = []) => {
     let kmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
     kmlString += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
     kmlString += '  <Document>\n';
     kmlString += `    <name>Waypoints Export ${new Date().toISOString().split('T')[0]}</name>\n`;
-    kmlString += `    <description>Exported ${waypoints.length} waypoint${waypoints.length !== 1 ? 's' : ''}</description>\n`;
+    kmlString += `    <description>Exported ${waypoints.length} waypoint${waypoints.length !== 1 ? 's' : ''}${tracks.length > 0 ? ` and ${tracks.length} track${tracks.length !== 1 ? 's' : ''}` : ''}</description>\n`;
 
+    // Add waypoint placemarks
     waypoints.forEach(wp => {
       const latitude = parseFloat(wp.latitude);
       const longitude = parseFloat(wp.longitude);
@@ -215,6 +298,45 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
       kmlString += '    </Placemark>\n';
     });
 
+    // Add track placemarks (LineStrings)
+    tracks.forEach(track => {
+      if (track.coordinates && track.coordinates.length > 0) {
+        // Coordinates are already in the correct format: [[lng, lat], ...]
+        const lineCoords = track.coordinates;
+
+        // Convert coordinates to KML format (lng,lat,alt lng,lat,alt ...)
+        const kmlCoords = lineCoords.map(coord => `${coord[0]},${coord[1]},0`).join(' ');
+
+        kmlString += '    <Placemark>\n';
+        kmlString += `      <name><![CDATA[Track for ${track.project_name || 'Project'}]]></name>\n`;
+        kmlString += `      <description><![CDATA[GPS Track]]></description>\n`;
+
+        // Add extended data
+        kmlString += '      <ExtendedData>\n';
+        if (track.id) {
+          kmlString += `        <Data name="track_id"><value>${track.id}</value></Data>\n`;
+        }
+        if (track.project_id) {
+          kmlString += `        <Data name="project_id"><value>${track.project_id}</value></Data>\n`;
+        }
+        if (track.project_name) {
+          kmlString += `        <Data name="project_name"><value><![CDATA[${track.project_name}]]></value></Data>\n`;
+        }
+        if (track.started_at) {
+          kmlString += `        <Data name="started_at"><value>${track.started_at}</value></Data>\n`;
+        }
+        if (track.ended_at) {
+          kmlString += `        <Data name="ended_at"><value>${track.ended_at}</value></Data>\n`;
+        }
+        kmlString += '      </ExtendedData>\n';
+
+        kmlString += '      <LineString>\n';
+        kmlString += `        <coordinates>${kmlCoords}</coordinates>\n`;
+        kmlString += '      </LineString>\n';
+        kmlString += '    </Placemark>\n';
+      }
+    });
+
     kmlString += '  </Document>\n';
     kmlString += '</kml>';
 
@@ -231,24 +353,25 @@ function ExportDialog({ open, onClose, onShowSnackbar }) {
   };
 
   const handleExport = () => {
-    const waypoints = getSelectedWaypoints();
+    const { waypoints, tracks } = getSelectedWaypoints();
 
-    if (waypoints.length === 0) {
+    if (waypoints.length === 0 && tracks.length === 0) {
       if (onShowSnackbar) {
-        onShowSnackbar('Please select at least one waypoint to export', 'warning');
+        onShowSnackbar('Please select at least one waypoint or track to export', 'warning');
       }
       return;
     }
 
     try {
       if (exportFormat === 'geojson') {
-        exportToGeoJSON(waypoints);
+        exportToGeoJSON(waypoints, tracks);
       } else if (exportFormat === 'kml') {
-        exportToKML(waypoints);
+        exportToKML(waypoints, tracks);
       }
 
       if (onShowSnackbar) {
-        onShowSnackbar(`Exported ${waypoints.length} waypoint${waypoints.length !== 1 ? 's' : ''} to ${exportFormat.toUpperCase()}`, 'success');
+        const message = `Exported ${waypoints.length} waypoint${waypoints.length !== 1 ? 's' : ''}${tracks.length > 0 ? ` and ${tracks.length} track${tracks.length !== 1 ? 's' : ''}` : ''} to ${exportFormat.toUpperCase()}`;
+        onShowSnackbar(message, 'success');
       }
       onClose();
     } catch (error) {
